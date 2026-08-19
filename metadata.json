@@ -1,0 +1,6 @@
+{
+  "name": "Concilia Rouanet - Gestão & Prestação de Contas SALIC",
+  "description": "SaaS de conciliação bancária, conferência de notas fiscais, controle de rubricas orçamentárias e auditoria de prestação de contas da Lei Rouanet (SALIC/MinC) com Inteligência Artificial.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
