@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "rouanet-concilia": {
+      "command": "python",
+      "args": [
+        "C:\\Users\\Dell\\Downloads\\concilia-rouanet\\backend\\mcp_server.py"
+      ],
+      "description": "Servidor MCP RouanetConcilia - Auditoria Contábil, Validação SALIC/ANCINE e Emissão de Recibos"
+    }
+  }
+}
