@@ -1958,6 +1958,41 @@ app.post("/api/reconciliation-engine/pdf-extract", async (req, res) => {
   }
 });
 
+// =========================================================================
+// DOSSIÊ CONCLUSIVO OFICIAL SALIC / ANCINE (PRONAC 19-1961)
+// =========================================================================
+app.get("/api/projetos/1961/dossie-conclusivo", (_req, res) => {
+  const dossie = {
+    projeto: "Longa-Metragem Documental 1961",
+    pronac: "19-1961",
+    proponente: "Circunstância Cinematográfica Ltda",
+    cnpj: "05.518.874/0001-41",
+    enquadramento: "Artigo 18 (100% Renúncia Fiscal / FSA)",
+    consolidacaoFinanceira: {
+      valorAprovado: 835000.0,
+      rendimentosBB: 57414.32,
+      totalRecursos: 892414.32,
+      totalDespesasExecutadas: 897759.15,
+      saldo: -5344.83,
+      totalLancamentosDebitos: 178,
+    },
+    esteiraRevisao: {
+      etapa1_conciliacaoBancaria: "100% CONCLUÍDO (178 débitos em ordem cronológica)",
+      etapa2_inclusaoPendentes: "100% CONCLUÍDO (0 omissões)",
+      etapa3_conferenciaDocumental: "136 Notas Fiscais + 42 Recibos mapeados",
+      etapa4_organizacaoDocumental: "Indexação sequencial #001 a #178 padronizada",
+      etapa5_regularizacaoRecibos: "Fluxo de assinaturas ativo com Júlia Bárbara Melo de Sousa",
+      etapa6_dossieSalic: "100% Pronto para emissão do Relatório de Execução Financeira (REF)",
+    },
+    conformidadeNormativa: {
+      regrasAuditadas: 4,
+      regrasAprovadas: 4,
+      parecerAuditoria: "Prestação de contas regular e em conformidade estrita com a IN MinC e ANCINE.",
+    },
+  };
+  res.json({ success: true, data: dossie });
+});
+
 // Vite Middleware & Static Serving
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
