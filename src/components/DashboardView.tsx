@@ -457,9 +457,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-xs font-semibold text-slate-200">Custos Administrativos (Teto 15%)</span>
             <span
               className={`text-xs font-bold px-2 py-0.5 rounded ${
-                percentAdminOfTotal <= 15
-                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                  : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
+                !hasCalculatedMetrics
+                  ? "bg-slate-800 text-slate-400 border border-slate-700"
+                  : percentAdminOfTotal <= 15
+                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                    : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
               }`}
             >
               {hasCalculatedMetrics ? `${percentAdminOfTotal}% / 15%` : "Ainda não calculado"}
@@ -473,9 +475,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative">
             <div
               className={`h-full rounded-full transition-all ${
-                percentAdminOfTotal <= 15 ? "bg-emerald-500" : "bg-rose-500"
+                !hasCalculatedMetrics
+                  ? "bg-slate-600"
+                  : percentAdminOfTotal <= 15
+                    ? "bg-emerald-500"
+                    : "bg-rose-500"
               }`}
-              style={{ width: `${Math.min(100, (percentAdminOfTotal / 15) * 100)}%` }}
+              style={{
+                width: `${hasCalculatedMetrics ? Math.min(100, (percentAdminOfTotal / 15) * 100) : 0}%`,
+              }}
             />
           </div>
           <div className="flex justify-between text-[10px] text-slate-500 mt-1">
@@ -490,9 +498,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-xs font-semibold text-slate-200">Divulgação & Mídia (Teto 30%)</span>
             <span
               className={`text-xs font-bold px-2 py-0.5 rounded ${
-                percentDivOfTotal <= 30
-                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                  : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
+                !hasCalculatedMetrics
+                  ? "bg-slate-800 text-slate-400 border border-slate-700"
+                  : percentDivOfTotal <= 30
+                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                    : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
               }`}
             >
               {hasCalculatedMetrics ? `${percentDivOfTotal}% / 30%` : "Ainda não calculado"}
@@ -505,8 +515,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </p>
           <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative">
             <div
-              className="bg-indigo-500 h-full rounded-full transition-all"
-              style={{ width: `${Math.min(100, (percentDivOfTotal / 30) * 100)}%` }}
+              className={`${hasCalculatedMetrics ? "bg-indigo-500" : "bg-slate-600"} h-full rounded-full transition-all`}
+              style={{
+                width: `${hasCalculatedMetrics ? Math.min(100, (percentDivOfTotal / 30) * 100) : 0}%`,
+              }}
             />
           </div>
           <div className="flex justify-between text-[10px] text-slate-500 mt-1">
