@@ -2,8 +2,10 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
+import {assertPublicEnvSafe} from './src/config/publicEnv';
 
 export default defineConfig(() => {
+  assertPublicEnvSafe(process.env);
   return {
     plugins: [react(), tailwindcss()],
     test: {
