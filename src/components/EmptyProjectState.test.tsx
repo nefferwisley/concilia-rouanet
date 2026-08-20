@@ -1,10 +1,65 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import App from "../App";
-import type { PronacProject } from "../types";
+import type { BankTransaction, BudgetRubric, FiscalDocument, PronacProject } from "../types";
 import { DashboardView } from "./DashboardView";
 import { DriveFolderImportModal } from "./DriveFolderImportModal";
 import { EmptyProjectState } from "./EmptyProjectState";
+
+const makeProject = (status: PronacProject["status"]): PronacProject => ({
+  id: `project-${status}`,
+  pronac: "246810",
+  nome: "Projeto recém-criado",
+  proponente: "",
+  cnpjCpf: "",
+  segmento: "Lei Rouanet",
+  artigoEnquadramento: "Lei Rouanet",
+  dataInicioVigencia: "",
+  dataFimVigencia: "",
+  prazoLimitePrestacao: "",
+  valorAprovado: 0,
+  valorCaptado: 0,
+  valorExecutado: 0,
+  bancoInfo: {
+    banco: "",
+    agencia: "",
+    contaCaptacao: "",
+    contaMovimento: "",
+    saldoBloqueado: 0,
+    saldoMovimento: 0,
+    rendimentoAplicacao: 0,
+  },
+  status,
+  resumoProjeto: "",
+});
+
+const localRubric: BudgetRubric = {
+  id: "rubric-local",
+  codigo: "1.1",
+  etapa: "Produção / Execução",
+  nome: "Serviço local não processado",
+  valorAprovado: 100,
+  valorExecutado: 15,
+};
+const localTransaction: BankTransaction = {
+  id: "transaction-local",
+  data: "2026-08-20",
+  tipo: "DEBITO",
+  valor: 15,
+  descricao: "Despesa local não processada",
+  status: "PENDENTE",
+};
+const localDocument: FiscalDocument = {
+  id: "document-local",
+  tipo: "NFS-e (Serviço)",
+  numeroDoc: "LOCAL-1",
+  dataEmissao: "2026-08-20",
+  fornecedorNome: "Fornecedor local",
+  fornecedorCnpjCpf: "",
+  descricaoServico: "Serviço local",
+  valorBruto: 15,
+  valorLiquido: 15,
+};
 
 vi.mock("../features/projects/useProjects", () => ({
   useProjects: () => ({
@@ -49,36 +104,9 @@ it("uses the authenticated project list instead of cached demo records", () => {
 });
 
 it("does not present unprocessed project metrics as calculated or compliant", () => {
-  const project: PronacProject = {
-    id: "project-empty",
-    pronac: "246810",
-    nome: "Projeto recém-criado",
-    proponente: "",
-    cnpjCpf: "",
-    segmento: "Lei Rouanet",
-    artigoEnquadramento: "Lei Rouanet",
-    dataInicioVigencia: "",
-    dataFimVigencia: "",
-    prazoLimitePrestacao: "",
-    valorAprovado: 0,
-    valorCaptado: 0,
-    valorExecutado: 0,
-    bancoInfo: {
-      banco: "",
-      agencia: "",
-      contaCaptacao: "",
-      contaMovimento: "",
-      saldoBloqueado: 0,
-      saldoMovimento: 0,
-      rendimentoAplicacao: 0,
-    },
-    status: "EMPTY",
-    resumoProjeto: "",
-  };
-
   render(
     <DashboardView
-      project={project}
+      project={makeProject("EMPTY")}
       rubrics={[]}
       transactions={[]}
       documents={[]}
@@ -94,6 +122,44 @@ it("does not present unprocessed project metrics as calculated or compliant", ()
   expect(screen.queryByText(/nenhuma pendência crítica/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/100% dos débitos amarrados/i)).not.toBeInTheDocument();
 });
+
+it.each([
+  { status: "EMPTY", withLocalCollections: true },
+  { status: "IMPORTING", withLocalCollections: true },
+  { status: "READY", withLocalCollections: false },
+] as const)(
+  "keeps $status metrics uncalculated when backend processing evidence is insufficient",
+  ({ status, withLocalCollections }) => {
+    render(
+      <DashboardView
+        project={makeProject(status)}
+        rubrics={withLocalCollections ? [localRubric] : []}
+        transactions={withLocalCollections ? [localTransaction] : []}
+        documents={withLocalCollections ? [localDocument] : []}
+        alerts={[]}
+        onNavigateTab={() => undefined}
+        onRunAiAudit={() => undefined}
+        isAuditing={false}
+      />,
+    );
+
+    expect(screen.getAllByText(/ainda não calculado/i).length).toBeGreaterThan(12);
+    expect(screen.queryByText(/1 rubricas parametrizadas/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/1 lançamentos importados/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/1 notas\/comprovantes anexados/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/1 docs fiscais/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/0 alerta de glosa/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/0 conciliados/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/1 lançamentos$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/abrir tela completa de extratos \(1\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/todos \(1\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/pendentes \(1\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/exibindo 1 de 1/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/despesa local não processada/i)).not.toBeInTheDocument();
+    expect(screen.queryAllByText(/R\$\s*0,00/i)).toHaveLength(0);
+    expect(screen.queryAllByText(/0% executado/i)).toHaveLength(0);
+  },
+);
 
 it("keeps normal folder import without instant demo activation", () => {
   render(

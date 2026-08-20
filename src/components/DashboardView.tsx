@@ -57,11 +57,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
-  const hasProcessedData =
-    project.status !== "EMPTY" ||
+  const hasDomainEvidence =
     safeRubrics.length > 0 ||
     safeTransactions.length > 0 ||
-    safeDocuments.length > 0;
+    safeDocuments.length > 0 ||
+    safeAlerts.length > 0;
+  const hasCalculatedMetrics =
+    (project.status === "REVIEW" || project.status === "READY") && hasDomainEvidence;
 
   const percentCaptado = calculatePercent(project.valorCaptado, project.valorAprovado);
   const percentExecutado = calculatePercent(project.valorExecutado, project.valorCaptado);
@@ -152,7 +154,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [txSearch, setTxSearch] = useState("");
   const [txStatusFilter, setTxStatusFilter] = useState<"ALL" | "CONCILIADO" | "PENDENTE" | "DEBITO" | "CREDITO">("ALL");
 
-  const filteredPreviewTransactions = safeTransactions.filter((tx) => {
+  const filteredPreviewTransactions = (hasCalculatedMetrics ? safeTransactions : []).filter((tx) => {
     if (txStatusFilter === "CONCILIADO" && tx.status !== "CONCILIADO") return false;
     if (txStatusFilter === "PENDENTE" && tx.status !== "PENDENTE" && tx.status !== "PARCIAL") return false;
     if (txStatusFilter === "DEBITO" && tx.tipo !== "DEBITO" && tx.tipo !== "TARIFA") return false;
@@ -174,48 +176,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     {
       id: "budget",
       title: "1. Rubricas Orçamentárias",
-      description: `${safeRubrics.length} rubricas parametrizadas`,
-      completed: safeRubrics.length > 0,
+      description: hasCalculatedMetrics ? `${safeRubrics.length} rubricas parametrizadas` : "Ainda não calculado",
+      completed: hasCalculatedMetrics && safeRubrics.length > 0,
       tab: "budget",
     },
     {
       id: "reconciliation",
       title: "2. Extrato Bancário",
-      description: `${safeTransactions.length} lançamentos importados`,
-      completed: safeTransactions.length > 0,
+      description: hasCalculatedMetrics ? `${safeTransactions.length} lançamentos importados` : "Ainda não calculado",
+      completed: hasCalculatedMetrics && safeTransactions.length > 0,
       tab: "reconciliation",
     },
     {
       id: "documents",
       title: "3. Documentos Fiscais",
-      description: `${safeDocuments.length} notas/comprovantes anexados`,
-      completed: safeDocuments.length > 0,
+      description: hasCalculatedMetrics ? `${safeDocuments.length} notas/comprovantes anexados` : "Ainda não calculado",
+      completed: hasCalculatedMetrics && safeDocuments.length > 0,
       tab: "documents",
     },
     {
       id: "reconciliation-match",
       title: "4. Conciliação Tripartite",
-      description: `${reconciledTransactions.length}/${debitTransactions.length} débitos vinculados`,
-      completed: debitTransactions.length > 0 && pendingTransactions.length === 0,
+      description: hasCalculatedMetrics
+        ? `${reconciledTransactions.length}/${debitTransactions.length} débitos vinculados`
+        : "Ainda não calculado",
+      completed: hasCalculatedMetrics && debitTransactions.length > 0 && pendingTransactions.length === 0,
       tab: "tripartite",
     },
     {
       id: "audit",
       title: "5. Auditoria de Conformidade",
-      description: !hasProcessedData
+      description: !hasCalculatedMetrics
         ? "Ainda não calculado"
         : unresolvedAlerts.length === 0
           ? "Sem alertas pendentes"
           : `${unresolvedAlerts.length} alerta(s) a revisar`,
-      completed: hasProcessedData && unresolvedAlerts.length === 0,
+      completed: hasCalculatedMetrics && unresolvedAlerts.length === 0,
       tab: "audit",
     },
     {
       id: "salic",
       title: "6. Dossiê SALIC",
-      description: hasProcessedData ? "Preparar exportação oficial" : "Ainda não calculado",
+      description: hasCalculatedMetrics ? "Preparar exportação oficial" : "Ainda não calculado",
       completed:
-        hasProcessedData &&
+        hasCalculatedMetrics &&
         safeTransactions.length > 0 &&
         pendingTransactions.length === 0 &&
         unresolvedAlerts.length === 0,
@@ -269,11 +273,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={onRunAiAudit}
-              disabled={isAuditing || !hasProcessedData}
+              disabled={isAuditing || !hasCalculatedMetrics}
               className="text-xs font-semibold bg-emerald-500 hover:bg-emerald-600 text-slate-950 px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-md shadow-emerald-500/20 transition"
             >
               <Sparkles className={`w-4 h-4 ${isAuditing ? "animate-spin" : ""}`} />
-              {isAuditing ? "Auditando MinC..." : hasProcessedData ? "Auditar com IA" : "Aguardando processamento"}
+              {isAuditing ? "Auditando MinC..." : hasCalculatedMetrics ? "Auditar com IA" : "Aguardando processamento"}
             </button>
             <button
               onClick={() => onNavigateTab("tripartite")}
@@ -314,7 +318,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400">Prontidão para Envio MinC:</span>
             <span className="text-xs font-bold text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-              {readinessPercent}%
+              {hasCalculatedMetrics ? `${readinessPercent}%` : "Ainda não calculado"}
             </span>
           </div>
         </div>
@@ -355,11 +359,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded">SALIC MinC</span>
           </div>
           <div className="text-xl font-bold text-white font-mono">
-            {hasProcessedData ? formatCurrency(project.valorAprovado) : "Ainda não calculado"}
+            {hasCalculatedMetrics ? formatCurrency(project.valorAprovado) : "Ainda não calculado"}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
             <span>Teto máximo aprovado</span>
-            <span className="text-slate-300">{hasProcessedData ? "100%" : "—"}</span>
+            <span className="text-slate-300">{hasCalculatedMetrics ? "100%" : "Ainda não calculado"}</span>
           </div>
           <div className="w-full bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
             <div className="bg-slate-500 h-full w-full" />
@@ -373,22 +377,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <TrendingUp className="w-4 h-4 text-emerald-400" /> Total Captado
             </span>
             <span className="text-[10px] bg-emerald-500/10 text-emerald-400 font-semibold px-2 py-0.5 rounded border border-emerald-500/20">
-              {hasProcessedData ? `${percentCaptado}%` : "Ainda não calculado"}
+              {hasCalculatedMetrics ? `${percentCaptado}%` : "Ainda não calculado"}
             </span>
           </div>
           <div className="text-xl font-bold text-emerald-400 font-mono">
-            {hasProcessedData ? formatCurrency(project.valorCaptado) : "Ainda não calculado"}
+            {hasCalculatedMetrics ? formatCurrency(project.valorCaptado) : "Ainda não calculado"}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
             <span>Disponível para execução</span>
             <span className="text-emerald-400 font-semibold">
-              {hasProcessedData ? "Liberado p/ Movimento" : "Aguardando processamento"}
+              {hasCalculatedMetrics ? "Liberado p/ Movimento" : "Ainda não calculado"}
             </span>
           </div>
           <div className="w-full bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
             <div
               className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-              style={{ width: `${percentCaptado}%` }}
+              style={{ width: `${hasCalculatedMetrics ? percentCaptado : 0}%` }}
             />
           </div>
         </div>
@@ -400,20 +404,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <Receipt className="w-4 h-4 text-teal-400" /> Executado & Conciliado
             </span>
             <span className="text-[10px] bg-teal-500/10 text-teal-400 font-semibold px-2 py-0.5 rounded border border-teal-500/20">
-              {hasProcessedData ? `${percentExecutado}%` : "Ainda não calculado"}
+              {hasCalculatedMetrics ? `${percentExecutado}%` : "Ainda não calculado"}
             </span>
           </div>
           <div className="text-xl font-bold text-teal-300 font-mono">
-            {hasProcessedData ? formatCurrency(project.valorExecutado) : "Ainda não calculado"}
+            {hasCalculatedMetrics ? formatCurrency(project.valorExecutado) : "Ainda não calculado"}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
             <span>Comprovado com NFs/RPAs</span>
-            <span className="text-slate-300">{safeDocuments.length} Docs Fiscais</span>
+            <span className="text-slate-300">
+              {hasCalculatedMetrics ? `${safeDocuments.length} Docs Fiscais` : "Ainda não calculado"}
+            </span>
           </div>
           <div className="w-full bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
             <div
               className="bg-teal-400 h-full rounded-full transition-all duration-500"
-              style={{ width: `${percentExecutado}%` }}
+              style={{ width: `${hasCalculatedMetrics ? percentExecutado : 0}%` }}
             />
           </div>
         </div>
@@ -429,12 +435,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </span>
           </div>
           <div className="text-xl font-bold text-white font-mono">
-            {hasProcessedData ? formatCurrency(project.bancoInfo.saldoMovimento) : "Ainda não calculado"}
+            {hasCalculatedMetrics ? formatCurrency(project.bancoInfo.saldoMovimento) : "Ainda não calculado"}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
             <span>Rendimento Aplicação:</span>
             <span className="text-amber-400 font-mono font-medium">
-              {hasProcessedData ? `+${formatCurrency(project.bancoInfo.rendimentoAplicacao)}` : "Ainda não calculado"}
+              {hasCalculatedMetrics ? `+${formatCurrency(project.bancoInfo.rendimentoAplicacao)}` : "Ainda não calculado"}
             </span>
           </div>
           <div className="w-full bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
@@ -456,11 +462,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
               }`}
             >
-              {hasProcessedData ? `${percentAdminOfTotal}% / 15%` : "Ainda não calculado"}
+              {hasCalculatedMetrics ? `${percentAdminOfTotal}% / 15%` : "Ainda não calculado"}
             </span>
           </div>
           <p className="text-[11px] text-slate-400 mb-3">
-            {hasProcessedData
+            {hasCalculatedMetrics
               ? `Total executado: ${formatCurrency(totalAdminExecutado)} de ${formatCurrency(project.valorExecutado)}`
               : "Ainda não calculado"}
           </p>
@@ -489,11 +495,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
               }`}
             >
-              {hasProcessedData ? `${percentDivOfTotal}% / 30%` : "Ainda não calculado"}
+              {hasCalculatedMetrics ? `${percentDivOfTotal}% / 30%` : "Ainda não calculado"}
             </span>
           </div>
           <p className="text-[11px] text-slate-400 mb-3">
-            {hasProcessedData
+            {hasCalculatedMetrics
               ? `Total executado: ${formatCurrency(totalDivExecutado)} de ${formatCurrency(project.valorExecutado)}`
               : "Ainda não calculado"}
           </p>
@@ -514,13 +520,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold text-slate-200">Conciliação do Extrato</span>
             <span className="text-xs font-bold px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-              {hasProcessedData
+              {hasCalculatedMetrics
                 ? `${reconciledTransactions.length} de ${debitTransactions.length} Débitos`
                 : "Ainda não calculado"}
             </span>
           </div>
           <p className="text-[11px] text-slate-400 mb-3">
-            {!hasProcessedData
+            {!hasCalculatedMetrics
               ? "Ainda não calculado"
               : pendingTransactions.length > 0
               ? `${pendingTransactions.length} débito(s) pendente(s) de Nota Fiscal`
@@ -531,7 +537,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="bg-cyan-500 h-full rounded-full transition-all"
               style={{
                 width: `${
-                    hasProcessedData && debitTransactions.length > 0
+                    hasCalculatedMetrics && debitTransactions.length > 0
                       ? (reconciledTransactions.length / debitTransactions.length) * 100
                       : 0
                 }%`,
@@ -539,8 +545,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             />
           </div>
           <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-            <span>{glosaTransactions.length} Alerta de Glosa</span>
-            <span>{reconciledTransactions.length} Conciliados</span>
+            <span>{hasCalculatedMetrics ? `${glosaTransactions.length} Alerta de Glosa` : "Ainda não calculado"}</span>
+            <span>{hasCalculatedMetrics ? `${reconciledTransactions.length} Conciliados` : "Ainda não calculado"}</span>
           </div>
         </div>
       </div>
@@ -604,21 +610,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <div className="flex items-center justify-between text-xs mb-1.5">
                     <span className="font-semibold text-slate-200">{stg.name}</span>
                     <span className="font-mono text-slate-300 font-medium">
-                      {formatCurrency(stg.executado)}{" "}
-                      <span className="text-slate-500 font-normal">/ {formatCurrency(stg.aprovado)}</span>
+                      {hasCalculatedMetrics ? (
+                        <>
+                          {formatCurrency(stg.executado)}{" "}
+                          <span className="text-slate-500 font-normal">/ {formatCurrency(stg.aprovado)}</span>
+                        </>
+                      ) : (
+                        "Ainda não calculado"
+                      )}
                     </span>
                   </div>
                   <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
                     <div
                       className={`${stg.color} h-full rounded-full transition-all duration-500`}
-                      style={{ width: `${Math.min(100, perc)}%` }}
+                      style={{ width: `${hasCalculatedMetrics ? Math.min(100, perc) : 0}%` }}
                     />
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1.5">
                     <span>
-                      Saldo Restante: <strong className="text-slate-300">{formatCurrency(saldo)}</strong>
+                      {hasCalculatedMetrics ? (
+                        <>Saldo Restante: <strong className="text-slate-300">{formatCurrency(saldo)}</strong></>
+                      ) : (
+                        "Ainda não calculado"
+                      )}
                     </span>
-                    <span className="font-semibold text-slate-300">{perc}% executado</span>
+                    <span className="font-semibold text-slate-300">
+                      {hasCalculatedMetrics ? `${perc}% executado` : "Ainda não calculado"}
+                    </span>
                   </div>
                 </div>
               );
@@ -648,7 +666,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="space-y-2.5">
-              {!hasProcessedData ? (
+              {!hasCalculatedMetrics ? (
                 <div className="p-6 text-center bg-slate-950/40 rounded-xl border border-slate-800">
                   <Clock className="w-8 h-8 text-slate-500 mx-auto mb-2" />
                   <p className="text-xs font-semibold text-white">Ainda não calculado</p>
@@ -716,7 +734,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="mt-4 pt-3 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
             <span>Prazo de Envio no SALIC:</span>
             <span className="font-semibold text-amber-400">
-              {project.prazoLimitePrestacao ? formatDate(project.prazoLimitePrestacao) : "Ainda não calculado"}
+              {hasCalculatedMetrics && project.prazoLimitePrestacao
+                ? formatDate(project.prazoLimitePrestacao)
+                : "Ainda não calculado"}
             </span>
           </div>
         </div>
@@ -735,8 +755,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   Extrato e Lançamentos Bancários do Projeto
                 </h3>
                 <span className="text-xs font-mono font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20 px-2 py-0.5 rounded-full">
-                  {safeTransactions.length} Lançamentos
-                  {project.bancoInfo.contaMovimento ? ` • Conta ${project.bancoInfo.contaMovimento}` : ""}
+                  {hasCalculatedMetrics ? `${safeTransactions.length} Lançamentos` : "Ainda não calculado"}
+                  {hasCalculatedMetrics && project.bancoInfo.contaMovimento
+                    ? ` • Conta ${project.bancoInfo.contaMovimento}`
+                    : ""}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
@@ -758,7 +780,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition shadow"
             >
               <Eye className="w-3.5 h-3.5" />
-              Abrir Tela Completa de Extratos ({safeTransactions.length})
+              {hasCalculatedMetrics
+                ? `Abrir Tela Completa de Extratos (${safeTransactions.length})`
+                : "Abrir Tela Completa de Extratos"}
             </button>
           </div>
         </div>
@@ -774,7 +798,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   : "bg-slate-800/60 text-slate-400 hover:text-slate-200"
               }`}
             >
-              Todos ({safeTransactions.length})
+              {hasCalculatedMetrics ? `Todos (${safeTransactions.length})` : "Todos — Ainda não calculado"}
             </button>
             <button
               onClick={() => setTxStatusFilter("CONCILIADO")}
@@ -785,7 +809,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               }`}
             >
               <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-              Conciliados ({reconciledTransactions.length})
+              {hasCalculatedMetrics
+                ? `Conciliados (${reconciledTransactions.length})`
+                : "Conciliados — Ainda não calculado"}
             </button>
             <button
               onClick={() => setTxStatusFilter("DEBITO")}
@@ -795,7 +821,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   : "bg-slate-800/60 text-slate-400 hover:text-slate-200"
               }`}
             >
-              Débitos ({debitTransactions.length})
+              {hasCalculatedMetrics ? `Débitos (${debitTransactions.length})` : "Débitos — Ainda não calculado"}
             </button>
             <button
               onClick={() => setTxStatusFilter("PENDENTE")}
@@ -806,7 +832,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               }`}
             >
               <AlertTriangle className="w-3 h-3 text-amber-400" />
-              Pendentes ({pendingTransactions.length})
+              {hasCalculatedMetrics
+                ? `Pendentes (${pendingTransactions.length})`
+                : "Pendentes — Ainda não calculado"}
             </button>
           </div>
 
@@ -841,7 +869,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {filteredPreviewTransactions.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-slate-400">
-                    Nenhum lançamento bancário encontrado para os filtros selecionados.
+                    {hasCalculatedMetrics
+                      ? "Nenhum lançamento bancário encontrado para os filtros selecionados."
+                      : "Ainda não calculado"}
                   </td>
                 </tr>
               ) : (
@@ -948,16 +978,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 text-xs text-slate-400">
           <span>
-            Exibindo <strong>{Math.min(10, filteredPreviewTransactions.length)}</strong> de{" "}
-            <strong>{filteredPreviewTransactions.length}</strong> lançamentos filtrados (Total no projeto:{" "}
-            <strong className="text-white">{safeTransactions.length}</strong>)
+            {hasCalculatedMetrics ? (
+              <>
+                Exibindo <strong>{Math.min(10, filteredPreviewTransactions.length)}</strong> de{" "}
+                <strong>{filteredPreviewTransactions.length}</strong> lançamentos filtrados (Total no projeto:{" "}
+                <strong className="text-white">{safeTransactions.length}</strong>)
+              </>
+            ) : (
+              "Ainda não calculado"
+            )}
           </span>
 
           <button
             onClick={() => onNavigateTab("reconciliation")}
             className="text-xs text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1"
           >
-            Ver todos os {safeTransactions.length} lançamentos na tela de Extrato e Conciliação Bancária &rarr;
+            {hasCalculatedMetrics
+              ? `Ver todos os ${safeTransactions.length} lançamentos na tela de Extrato e Conciliação Bancária →`
+              : "Abrir tela de Extrato e Conciliação Bancária →"}
           </button>
         </div>
       </div>

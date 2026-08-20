@@ -116,8 +116,8 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
   // New Entry Form State
   const [newEntryForm, setNewEntryForm] = useState<Partial<TripartiteEntry>>({
     periodo: "2024-11",
-    idRubrica: safeRubrics[0]?.id || "RUB-01",
-    descricaoRubrica: safeRubrics[0]?.nome || "Geral",
+    idRubrica: safeRubrics[0]?.id || "",
+    descricaoRubrica: safeRubrics[0]?.nome || "",
     tipoDoc: "NFS-e (Serviço)",
     numeroDoc: "",
     dataEmissao: new Date().toISOString().slice(0, 10),
@@ -379,14 +379,19 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
   // Submit New Entry
   const handleAddNewEntry = (e: React.FormEvent) => {
     e.preventDefault();
-    const newId = `LANC-${String(tripartiteEntries.length + 1).padStart(4, "0")}`;
-    const selectedRub = rubrics.find((r) => r.id === newEntryForm.idRubrica) || rubrics[0];
+    const selectedRub = safeRubrics.find((r) => r.id === newEntryForm.idRubrica) || safeRubrics[0];
+    if (!selectedRub) {
+      setSyncFeedback("Cadastre ou importe ao menos uma rubrica antes de criar um lançamento tripartite.");
+      setIsNewEntryModalOpen(false);
+      return;
+    }
+    const newId = `LANC-${String(safeTripartiteEntries.length + 1).padStart(4, "0")}`;
 
     const entryToAdd: TripartiteEntry = {
       idLancamento: newId,
       periodo: newEntryForm.periodo || "2024-11",
       idRubrica: selectedRub.id,
-      descricaoRubrica: selectedRub.nome,
+      descricaoRubrica: selectedRub.nome || selectedRub.nomeRubrica || "Rubrica sem descrição",
       idDocFiscal: `doc-${Date.now()}`,
       tipoDoc: newEntryForm.tipoDoc || "NFS-e (Serviço)",
       numeroDoc: newEntryForm.numeroDoc || `DOC-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -424,7 +429,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
       observacoes: newEntryForm.observacoes || "Lançamento tripartite inserido com sucesso.",
     };
 
-    onUpdateTripartiteEntries([entryToAdd, ...tripartiteEntries]);
+    onUpdateTripartiteEntries([entryToAdd, ...safeTripartiteEntries]);
     setIsNewEntryModalOpen(false);
   };
 
@@ -490,7 +495,13 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
             </button>
             <button
               onClick={() => setIsNewEntryModalOpen(true)}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs px-3.5 py-2.5 rounded-xl border border-slate-700 transition flex items-center gap-2"
+              disabled={safeRubrics.length === 0}
+              title={
+                safeRubrics.length === 0
+                  ? "Cadastre ou importe uma rubrica antes de criar um lançamento"
+                  : "Criar lançamento tripartite"
+              }
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs px-3.5 py-2.5 rounded-xl border border-slate-700 transition flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="w-4 h-4 text-emerald-400" /> Novo Lançamento
             </button>
@@ -1419,11 +1430,13 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                   <label className="text-slate-400 font-medium block mb-1">Rubrica SALIC:</label>
                   <select
                     value={newEntryForm.idRubrica}
+                    disabled={safeRubrics.length === 0}
                     onChange={(e) =>
                       setNewEntryForm({ ...newEntryForm, idRubrica: e.target.value })
                     }
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200"
                   >
+                    {safeRubrics.length === 0 && <option value="">Nenhuma rubrica disponível</option>}
                     {safeRubrics.map((r) => (
                       <option key={r.id} value={r.id}>
                         {r.id} - {r.nome}
@@ -1559,7 +1572,9 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-xl"
+                  disabled={safeRubrics.length === 0}
+                  title={safeRubrics.length === 0 ? "Cadastre ou importe uma rubrica antes de salvar" : undefined}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-xl disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Salvar Lançamento
                 </button>
