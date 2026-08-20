@@ -13,7 +13,7 @@ import logging
 import time
 
 import jwt as pyjwt
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from backend.config import settings
@@ -50,6 +50,9 @@ async def demo_login():
     Usado pelo botão 'Entrar com Token de Demonstração' da tela de login, para
     a avaliadora entrar sem depender do Supabase remoto estando ativo.
     """
+    if settings.app_env.strip().lower() != "dev":
+        raise HTTPException(status_code=404, detail="Rota disponível apenas em desenvolvimento.")
+
     acquired_pool, conn = await adquirir_conn()
     try:
         # Conexão como dono (role 'rouanet') ignora RLS — é o único caminho de

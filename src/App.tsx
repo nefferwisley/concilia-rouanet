@@ -717,8 +717,9 @@ export default function App() {
             <form onSubmit={handleCreateProject} className="space-y-4 text-xs">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">PRONAC / Identificador *</label>
+                  <label htmlFor="new-project-identifier" className="block text-slate-300 font-medium mb-1">PRONAC / Identificador *</label>
                   <input
+                    id="new-project-identifier"
                     type="text"
                     required
                     placeholder="Ex: 243910"
@@ -729,8 +730,9 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Pacote regulatório *</label>
+                  <label htmlFor="new-project-regulatory-package" className="block text-slate-300 font-medium mb-1">Pacote regulatório *</label>
                   <select
+                    id="new-project-regulatory-package"
                     value={newProjectForm.regulatoryPackage}
                     onChange={(e) =>
                       setNewProjectForm({
@@ -747,8 +749,9 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-medium mb-1">Nome do Projeto *</label>
+                <label htmlFor="new-project-name" className="block text-slate-300 font-medium mb-1">Nome do Projeto *</label>
                 <input
+                  id="new-project-name"
                   type="text"
                   required
                   placeholder="Ex: Turnê Sinfônica Caminhos do Barroco"
@@ -759,8 +762,9 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-medium mb-1">Razão social / Proponente *</label>
+                <label htmlFor="new-project-proponent" className="block text-slate-300 font-medium mb-1">Razão social / Proponente *</label>
                 <input
+                  id="new-project-proponent"
                   type="text"
                   required
                   placeholder="Ex: Associação Cultural Viva"
