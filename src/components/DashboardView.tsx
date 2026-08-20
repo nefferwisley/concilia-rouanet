@@ -57,6 +57,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
+  const hasProcessedData =
+    project.status !== "EMPTY" ||
+    safeRubrics.length > 0 ||
+    safeTransactions.length > 0 ||
+    safeDocuments.length > 0;
 
   const percentCaptado = calculatePercent(project.valorCaptado, project.valorAprovado);
   const percentExecutado = calculatePercent(project.valorExecutado, project.valorCaptado);
@@ -197,15 +202,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     {
       id: "audit",
       title: "5. Auditoria de Conformidade",
-      description: unresolvedAlerts.length === 0 ? "Sem alertas pendentes" : `${unresolvedAlerts.length} alerta(s) a revisar`,
-      completed: unresolvedAlerts.length === 0,
+      description: !hasProcessedData
+        ? "Ainda não calculado"
+        : unresolvedAlerts.length === 0
+          ? "Sem alertas pendentes"
+          : `${unresolvedAlerts.length} alerta(s) a revisar`,
+      completed: hasProcessedData && unresolvedAlerts.length === 0,
       tab: "audit",
     },
     {
       id: "salic",
       title: "6. Dossiê SALIC",
-      description: "Pronto para exportação oficial",
-      completed: pendingTransactions.length === 0 && unresolvedAlerts.length === 0,
+      description: hasProcessedData ? "Preparar exportação oficial" : "Ainda não calculado",
+      completed:
+        hasProcessedData &&
+        safeTransactions.length > 0 &&
+        pendingTransactions.length === 0 &&
+        unresolvedAlerts.length === 0,
       tab: "salic",
     },
   ];
@@ -238,12 +251,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <h1 className="text-xl font-bold text-white tracking-tight">{project.nome}</h1>
             <p className="text-xs text-slate-400 flex items-center gap-2">
               <span>
-                <strong>Proponente:</strong> {project.proponente} ({project.cnpjCpf})
+                <strong>Proponente:</strong>{" "}
+                {project.proponente || "Proponente não informado"}
+                {project.cnpjCpf ? ` (${project.cnpjCpf})` : ""}
               </span>
               <span>•</span>
               <span className="flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-slate-400" /> Vigência:{" "}
-                {formatDate(project.dataInicioVigencia)} até {formatDate(project.dataFimVigencia)}
+                <Calendar className="w-3.5 h-3.5 text-slate-400" />{" "}
+                {project.dataInicioVigencia && project.dataFimVigencia
+                  ? `Vigência: ${formatDate(project.dataInicioVigencia)} até ${formatDate(project.dataFimVigencia)}`
+                  : "Vigência não informada"}
               </span>
             </p>
           </div>
@@ -252,11 +269,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={onRunAiAudit}
-              disabled={isAuditing}
+              disabled={isAuditing || !hasProcessedData}
               className="text-xs font-semibold bg-emerald-500 hover:bg-emerald-600 text-slate-950 px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-md shadow-emerald-500/20 transition"
             >
               <Sparkles className={`w-4 h-4 ${isAuditing ? "animate-spin" : ""}`} />
-              {isAuditing ? "Auditando MinC..." : "Auditar com IA"}
+              {isAuditing ? "Auditando MinC..." : hasProcessedData ? "Auditar com IA" : "Aguardando processamento"}
             </button>
             <button
               onClick={() => onNavigateTab("tripartite")}
@@ -337,10 +354,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </span>
             <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded">SALIC MinC</span>
           </div>
-          <div className="text-xl font-bold text-white font-mono">{formatCurrency(project.valorAprovado)}</div>
+          <div className="text-xl font-bold text-white font-mono">
+            {hasProcessedData ? formatCurrency(project.valorAprovado) : "Ainda não calculado"}
+          </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
             <span>Teto máximo aprovado</span>
-            <span className="text-slate-300">100%</span>
+            <span className="text-slate-300">{hasProcessedData ? "100%" : "—"}</span>
           </div>
           <div className="w-full bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
             <div className="bg-slate-500 h-full w-full" />
@@ -354,15 +373,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <TrendingUp className="w-4 h-4 text-emerald-400" /> Total Captado
             </span>
             <span className="text-[10px] bg-emerald-500/10 text-emerald-400 font-semibold px-2 py-0.5 rounded border border-emerald-500/20">
-              {percentCaptado}%
+              {hasProcessedData ? `${percentCaptado}%` : "Ainda não calculado"}
             </span>
           </div>
           <div className="text-xl font-bold text-emerald-400 font-mono">
-            {formatCurrency(project.valorCaptado)}
+            {hasProcessedData ? formatCurrency(project.valorCaptado) : "Ainda não calculado"}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
             <span>Disponível para execução</span>
-            <span className="text-emerald-400 font-semibold">Liberado p/ Movimento</span>
+            <span className="text-emerald-400 font-semibold">
+              {hasProcessedData ? "Liberado p/ Movimento" : "Aguardando processamento"}
+            </span>
           </div>
           <div className="w-full bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
             <div
@@ -379,11 +400,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <Receipt className="w-4 h-4 text-teal-400" /> Executado & Conciliado
             </span>
             <span className="text-[10px] bg-teal-500/10 text-teal-400 font-semibold px-2 py-0.5 rounded border border-teal-500/20">
-              {percentExecutado}%
+              {hasProcessedData ? `${percentExecutado}%` : "Ainda não calculado"}
             </span>
           </div>
           <div className="text-xl font-bold text-teal-300 font-mono">
-            {formatCurrency(project.valorExecutado)}
+            {hasProcessedData ? formatCurrency(project.valorExecutado) : "Ainda não calculado"}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
             <span>Comprovado com NFs/RPAs</span>
@@ -404,16 +425,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <Banknote className="w-4 h-4 text-cyan-400" /> Saldo Conta Movimento
             </span>
             <span className="text-[10px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/20">
-              {project.bancoInfo.contaMovimento}
+              {project.bancoInfo.contaMovimento || "Conta não informada"}
             </span>
           </div>
           <div className="text-xl font-bold text-white font-mono">
-            {formatCurrency(project.bancoInfo.saldoMovimento)}
+            {hasProcessedData ? formatCurrency(project.bancoInfo.saldoMovimento) : "Ainda não calculado"}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
             <span>Rendimento Aplicação:</span>
             <span className="text-amber-400 font-mono font-medium">
-              +{formatCurrency(project.bancoInfo.rendimentoAplicacao)}
+              {hasProcessedData ? `+${formatCurrency(project.bancoInfo.rendimentoAplicacao)}` : "Ainda não calculado"}
             </span>
           </div>
           <div className="w-full bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
@@ -435,11 +456,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
               }`}
             >
-              {percentAdminOfTotal}% / 15%
+              {hasProcessedData ? `${percentAdminOfTotal}% / 15%` : "Ainda não calculado"}
             </span>
           </div>
           <p className="text-[11px] text-slate-400 mb-3">
-            Total executado: {formatCurrency(totalAdminExecutado)} de {formatCurrency(project.valorExecutado)}
+            {hasProcessedData
+              ? `Total executado: ${formatCurrency(totalAdminExecutado)} de ${formatCurrency(project.valorExecutado)}`
+              : "Ainda não calculado"}
           </p>
           <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative">
             <div
@@ -466,11 +489,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
               }`}
             >
-              {percentDivOfTotal}% / 30%
+              {hasProcessedData ? `${percentDivOfTotal}% / 30%` : "Ainda não calculado"}
             </span>
           </div>
           <p className="text-[11px] text-slate-400 mb-3">
-            Total executado: {formatCurrency(totalDivExecutado)} de {formatCurrency(project.valorExecutado)}
+            {hasProcessedData
+              ? `Total executado: ${formatCurrency(totalDivExecutado)} de ${formatCurrency(project.valorExecutado)}`
+              : "Ainda não calculado"}
           </p>
           <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative">
             <div
@@ -489,11 +514,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold text-slate-200">Conciliação do Extrato</span>
             <span className="text-xs font-bold px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-              {reconciledTransactions.length} de {debitTransactions.length} Débitos
+              {hasProcessedData
+                ? `${reconciledTransactions.length} de ${debitTransactions.length} Débitos`
+                : "Ainda não calculado"}
             </span>
           </div>
           <p className="text-[11px] text-slate-400 mb-3">
-            {pendingTransactions.length > 0
+            {!hasProcessedData
+              ? "Ainda não calculado"
+              : pendingTransactions.length > 0
               ? `${pendingTransactions.length} débito(s) pendente(s) de Nota Fiscal`
               : "100% dos débitos amarrados a documentos fiscais"}
           </p>
@@ -502,9 +531,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="bg-cyan-500 h-full rounded-full transition-all"
               style={{
                 width: `${
-                  debitTransactions.length > 0
-                    ? (reconciledTransactions.length / debitTransactions.length) * 100
-                    : 100
+                    hasProcessedData && debitTransactions.length > 0
+                      ? (reconciledTransactions.length / debitTransactions.length) * 100
+                      : 0
                 }%`,
               }}
             />
@@ -619,7 +648,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="space-y-2.5">
-              {unresolvedAlerts.length === 0 ? (
+              {!hasProcessedData ? (
+                <div className="p-6 text-center bg-slate-950/40 rounded-xl border border-slate-800">
+                  <Clock className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                  <p className="text-xs font-semibold text-white">Ainda não calculado</p>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Importe e processe os documentos para iniciar a auditoria preventiva.
+                  </p>
+                </div>
+              ) : unresolvedAlerts.length === 0 ? (
                 <div className="p-6 text-center bg-slate-950/40 rounded-xl border border-slate-800">
                   <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
                   <p className="text-xs font-semibold text-white">Nenhuma pendência crítica!</p>
@@ -678,7 +715,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           <div className="mt-4 pt-3 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
             <span>Prazo de Envio no SALIC:</span>
-            <span className="font-semibold text-amber-400">{formatDate(project.prazoLimitePrestacao)}</span>
+            <span className="font-semibold text-amber-400">
+              {project.prazoLimitePrestacao ? formatDate(project.prazoLimitePrestacao) : "Ainda não calculado"}
+            </span>
           </div>
         </div>
       </div>
@@ -696,7 +735,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   Extrato e Lançamentos Bancários do Projeto
                 </h3>
                 <span className="text-xs font-mono font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20 px-2 py-0.5 rounded-full">
-                  {safeTransactions.length} Lançamentos • Conta BB 8768-8
+                  {safeTransactions.length} Lançamentos
+                  {project.bancoInfo.contaMovimento ? ` • Conta ${project.bancoInfo.contaMovimento}` : ""}
                 </span>
               </div>
               <p className="text-xs text-slate-400">

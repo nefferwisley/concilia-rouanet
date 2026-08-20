@@ -20,20 +20,11 @@ import {
   X,
   Plus,
   Filter,
-  Zap,
 } from "lucide-react";
 import JSZip from "jszip";
 import { PronacProject, BudgetRubric, BankTransaction, FiscalDocument, AuditAlert, TripartiteEntry } from "../types";
 import { requestGoogleDriveToken } from "../services/googleDriveService";
 import { runRealtimeTripartiteReconciliation } from "../utils/shadowLedger";
-import {
-  initialProjects,
-  initialRubrics,
-  initialTransactions,
-  initialDocuments,
-  initialAlerts,
-  initialTripartiteEntries,
-} from "../data/mockData";
 
 export interface UploadedFileItem {
   id: string;
@@ -66,7 +57,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
   onImportComplete,
 }) => {
   const [activeTab, setActiveTab] = useState<"folder_files" | "drive_token">("folder_files");
-  const [folderUrl, setFolderUrl] = useState("https://drive.google.com/drive/folders/13QvuLP5B2USqBBUyaHum7C_DhYdX387F");
+  const [folderUrl, setFolderUrl] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [status, setStatus] = useState<"idle" | "connecting" | "listing" | "processing" | "done" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
@@ -78,24 +69,6 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
-
-  const handleActivateProject1961 = () => {
-    const proj = initialProjects[0];
-    setStatus("done");
-    setProgressPercent(100);
-    setStatusMessage("Ativando Projeto 1961 com todos os 195 lançamentos e 109 rubricas...");
-    setTimeout(() => {
-      onImportComplete({
-        project: proj,
-        rubrics: initialRubrics[proj.id] || [],
-        transactions: initialTransactions[proj.id] || [],
-        documents: initialDocuments[proj.id] || [],
-        alerts: initialAlerts[proj.id] || [],
-        tripartiteEntries: initialTripartiteEntries[proj.id] || [],
-      });
-      onClose();
-    }, 300);
-  };
 
   if (!isOpen) return null;
 
@@ -499,9 +472,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
       setStatus("error");
       const rawMsg = err.message || "";
       if (rawMsg.includes("503") || rawMsg.includes("high demand") || rawMsg.includes("UNAVAILABLE")) {
-        setStatusMessage(
-          "Servidores com alta demanda. Clique no botão 'Ativar Projeto Instantaneamente' abaixo para carregar todos os 195 lançamentos imediatamente sem espera."
-        );
+        setStatusMessage("Servidores com alta demanda. Aguarde alguns instantes e tente extrair os arquivos novamente.");
       } else {
         setStatusMessage(rawMsg || "Ocorreu um erro ao extrair os arquivos da pasta.");
       }
@@ -563,33 +534,6 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
 
         {activeTab === "folder_files" ? (
           <div className="space-y-4">
-            {/* Quick 1-Click Load for Project 1961 (Extracted from Drive) */}
-            <div className="bg-gradient-to-r from-emerald-950/60 via-slate-900 to-indigo-950/60 border border-emerald-500/40 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg shadow-emerald-950/30">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
-                  <Zap className="w-5 h-5 text-emerald-400" />
-                </div>
-                <div>
-                  <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2 flex-wrap">
-                    Projeto 1961 (FSA/ANCINE)
-                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono border border-emerald-500/30 font-bold">
-                      Instantâneo • 195 Lançamentos • 109 Rubricas
-                    </span>
-                  </h4>
-                  <p className="text-[11px] text-slate-300 mt-0.5">
-                    Carregamento imediato em 1 segundo com todas as subpastas e extratos BB 8768-8
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleActivateProject1961}
-                className="w-full sm:w-auto px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-lg transition shadow-md shadow-emerald-500/20 shrink-0 text-center flex items-center justify-center gap-1.5"
-              >
-                <Sparkles className="w-3.5 h-3.5" /> Ativar Projeto Agora
-              </button>
-            </div>
-
             {/* Dropzone with multi-mode selection: Folder with subfolders, ZIP, Files */}
             <div
               onDragOver={(e) => {
@@ -883,16 +827,6 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
                 </div>
               </div>
 
-              {/* Fast Instant Load Button */}
-              <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-                <button
-                  type="button"
-                  onClick={handleActivateProject1961}
-                  className="w-full sm:w-auto px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg transition shadow text-xs flex items-center justify-center gap-1.5"
-                >
-                  <Zap className="w-3.5 h-3.5" /> Ativar Instantaneamente
-                </button>
-              </div>
             </div>
 
             {/* Visual Animated Progress Bar */}

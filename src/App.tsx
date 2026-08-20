@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Navbar } from "./components/Navbar";
 import { Sidebar, ActiveTab } from "./components/Sidebar";
 import { DashboardView } from "./components/DashboardView";
@@ -15,14 +15,7 @@ import { DriveFolderImportModal } from "./components/DriveFolderImportModal";
 import { LangChainRagSelfCorrectionModal } from "./components/LangChainRagSelfCorrectionModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AccessibilityToolbar } from "./components/AccessibilityToolbar";
-import {
-  initialProjects,
-  initialRubrics,
-  initialTransactions,
-  initialDocuments,
-  initialAlerts,
-  initialTripartiteEntries,
-} from "./data/mockData";
+import { EmptyProjectState } from "./components/EmptyProjectState";
 import { FinancialReviewWorkflowView } from "./components/FinancialReviewWorkflowView";
 import {
   PronacProject,
@@ -35,140 +28,75 @@ import {
 } from "./types";
 import { auditComplianceWithAi } from "./services/geminiService";
 import { exportSalicExcel, exportSalicPdf } from "./utils/exportUtils";
-import { runRealtimeTripartiteReconciliation, selfHealDocumentsAndTransactions } from "./utils/shadowLedger";
-import { Plus, X, Building, CheckCircle2, LayoutDashboard, Split, ArrowLeftRight, ShieldCheck, Menu, Coins, Receipt, AlertTriangle } from "lucide-react";
+import { runRealtimeTripartiteReconciliation } from "./utils/shadowLedger";
+import { X, Building, CheckCircle2, LayoutDashboard, Split, ArrowLeftRight, ShieldCheck, Menu, Coins, Receipt } from "lucide-react";
+import { useProjects } from "./features/projects/useProjects";
+import { createProject } from "./features/projects/projectApi";
+import type { CreateOnlineProjectInput, OnlineProject } from "./features/projects/projectTypes";
+import { useSession } from "./hooks/useSession";
 
-const STORAGE_KEYS = {
-  PROJECTS: "concilia_rouanet_projects_v5",
-  ACTIVE_ID: "concilia_rouanet_active_id_v5",
-  RUBRICS: "concilia_rouanet_rubrics_v5",
-  TRANSACTIONS: "concilia_rouanet_transactions_v5",
-  DOCUMENTS: "concilia_rouanet_documents_v5",
-  ALERTS: "concilia_rouanet_alerts_v5",
-  TRIPARTITE: "concilia_rouanet_tripartite_v5",
-  RECEIPTS: "concilia_rouanet_receipts_v5",
-};
+function mapOnlineProject(project: OnlineProject, imported?: PronacProject): PronacProject {
+  const regulatoryLabel = project.regulatoryPackage === "ROUANET" ? "Lei Rouanet" : "FSA / ANCINE";
 
-const isSummaryItem = (item: any) => {
-  if (!item) return false;
-  const text = `${item.descricaoOriginalExtrato || ""} ${item.favorecido || ""} ${item.numeroDoc || ""} ${item.documentoNumero || ""} ${item.descricaoServico || ""}`.toLowerCase();
-  return (
-    text.includes("pagamentos realizados") ||
-    text.includes("total rendimento") ||
-    text.includes("total geral") ||
-    text.includes("subtotal") ||
-    (item.documentoNumero && String(item.documentoNumero).toLowerCase().includes("total"))
-  );
-};
+  return {
+    ...(imported ?? {}),
+    id: project.id,
+    pronac: project.identifier,
+    nome: project.name,
+    proponente: project.proponent ?? "",
+    cnpjCpf: imported?.cnpjCpf ?? "",
+    segmento: regulatoryLabel,
+    artigoEnquadramento: regulatoryLabel,
+    dataInicioVigencia: imported?.dataInicioVigencia ?? "",
+    dataFimVigencia: imported?.dataFimVigencia ?? "",
+    prazoLimitePrestacao: imported?.prazoLimitePrestacao ?? "",
+    valorAprovado: imported?.valorAprovado ?? 0,
+    valorCaptado: imported?.valorCaptado ?? 0,
+    valorExecutado: imported?.valorExecutado ?? 0,
+    bancoInfo: imported?.bancoInfo ?? {
+      banco: "",
+      agencia: "",
+      contaCaptacao: "",
+      contaMovimento: "",
+      saldoBloqueado: 0,
+      saldoMovimento: 0,
+      rendimentoAplicacao: 0,
+    },
+    status: project.status,
+    resumoProjeto: imported?.resumoProjeto ?? "",
+    pacoteRegulatorio: project.regulatoryPackage,
+    statusProcessamento: project.status,
+    criadoEm: project.createdAt,
+  };
+}
 
 export default function App() {
-  // Load state from localStorage or initialize with mock data
-  const [projects, setProjects] = useState<PronacProject[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.warn("Could not load saved projects:", e);
-    }
-    return initialProjects;
-  });
-
-  const [activeProjectId, setActiveProjectId] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.ACTIVE_ID);
-      if (saved && initialProjects.some((p) => p.id === saved)) return saved;
-    } catch (e) {
-      console.warn("Could not load saved active id:", e);
-    }
-    return initialProjects[0]?.id || "proj-1";
-  });
+  const {
+    projects: onlineProjects,
+    activeProject: selectedOnlineProject,
+    activeProjectId,
+    loading: projectsLoading,
+    error: projectsError,
+    setActiveProjectId,
+    reload: reloadProjects,
+  } = useProjects();
+  const { session } = useSession();
+  const [importedProjects, setImportedProjects] = useState<Record<string, PronacProject>>({});
+  const projects = useMemo(
+    () => onlineProjects.map((project) => mapOnlineProject(project, importedProjects[project.id])),
+    [importedProjects, onlineProjects],
+  );
 
   const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard");
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
-  // Domain state stored per project
-  const [allRubrics, setAllRubrics] = useState<Record<string, BudgetRubric[]>>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.RUBRICS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.warn("Could not load saved rubrics:", e);
-    }
-    return initialRubrics;
-  });
-
-  const [allTransactions, setAllTransactions] = useState<Record<string, BankTransaction[]>>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
-      if (saved) {
-        const parsed: Record<string, BankTransaction[]> = JSON.parse(saved);
-        const cleaned: Record<string, BankTransaction[]> = {};
-        Object.keys(parsed).forEach((k) => {
-          cleaned[k] = (parsed[k] || []).filter((t) => !isSummaryItem(t));
-        });
-        return cleaned;
-      }
-    } catch (e) {
-      console.warn("Could not load saved transactions:", e);
-    }
-    return initialTransactions;
-  });
-
-  const [allDocuments, setAllDocuments] = useState<Record<string, FiscalDocument[]>>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.DOCUMENTS);
-      if (saved) {
-        const parsed: Record<string, FiscalDocument[]> = JSON.parse(saved);
-        const cleaned: Record<string, FiscalDocument[]> = {};
-        Object.keys(parsed).forEach((k) => {
-          cleaned[k] = (parsed[k] || []).filter((d) => !isSummaryItem(d));
-        });
-        return cleaned;
-      }
-    } catch (e) {
-      console.warn("Could not load saved documents:", e);
-    }
-    return initialDocuments;
-  });
-
-  const [allAlerts, setAllAlerts] = useState<Record<string, AuditAlert[]>>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.ALERTS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.warn("Could not load saved alerts:", e);
-    }
-    return initialAlerts;
-  });
-
-  const [allTripartiteEntries, setAllTripartiteEntries] = useState<
-    Record<string, TripartiteEntry[]>
-  >(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.TRIPARTITE);
-      if (saved) {
-        const parsed: Record<string, TripartiteEntry[]> = JSON.parse(saved);
-        const cleaned: Record<string, TripartiteEntry[]> = {};
-        Object.keys(parsed).forEach((k) => {
-          cleaned[k] = (parsed[k] || []).filter((trip) => !isSummaryItem(trip));
-        });
-        return cleaned;
-      }
-    } catch (e) {
-      console.warn("Could not load saved tripartite entries:", e);
-    }
-    return initialTripartiteEntries;
-  });
-
-  const [allReceipts, setAllReceipts] = useState<Record<string, Record<string, ReceiptItem>>>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.RECEIPTS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.warn("Could not load saved receipts:", e);
-    }
-    return {};
-  });
+  // Imported/processed domain data remains session-local until the real upload pipeline is connected.
+  const [allRubrics, setAllRubrics] = useState<Record<string, BudgetRubric[]>>({});
+  const [allTransactions, setAllTransactions] = useState<Record<string, BankTransaction[]>>({});
+  const [allDocuments, setAllDocuments] = useState<Record<string, FiscalDocument[]>>({});
+  const [allAlerts, setAllAlerts] = useState<Record<string, AuditAlert[]>>({});
+  const [allTripartiteEntries, setAllTripartiteEntries] = useState<Record<string, TripartiteEntry[]>>({});
+  const [allReceipts, setAllReceipts] = useState<Record<string, Record<string, ReceiptItem>>>({});
 
   // Global AI audit loader
   const [isAuditingGlobal, setIsAuditingGlobal] = useState(false);
@@ -177,84 +105,33 @@ export default function App() {
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
   const [isLangChainModalOpen, setIsLangChainModalOpen] = useState(false);
-  const [newProjectForm, setNewProjectForm] = useState<Partial<PronacProject>>({
-    pronac: "",
-    nome: "",
-    proponente: "",
-    cnpjCpf: "",
-    segmento: "Música",
-    artigoEnquadramento: "Artigo 18 (100% Renúncia)",
-    dataInicioVigencia: new Date().toISOString().slice(0, 10),
-    dataFimVigencia: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-    prazoLimitePrestacao: new Date(Date.now() + (365 + 60) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-    valorAprovado: 300000,
-    valorCaptado: 300000,
-    valorExecutado: 0,
-    bancoInfo: {
-      banco: "Banco do Brasil (001)",
-      agencia: "1821-X",
-      contaCaptacao: "12345-6",
-      contaMovimento: "12345-7",
-      saldoBloqueado: 0,
-      saldoMovimento: 300000,
-      rendimentoAplicacao: 0,
-    },
-    status: "Em Execução",
-    resumoProjeto: "",
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [createProjectError, setCreateProjectError] = useState<string | null>(null);
+  const [newProjectForm, setNewProjectForm] = useState<CreateOnlineProjectInput>({
+    identifier: "",
+    name: "",
+    proponent: "",
+    regulatoryPackage: "ROUANET",
   });
 
-  // Persist to LocalStorage on change
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
-      localStorage.setItem(STORAGE_KEYS.ACTIVE_ID, activeProjectId);
-      localStorage.setItem(STORAGE_KEYS.RUBRICS, JSON.stringify(allRubrics));
-      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(allTransactions));
-      localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(allDocuments));
-      localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(allAlerts));
-      localStorage.setItem(STORAGE_KEYS.TRIPARTITE, JSON.stringify(allTripartiteEntries));
-      localStorage.setItem(STORAGE_KEYS.RECEIPTS, JSON.stringify(allReceipts));
-    } catch (e) {
-      console.warn("Error saving to localStorage:", e);
+    if (!projectsLoading && onlineProjects.length > 0 && !selectedOnlineProject) {
+      setActiveProjectId(onlineProjects[0].id);
     }
-  }, [
-    projects,
-    activeProjectId,
-    allRubrics,
-    allTransactions,
-    allDocuments,
-    allAlerts,
-    allTripartiteEntries,
-    allReceipts,
-  ]);
+  }, [onlineProjects, projectsLoading, selectedOnlineProject, setActiveProjectId]);
 
-  // Active Project & Safe arrays
-  const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0] || initialProjects[0];
+  // Active project metadata comes from the authenticated API; empty domain collections stay empty.
+  const effectiveActiveProjectId = selectedOnlineProject?.id ?? onlineProjects[0]?.id ?? null;
+  const activeProject = projects.find((project) => project.id === effectiveActiveProjectId) ?? null;
+  const projectStateKey = activeProject?.id ?? "";
 
-  const currentRubrics: BudgetRubric[] =
-    Array.isArray(allRubrics[activeProjectId]) && allRubrics[activeProjectId].length > 0
-      ? allRubrics[activeProjectId]
-      : initialRubrics[activeProjectId] || [];
-
-  const currentTransactions: BankTransaction[] =
-    Array.isArray(allTransactions[activeProjectId]) && allTransactions[activeProjectId].length > 0
-      ? allTransactions[activeProjectId]
-      : initialTransactions[activeProjectId] || [];
-
-  const currentDocuments: FiscalDocument[] =
-    Array.isArray(allDocuments[activeProjectId]) && allDocuments[activeProjectId].length > 0
-      ? allDocuments[activeProjectId]
-      : initialDocuments[activeProjectId] || [];
-
-  const currentAlerts: AuditAlert[] =
-    Array.isArray(allAlerts[activeProjectId]) && allAlerts[activeProjectId].length > 0
-      ? allAlerts[activeProjectId]
-      : initialAlerts[activeProjectId] || [];
-
-  const currentTripartiteEntries: TripartiteEntry[] =
-    Array.isArray(allTripartiteEntries[activeProjectId]) && allTripartiteEntries[activeProjectId].length > 0
-      ? allTripartiteEntries[activeProjectId]
-      : initialTripartiteEntries[activeProjectId] || [];
+  const currentRubrics: BudgetRubric[] = projectStateKey ? allRubrics[projectStateKey] ?? [] : [];
+  const currentTransactions: BankTransaction[] = projectStateKey ? allTransactions[projectStateKey] ?? [] : [];
+  const currentDocuments: FiscalDocument[] = projectStateKey ? allDocuments[projectStateKey] ?? [] : [];
+  const currentAlerts: AuditAlert[] = projectStateKey ? allAlerts[projectStateKey] ?? [] : [];
+  const currentTripartiteEntries: TripartiteEntry[] = projectStateKey
+    ? allTripartiteEntries[projectStateKey] ?? []
+    : [];
 
   // Dynamic recalculation of executed total based on documents & transactions
   const totalExecutadoCalc = currentTransactions
@@ -265,41 +142,47 @@ export default function App() {
     )
     .reduce((sum, t) => sum + (Number(t.valor) || 0), 0);
 
-  const currentProjectWithLiveStats: PronacProject = {
-    ...activeProject,
-    valorExecutado: totalExecutadoCalc > 0 ? totalExecutadoCalc : activeProject.valorExecutado,
-  };
+  const currentProjectWithLiveStats: PronacProject | null = activeProject
+    ? {
+        ...activeProject,
+        valorExecutado: totalExecutadoCalc > 0 ? totalExecutadoCalc : activeProject.valorExecutado,
+      }
+    : null;
 
   // State Updaters for active project
   const setRubrics = (action: BudgetRubric[] | ((prev: BudgetRubric[]) => BudgetRubric[])) => {
     setAllRubrics((prev) => {
-      const current = prev[activeProjectId] || [];
+      if (!projectStateKey) return prev;
+      const current = prev[projectStateKey] || [];
       const updated = typeof action === "function" ? action(current) : action;
-      return { ...prev, [activeProjectId]: updated };
+      return { ...prev, [projectStateKey]: updated };
     });
   };
 
   const setTransactions = (action: BankTransaction[] | ((prev: BankTransaction[]) => BankTransaction[])) => {
     setAllTransactions((prev) => {
-      const current = prev[activeProjectId] || [];
+      if (!projectStateKey) return prev;
+      const current = prev[projectStateKey] || [];
       const updated = typeof action === "function" ? action(current) : action;
-      return { ...prev, [activeProjectId]: updated };
+      return { ...prev, [projectStateKey]: updated };
     });
   };
 
   const setDocuments = (action: FiscalDocument[] | ((prev: FiscalDocument[]) => FiscalDocument[])) => {
     setAllDocuments((prev) => {
-      const current = prev[activeProjectId] || [];
+      if (!projectStateKey) return prev;
+      const current = prev[projectStateKey] || [];
       const updated = typeof action === "function" ? action(current) : action;
-      return { ...prev, [activeProjectId]: updated };
+      return { ...prev, [projectStateKey]: updated };
     });
   };
 
   const setAlerts = (action: AuditAlert[] | ((prev: AuditAlert[]) => AuditAlert[])) => {
     setAllAlerts((prev) => {
-      const current = prev[activeProjectId] || [];
+      if (!projectStateKey) return prev;
+      const current = prev[projectStateKey] || [];
       const updated = typeof action === "function" ? action(current) : action;
-      return { ...prev, [activeProjectId]: updated };
+      return { ...prev, [projectStateKey]: updated };
     });
   };
 
@@ -307,14 +190,17 @@ export default function App() {
     action: TripartiteEntry[] | ((prev: TripartiteEntry[]) => TripartiteEntry[])
   ) => {
     setAllTripartiteEntries((prev) => {
-      const current = prev[activeProjectId] || [];
+      if (!projectStateKey) return prev;
+      const current = prev[projectStateKey] || [];
       const updated = typeof action === "function" ? action(current) : action;
-      return { ...prev, [activeProjectId]: updated };
+      return { ...prev, [projectStateKey]: updated };
     });
   };
 
   // Shadow Ledger Global Synchronization & Self-Healing
   const handleSelfHealAndSyncAll = () => {
+    if (!currentProjectWithLiveStats) return;
+
     try {
       const result = runRealtimeTripartiteReconciliation(
         currentTransactions,
@@ -346,6 +232,8 @@ export default function App() {
 
   // Run overall AI compliance audit
   const handleRunAiAudit = async () => {
+    if (!currentProjectWithLiveStats) return;
+
     try {
       setIsAuditingGlobal(true);
       const res = await auditComplianceWithAi({
@@ -380,13 +268,14 @@ export default function App() {
   };
 
   // Receipt Handlers
-  const currentReceipts = allReceipts[activeProjectId] || {};
+  const currentReceipts = projectStateKey ? allReceipts[projectStateKey] || {} : {};
   const handleSaveReceipt = (receipt: ReceiptItem) => {
     setAllReceipts((prev) => {
-      const projReceipts = prev[activeProjectId] || {};
+      if (!projectStateKey) return prev;
+      const projReceipts = prev[projectStateKey] || {};
       return {
         ...prev,
-        [activeProjectId]: {
+        [projectStateKey]: {
           ...projReceipts,
           [receipt.transacaoId]: receipt,
         },
@@ -461,48 +350,36 @@ export default function App() {
   };
 
   // Handle New Project Creation
-  const handleCreateProject = (e: React.FormEvent) => {
+  const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProjectForm.pronac || !newProjectForm.nome) {
-      alert("Por favor, preencha o número do PRONAC e o Nome do Projeto.");
+    if (!newProjectForm.identifier.trim() || !newProjectForm.name.trim() || !newProjectForm.proponent.trim()) {
+      setCreateProjectError("Preencha o identificador, o nome e o proponente do projeto.");
       return;
     }
 
-    const newId = `proj-${Date.now()}`;
-    const fullNewProject: PronacProject = {
-      id: newId,
-      pronac: newProjectForm.pronac || "000000",
-      nome: newProjectForm.nome || "Novo Projeto Cultural",
-      proponente: newProjectForm.proponente || "Proponente Cultural",
-      cnpjCpf: newProjectForm.cnpjCpf || "00.000.000/0001-00",
-      segmento: newProjectForm.segmento || "Música",
-      artigoEnquadramento: (newProjectForm.artigoEnquadramento as any) || "Artigo 18 (100% Renúncia)",
-      dataInicioVigencia: newProjectForm.dataInicioVigencia || "2024-01-01",
-      dataFimVigencia: newProjectForm.dataFimVigencia || "2024-12-31",
-      prazoLimitePrestacao: newProjectForm.prazoLimitePrestacao || "2025-02-28",
-      valorAprovado: Number(newProjectForm.valorAprovado) || 100000,
-      valorCaptado: Number(newProjectForm.valorCaptado) || 100000,
-      valorExecutado: 0,
-      bancoInfo: {
-        banco: "Banco do Brasil (001)",
-        agencia: newProjectForm.bancoInfo?.agencia || "0001-9",
-        contaCaptacao: newProjectForm.bancoInfo?.contaCaptacao || "10001-1",
-        contaMovimento: newProjectForm.bancoInfo?.contaMovimento || "10001-2",
-        saldoBloqueado: 0,
-        saldoMovimento: Number(newProjectForm.valorCaptado) || 100000,
-        rendimentoAplicacao: 0,
-      },
-      status: "Em Execução",
-      resumoProjeto: newProjectForm.resumoProjeto || "",
-    };
+    if (!session?.access_token) {
+      setCreateProjectError("Sua sessão expirou. Entre novamente para criar o projeto.");
+      return;
+    }
 
-    setProjects((prev) => [...prev, fullNewProject]);
-    setAllRubrics((prev) => ({ ...prev, [newId]: [] }));
-    setAllTransactions((prev) => ({ ...prev, [newId]: [] }));
-    setAllDocuments((prev) => ({ ...prev, [newId]: [] }));
-    setAllAlerts((prev) => ({ ...prev, [newId]: [] }));
-    setActiveProjectId(newId);
-    setIsNewProjectModalOpen(false);
+    setIsCreatingProject(true);
+    setCreateProjectError(null);
+    try {
+      const createdProject = await createProject(session.access_token, {
+        ...newProjectForm,
+        identifier: newProjectForm.identifier.trim(),
+        name: newProjectForm.name.trim(),
+        proponent: newProjectForm.proponent.trim(),
+      });
+      await reloadProjects();
+      setActiveProjectId(createdProject.id);
+      setNewProjectForm({ identifier: "", name: "", proponent: "", regulatoryPackage: "ROUANET" });
+      setIsNewProjectModalOpen(false);
+    } catch (reason) {
+      setCreateProjectError(reason instanceof Error ? reason.message : "Não foi possível criar o projeto.");
+    } finally {
+      setIsCreatingProject(false);
+    }
   };
 
   return (
@@ -510,6 +387,33 @@ export default function App() {
       {/* Top Accessibility Toolbar (eMAG / WCAG 2.1) */}
       <AccessibilityToolbar onNavigateTab={(tab) => setActiveTab(tab as any)} />
 
+      {projectsLoading ? (
+        <main className="flex flex-1 items-center justify-center p-6 text-sm text-slate-400">
+          Carregando projetos...
+        </main>
+      ) : projectsError ? (
+        <main className="flex flex-1 items-center justify-center p-6">
+          <section className="max-w-lg rounded-2xl border border-rose-500/30 bg-slate-900 p-6 text-center">
+            <h1 className="text-lg font-bold text-white">Não foi possível carregar seus projetos</h1>
+            <p className="mt-2 text-sm text-slate-400">{projectsError.message}</p>
+            <button
+              type="button"
+              onClick={() => void reloadProjects()}
+              className="mt-5 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400"
+            >
+              Tentar novamente
+            </button>
+          </section>
+        </main>
+      ) : !currentProjectWithLiveStats ? (
+        <EmptyProjectState
+          onCreate={() => {
+            setCreateProjectError(null);
+            setIsNewProjectModalOpen(true);
+          }}
+        />
+      ) : (
+        <>
       {/* Top Main Navigation Bar */}
       <Navbar
         projects={projects}
@@ -785,8 +689,10 @@ export default function App() {
           <span>Mais</span>
         </button>
       </nav>
+        </>
+      )}
 
-      {/* Modal: Cadastrar Novo Projeto PRONAC */}
+      {/* Modal: Cadastrar novo projeto online */}
       {isNewProjectModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl p-6">
@@ -796,8 +702,8 @@ export default function App() {
                   <Building className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">Cadastrar Novo Projeto PRONAC</h3>
-                  <p className="text-xs text-slate-400">Insira os dados homologados na Portaria do MinC</p>
+                  <h3 className="text-sm font-bold text-white">Cadastrar novo projeto</h3>
+                  <p className="text-xs text-slate-400">Crie a área online antes de importar os arquivos</p>
                 </div>
               </div>
               <button
@@ -811,31 +717,31 @@ export default function App() {
             <form onSubmit={handleCreateProject} className="space-y-4 text-xs">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Número PRONAC *</label>
+                  <label className="block text-slate-300 font-medium mb-1">PRONAC / Identificador *</label>
                   <input
                     type="text"
                     required
                     placeholder="Ex: 243910"
-                    value={newProjectForm.pronac}
-                    onChange={(e) => setNewProjectForm({ ...newProjectForm, pronac: e.target.value })}
+                    value={newProjectForm.identifier}
+                    onChange={(e) => setNewProjectForm({ ...newProjectForm, identifier: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Enquadramento Legal</label>
+                  <label className="block text-slate-300 font-medium mb-1">Pacote regulatório *</label>
                   <select
-                    value={newProjectForm.artigoEnquadramento}
+                    value={newProjectForm.regulatoryPackage}
                     onChange={(e) =>
                       setNewProjectForm({
                         ...newProjectForm,
-                        artigoEnquadramento: e.target.value as any,
+                        regulatoryPackage: e.target.value as CreateOnlineProjectInput["regulatoryPackage"],
                       })
                     }
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   >
-                    <option value="Artigo 18 (100% Renúncia)">Artigo 18 (100% Dedução IRPJ/IRPF)</option>
-                    <option value="Artigo 26 (30% / 40% Dedução)">Artigo 26 (Dedução Parcial)</option>
+                    <option value="ROUANET">Lei Rouanet</option>
+                    <option value="FSA_ANCINE">FSA / ANCINE</option>
                   </select>
                 </div>
               </div>
@@ -846,67 +752,29 @@ export default function App() {
                   type="text"
                   required
                   placeholder="Ex: Turnê Sinfônica Caminhos do Barroco"
-                  value={newProjectForm.nome}
-                  onChange={(e) => setNewProjectForm({ ...newProjectForm, nome: e.target.value })}
+                  value={newProjectForm.name}
+                  onChange={(e) => setNewProjectForm({ ...newProjectForm, name: e.target.value })}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-300 font-medium mb-1">Razão Social / Proponente</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Associação Cultural Viva"
-                    value={newProjectForm.proponente}
-                    onChange={(e) => setNewProjectForm({ ...newProjectForm, proponente: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-medium mb-1">CNPJ / CPF do Proponente</label>
-                  <input
-                    type="text"
-                    placeholder="00.000.000/0001-00"
-                    value={newProjectForm.cnpjCpf}
-                    onChange={(e) => setNewProjectForm({ ...newProjectForm, cnpjCpf: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-slate-300 font-medium mb-1">Razão social / Proponente *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Associação Cultural Viva"
+                  value={newProjectForm.proponent}
+                  onChange={(e) => setNewProjectForm({ ...newProjectForm, proponent: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-300 font-medium mb-1">Valor Aprovado (SALIC) R$</label>
-                  <input
-                    type="number"
-                    value={newProjectForm.valorAprovado}
-                    onChange={(e) =>
-                      setNewProjectForm({
-                        ...newProjectForm,
-                        valorAprovado: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-medium mb-1">Valor Captado R$</label>
-                  <input
-                    type="number"
-                    value={newProjectForm.valorCaptado}
-                    onChange={(e) =>
-                      setNewProjectForm({
-                        ...newProjectForm,
-                        valorCaptado: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
-              </div>
+              {createProjectError && (
+                <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-rose-300">
+                  {createProjectError}
+                </p>
+              )}
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
                 <button
@@ -918,10 +786,11 @@ export default function App() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl flex items-center gap-1.5 transition shadow"
+                  disabled={isCreatingProject}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl flex items-center gap-1.5 transition shadow disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  Salvar e Abrir Projeto
+                  {isCreatingProject ? "Criando..." : "Criar e abrir projeto"}
                 </button>
               </div>
             </form>
@@ -929,27 +798,34 @@ export default function App() {
         </div>
       )}
 
+      {currentProjectWithLiveStats && (
+        <>
       {/* Google Drive Folder Extraction Modal */}
       <DriveFolderImportModal
         isOpen={isDriveModalOpen}
         onClose={() => setIsDriveModalOpen(false)}
         onImportComplete={({ project, rubrics, transactions, documents, alerts, tripartiteEntries }) => {
-          // Add project and set as active
-          setProjects((prev) => {
-            const filtered = prev.filter((p) => p.id !== project.id);
-            return [project, ...filtered];
-          });
-          setActiveProjectId(project.id);
-          try {
-            localStorage.setItem(STORAGE_KEYS.ACTIVE_ID, project.id);
-          } catch (e) {}
+          const onlineProjectId = currentProjectWithLiveStats.id;
+          setImportedProjects((prev) => ({
+            ...prev,
+            [onlineProjectId]: {
+              ...project,
+              id: onlineProjectId,
+              pronac: currentProjectWithLiveStats.pronac,
+              nome: currentProjectWithLiveStats.nome,
+              proponente: currentProjectWithLiveStats.proponente,
+              segmento: currentProjectWithLiveStats.segmento,
+              artigoEnquadramento: currentProjectWithLiveStats.artigoEnquadramento,
+              status: currentProjectWithLiveStats.status,
+            },
+          }));
 
           // Update domain states
-          setAllRubrics((prev) => ({ ...prev, [project.id]: rubrics }));
-          setAllTransactions((prev) => ({ ...prev, [project.id]: transactions }));
-          setAllDocuments((prev) => ({ ...prev, [project.id]: documents }));
-          setAllAlerts((prev) => ({ ...prev, [project.id]: alerts }));
-          setAllTripartiteEntries((prev) => ({ ...prev, [project.id]: tripartiteEntries }));
+          setAllRubrics((prev) => ({ ...prev, [onlineProjectId]: rubrics }));
+          setAllTransactions((prev) => ({ ...prev, [onlineProjectId]: transactions }));
+          setAllDocuments((prev) => ({ ...prev, [onlineProjectId]: documents }));
+          setAllAlerts((prev) => ({ ...prev, [onlineProjectId]: alerts }));
+          setAllTripartiteEntries((prev) => ({ ...prev, [onlineProjectId]: tripartiteEntries }));
 
           // Automatically navigate to "reconciliation" so the user can verify all transactions
           setActiveTab("reconciliation");
@@ -967,11 +843,11 @@ export default function App() {
         alerts={currentAlerts}
         tripartiteEntries={currentTripartiteEntries}
         onApplySync={({ transactions: updatedTxs, documents: updatedDocs, rubrics: updatedRubs, tripartiteEntries: updatedTrips, alerts: updatedAlts }) => {
-          setAllTransactions((prev) => ({ ...prev, [activeProjectId]: updatedTxs }));
-          setAllDocuments((prev) => ({ ...prev, [activeProjectId]: updatedDocs }));
-          setAllRubrics((prev) => ({ ...prev, [activeProjectId]: updatedRubs }));
-          setAllTripartiteEntries((prev) => ({ ...prev, [activeProjectId]: updatedTrips }));
-          setAllAlerts((prev) => ({ ...prev, [activeProjectId]: updatedAlts }));
+          setAllTransactions((prev) => ({ ...prev, [currentProjectWithLiveStats.id]: updatedTxs }));
+          setAllDocuments((prev) => ({ ...prev, [currentProjectWithLiveStats.id]: updatedDocs }));
+          setAllRubrics((prev) => ({ ...prev, [currentProjectWithLiveStats.id]: updatedRubs }));
+          setAllTripartiteEntries((prev) => ({ ...prev, [currentProjectWithLiveStats.id]: updatedTrips }));
+          setAllAlerts((prev) => ({ ...prev, [currentProjectWithLiveStats.id]: updatedAlts }));
         }}
       />
 
@@ -1040,6 +916,8 @@ export default function App() {
           )}
         </button>
       </div>
+        </>
+      )}
     </div>
   );
 }
