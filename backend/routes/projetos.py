@@ -20,8 +20,9 @@ async def criar_projeto(body: ProjetoCreate, dep=Depends(get_conn)):
     # RETURNING, que é filtrado pela policy de SELECT). Ver db/migrations/0001_schema.sql.
     try:
         row = await conn.fetchrow(
-            "select * from criar_projeto_com_membro($1, $2, $3, $4, $5)",
+            "select * from criar_projeto_com_membro($1, $2, $3, $4, $5, $6)",
             body.pronac, body.nome, body.proponente, body.controller, body.banco_nome,
+            body.pacote_regulatorio,
         )
     except asyncpg.UniqueViolationError:
         raise HTTPException(
@@ -42,7 +43,10 @@ async def criar_projeto(body: ProjetoCreate, dep=Depends(get_conn)):
 
     return ProjetoOut(
         id=str(row["id"]), pronac=row["pronac"], nome=row["nome"],
-        proponente=row["proponente"], banco=row["banco"], criado_em=row["created_at"],
+        proponente=row["proponente"], pacote_regulatorio=row["pacote_regulatorio"],
+        status_processamento=row["status_processamento"], banco=row["banco"],
+        valor_captado=float(row["valor_captado"]) if row["valor_captado"] is not None else None,
+        criado_em=row["created_at"],
     )
 
 
@@ -58,7 +62,8 @@ async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = N
         total = await conn.fetchval("select count(*) from projetos where pronac ilike $1", filtro)
         rows = await conn.fetch(
             """
-            select p.id, p.pronac, p.nome, p.created_at,
+            select p.id, p.pronac, p.nome, p.proponente, p.pacote_regulatorio,
+                   p.status_processamento, p.created_at,
                    (select count(*) from transacoes t where t.projeto_id = p.id) as transacoes_count
             from projetos p where p.pronac ilike $1
             order by p.created_at desc limit $2 offset $3
@@ -69,7 +74,8 @@ async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = N
         total = await conn.fetchval("select count(*) from projetos")
         rows = await conn.fetch(
             """
-            select p.id, p.pronac, p.nome, p.created_at,
+            select p.id, p.pronac, p.nome, p.proponente, p.pacote_regulatorio,
+                   p.status_processamento, p.created_at,
                    (select count(*) from transacoes t where t.projeto_id = p.id) as transacoes_count
             from projetos p order by p.created_at desc limit $1 offset $2
             """,
@@ -82,6 +88,9 @@ async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = N
         "projetos": [
             {
                 "id": str(r["id"]), "pronac": r["pronac"], "nome": r["nome"],
+                "proponente": r["proponente"],
+                "pacote_regulatorio": r["pacote_regulatorio"],
+                "status_processamento": r["status_processamento"],
                 "transacoes_count": r["transacoes_count"],
                 "criado_em": r["created_at"].isoformat(),
             }
@@ -217,6 +226,8 @@ async def update_projeto(
             pronac=projeto["pronac"],
             nome=projeto["nome"],
             proponente=projeto["proponente"],
+            pacote_regulatorio=projeto["pacote_regulatorio"],
+            status_processamento=projeto["status_processamento"],
             banco=projeto["banco"],
             valor_captado=float(projeto["valor_captado"]) if projeto["valor_captado"] is not None else None,
             criado_em=projeto["created_at"]

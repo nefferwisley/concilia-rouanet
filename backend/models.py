@@ -1,14 +1,15 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from decimal import Decimal
 
 from pydantic import BaseModel, Field, field_validator
 
 
 class ProjetoCreate(BaseModel):
-    pronac: str
-    nome: str
-    proponente: Optional[str] = None
+    pronac: str = Field(min_length=1)
+    nome: str = Field(min_length=1)
+    proponente: str = Field(min_length=1)
+    pacote_regulatorio: Literal["ROUANET", "FSA_ANCINE"]
     controller: Optional[str] = None
     banco_nome: Optional[str] = None
     agencia: Optional[str] = None
@@ -19,7 +20,9 @@ class ProjetoOut(BaseModel):
     id: str
     pronac: str
     nome: str
-    proponente: Optional[str] = None
+    proponente: str
+    pacote_regulatorio: Literal["ROUANET", "FSA_ANCINE"]
+    status_processamento: Literal["EMPTY", "IMPORTING", "REVIEW", "READY"]
     banco: Optional[str] = None
     valor_captado: Optional[float] = None
     criado_em: datetime
