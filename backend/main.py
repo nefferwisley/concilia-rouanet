@@ -19,6 +19,7 @@ from backend.routes import (
     planilha,
     projetos,
     real_imports,
+    reconciliations,
     regularizacao,
     relatorios,
     revisao,
@@ -96,6 +97,7 @@ app.add_middleware(
 
 app.include_router(projetos.router)
 app.include_router(real_imports.router)
+app.include_router(reconciliations.router)
 app.include_router(importacoes.router)
 app.include_router(conciliacao.router)
 app.include_router(relatorios.router)
