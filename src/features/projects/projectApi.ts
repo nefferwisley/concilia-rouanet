@@ -24,6 +24,25 @@ function readRequiredString(project: Record<string, unknown>, field: string): st
   return value;
 }
 
+function readRequiredNullableString(
+  project: Record<string, unknown>,
+  field: string,
+): string | null {
+  if (!Object.prototype.hasOwnProperty.call(project, field)) {
+    throw new ApiContractError(`Resposta de projeto inválida: campo obrigatório "${field}" ausente.`, project);
+  }
+
+  const value = project[field];
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new ApiContractError(`Resposta de projeto inválida: campo "${field}" inválido.`, project);
+  }
+
+  return value;
+}
+
 function readEnum<T extends readonly string[]>(
   project: Record<string, unknown>,
   field: string,
@@ -51,7 +70,7 @@ function mapProject(value: unknown): OnlineProject {
     id: readRequiredString(value, "id"),
     identifier: readRequiredString(value, "pronac"),
     name: readRequiredString(value, "nome"),
-    proponent: readRequiredString(value, "proponente"),
+    proponent: readRequiredNullableString(value, "proponente"),
     regulatoryPackage: readEnum(value, "pacote_regulatorio", REGULATORY_PACKAGES),
     status: readEnum(value, "status_processamento", PROJECT_STATUSES),
     createdAt,
@@ -85,6 +104,7 @@ export async function createProject(
       pronac: input.identifier,
       nome: input.name,
       proponente: input.proponent,
+      pacote_regulatorio: input.regulatoryPackage,
       controller: input.controller,
       banco_nome: input.bankName,
       agencia: input.agency,

@@ -44,11 +44,24 @@ begin
       add constraint projetos_status_processamento_check
       check (status_processamento in ('EMPTY', 'IMPORTING', 'REVIEW', 'READY'));
   end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.projetos'::regclass
+      and conname = 'projetos_proponente_nonblank_check'
+  ) then
+    alter table public.projetos
+      add constraint projetos_proponente_nonblank_check
+      check (proponente is not null and btrim(proponente) <> '') not valid;
+  end if;
 end;
 $$;
 
 create index if not exists membros_projeto_user_project_idx
   on public.membros_projeto (user_id, projeto_id);
+
+drop function if exists public.criar_projeto_com_membro(text, text, text, text, text);
 
 create or replace function public.pode_acessar_projeto(p_projeto_id uuid)
 returns boolean
@@ -155,6 +168,11 @@ begin
       using errcode = 'insufficient_privilege';
   end if;
 
+  if p_proponente is null or btrim(p_proponente) = '' then
+    raise exception 'proponent is required'
+      using errcode = 'check_violation';
+  end if;
+
   if p_pacote_regulatorio is null
      or p_pacote_regulatorio not in ('ROUANET', 'FSA_ANCINE') then
     raise exception 'invalid regulatory package: %', p_pacote_regulatorio
@@ -215,36 +233,9 @@ exception
 end;
 $$;
 
--- Preserve the original five-argument RPC contract for older clients.
-create or replace function public.criar_projeto_com_membro(
-  p_pronac text,
-  p_nome text,
-  p_proponente text,
-  p_controller text,
-  p_banco text
-) returns public.projetos
-language sql
-security invoker
-set search_path = ''
-as $$
-  select *
-  from public.criar_projeto_com_membro(
-    p_pronac,
-    p_nome,
-    p_proponente,
-    p_controller,
-    p_banco,
-    'FSA_ANCINE'
-  );
-$$;
-
 revoke all on function public.criar_projeto_com_membro(text, text, text, text, text, text)
   from public, anon;
-revoke all on function public.criar_projeto_com_membro(text, text, text, text, text)
-  from public, anon;
 grant execute on function public.criar_projeto_com_membro(text, text, text, text, text, text)
-  to authenticated;
-grant execute on function public.criar_projeto_com_membro(text, text, text, text, text)
   to authenticated;
 
 commit;

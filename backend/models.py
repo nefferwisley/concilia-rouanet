@@ -15,12 +15,19 @@ class ProjetoCreate(BaseModel):
     agencia: Optional[str] = None
     conta: Optional[str] = None
 
+    @field_validator('proponente')
+    @classmethod
+    def proponente_not_blank(cls, v):
+        if len(v.strip()) == 0:
+            raise ValueError('Proponente não pode ser vazio')
+        return v
+
 
 class ProjetoOut(BaseModel):
     id: str
     pronac: str
     nome: str
-    proponente: str
+    proponente: Optional[str]
     pacote_regulatorio: Literal["ROUANET", "FSA_ANCINE"]
     status_processamento: Literal["EMPTY", "IMPORTING", "REVIEW", "READY"]
     banco: Optional[str] = None
@@ -62,6 +69,13 @@ class ProjetoUpdate(BaseModel):
     def nome_not_empty(cls, v):
         if v is not None and len(v.strip()) == 0:
             raise ValueError('Nome não pode ser vazio')
+        return v
+
+    @field_validator('proponente')
+    @classmethod
+    def proponente_not_blank(cls, v):
+        if v is None or len(v.strip()) == 0:
+            raise ValueError('Proponente não pode ser vazio')
         return v
 
     class Config:

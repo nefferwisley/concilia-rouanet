@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from backend.models import ProjetoCreate, ProjetoOut
+from backend.models import ProjetoCreate, ProjetoOut, ProjetoUpdate
 from backend.routes.projetos import criar_projeto, listar_projetos
 
 
@@ -63,6 +63,30 @@ def test_project_creation_rpc_validates_identity_and_limits_execution():
     assert all(" to anon" not in statement for statement in execute_grants)
 
 
+def test_legacy_project_creation_rpc_is_removed_for_authenticated_users():
+    normalized = _read_sql()
+    legacy_signature = (
+        "public.criar_projeto_com_membro(text, text, text, text, text)"
+    )
+
+    assert f"drop function if exists {legacy_signature}" in normalized
+    execute_grants = [
+        statement
+        for statement in normalized.split(";")
+        if statement.strip().startswith("grant execute")
+    ]
+    assert all(legacy_signature not in statement for statement in execute_grants)
+
+
+def test_future_projects_and_rpc_reject_missing_or_blank_proponents():
+    normalized = _read_sql()
+
+    assert "projetos_proponente_nonblank_check" in normalized
+    assert "check (proponente is not null and btrim(proponente) <> '') not valid" in normalized
+    assert "p_proponente is null" in normalized
+    assert "btrim(p_proponente) = ''" in normalized
+
+
 def test_project_models_require_real_identity_and_regulatory_fields():
     with pytest.raises(ValidationError):
         ProjetoCreate(pronac="TEST-001", nome="Projeto", proponente="Proponente")
@@ -91,6 +115,38 @@ def test_project_models_require_real_identity_and_regulatory_fields():
             proponente="Proponente",
             criado_em=datetime.now(timezone.utc),
         )
+
+
+def test_project_create_and_patch_reject_blank_or_null_proponents():
+    with pytest.raises(ValidationError):
+        ProjetoCreate(
+            pronac="TEST-001",
+            nome="Projeto",
+            proponente="   ",
+            pacote_regulatorio="ROUANET",
+        )
+
+    ProjetoUpdate()
+    for invalid_proponent in (None, "", "   "):
+        with pytest.raises(ValidationError):
+            ProjetoUpdate(proponente=invalid_proponent)
+
+
+def test_project_output_requires_proponent_key_but_allows_legacy_null():
+    project_fields = {
+        "id": "legacy-project",
+        "pronac": "LEGACY-001",
+        "nome": "Projeto legado",
+        "pacote_regulatorio": "ROUANET",
+        "status_processamento": "READY",
+        "criado_em": datetime.now(timezone.utc),
+    }
+
+    project = ProjetoOut(proponente=None, **project_fields)
+    assert project.proponente is None
+
+    with pytest.raises(ValidationError):
+        ProjetoOut(**project_fields)
 
 
 class _ProjectListConnection:
