@@ -6,7 +6,7 @@ describe("projectApi", () => {
     vi.unstubAllGlobals();
   });
 
-  it("maps the current Portuguese project listing without financial defaults", async () => {
+  it("maps complete Portuguese project fields into OnlineProject", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -19,6 +19,9 @@ describe("projectApi", () => {
                 id: "project-1",
                 pronac: "123456",
                 nome: "Projeto Cultural",
+                proponente: "Associação Cultural",
+                pacote_regulatorio: "FSA_ANCINE",
+                status_processamento: "READY",
                 criado_em: "2026-08-20T10:00:00+00:00",
                 transacoes_count: 0,
               },
@@ -34,12 +37,40 @@ describe("projectApi", () => {
         id: "project-1",
         identifier: "123456",
         name: "Projeto Cultural",
-        proponent: "",
-        regulatoryPackage: "ROUANET",
-        status: "EMPTY",
+        proponent: "Associação Cultural",
+        regulatoryPackage: "FSA_ANCINE",
+        status: "READY",
         createdAt: "2026-08-20T10:00:00+00:00",
       },
     ]);
+  });
+
+  it("rejects a non-empty project payload that omits required online fields", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            total: 1,
+            page: 1,
+            projetos: [
+              {
+                id: "project-1",
+                pronac: "123456",
+                nome: "Projeto Cultural",
+                criado_em: "2026-08-20T10:00:00+00:00",
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    await expect(listProjects("token")).rejects.toMatchObject({
+      name: "ApiContractError",
+      status: 200,
+    });
   });
 
   it("turns a non-successful project response into ApiError", async () => {

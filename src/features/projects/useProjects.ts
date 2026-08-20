@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "../../hooks/useSession";
 import { listProjects } from "./projectApi";
 import type { OnlineProject } from "./projectTypes";
@@ -27,11 +27,16 @@ export function useProjects(): {
   const [activeProjectId, setActiveProjectIdState] = useState<string | null>(getPreferredProjectId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const requestGeneration = useRef(0);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
+    const generation = ++requestGeneration.current;
+
     if (!session?.access_token) {
-      setProjects([]);
-      setLoading(false);
+      if (generation === requestGeneration.current) {
+        setProjects([]);
+        setLoading(false);
+      }
       return;
     }
 
@@ -39,14 +44,21 @@ export function useProjects(): {
     setError(null);
 
     try {
-      setProjects(await listProjects(session.access_token));
+      const nextProjects = await listProjects(session.access_token);
+      if (generation === requestGeneration.current) {
+        setProjects(nextProjects);
+      }
     } catch (reason) {
-      setProjects([]);
-      setError(reason instanceof Error ? reason : new Error("Não foi possível carregar os projetos."));
+      if (generation === requestGeneration.current) {
+        setProjects([]);
+        setError(reason instanceof Error ? reason : new Error("Não foi possível carregar os projetos."));
+      }
     } finally {
-      setLoading(false);
+      if (generation === requestGeneration.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [session?.access_token]);
 
   useEffect(() => {
     if (sessionLoading) {
@@ -54,7 +66,14 @@ export function useProjects(): {
     }
 
     void reload();
-  }, [session?.access_token, sessionLoading]);
+    return () => {
+      requestGeneration.current += 1;
+    };
+  }, [reload, sessionLoading]);
+
+  useEffect(() => () => {
+    requestGeneration.current += 1;
+  }, []);
 
   const setActiveProjectId = (id: string | null) => {
     setActiveProjectIdState(id);
