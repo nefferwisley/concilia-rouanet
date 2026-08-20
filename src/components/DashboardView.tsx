@@ -31,6 +31,7 @@ import {
 import { PronacProject, BudgetRubric, BankTransaction, FiscalDocument, AuditAlert } from "../types";
 import { formatCurrency, formatDate, calculatePercent } from "../utils/formatters";
 import { resolveProviderAndCompany } from "../utils/providerHelper";
+import { canRevealFinancialMetrics } from "../utils/financialMetricGate";
 
 interface DashboardViewProps {
   project: PronacProject;
@@ -57,13 +58,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
-  const hasDomainEvidence =
-    safeRubrics.length > 0 ||
-    safeTransactions.length > 0 ||
-    safeDocuments.length > 0 ||
-    safeAlerts.length > 0;
-  const hasCalculatedMetrics =
-    (project.status === "REVIEW" || project.status === "READY") && hasDomainEvidence;
+  const hasCalculatedMetrics = canRevealFinancialMetrics(project, {
+    rubrics: safeRubrics,
+    transactions: safeTransactions,
+    documents: safeDocuments,
+  });
 
   const percentCaptado = calculatePercent(project.valorCaptado, project.valorAprovado);
   const percentExecutado = calculatePercent(project.valorExecutado, project.valorCaptado);

@@ -29,6 +29,23 @@ describe("readPublicEnv", () => {
     })).toThrow(/privilegiada/i);
   });
 
+  it("rejects every non-empty VITE variable outside the exact public allowlist", () => {
+    expect(() => assertPublicEnvSafe({
+      VITE_SUPABASE_URL: "https://example.supabase.co",
+      VITE_SUPABASE_PUBLISHABLE_KEY: "anon-key",
+      VITE_API_URL: "https://api.example.test/api/v1",
+      VITE_GOOGLE_CLIENT_ID: "public-but-not-allowed.apps.googleusercontent.com",
+    })).toThrow(/vite_google_client_id/i);
+
+    expect(() => assertPublicEnvSafe({ VITE_UNUSED: "   " })).not.toThrow();
+  });
+
+  it("rejects privileged values even when hidden under an alternative VITE name", () => {
+    expect(() => assertPublicEnvSafe({
+      VITE_INTERNAL_TOKEN: "sb_secret_hidden_elsewhere",
+    })).toThrow(/privilegiada/i);
+  });
+
   it("returns a trimmed public configuration", () => {
     expect(readPublicEnv({
       VITE_SUPABASE_URL: "  https://example.supabase.co  ",

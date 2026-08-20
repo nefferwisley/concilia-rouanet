@@ -77,21 +77,56 @@ function mapProject(value: unknown): OnlineProject {
   };
 }
 
-function unwrapProjects(response: unknown): unknown[] {
+type ProjectPage = {
+  projects: unknown[];
+  total: number | null;
+  page: number | null;
+};
+
+function unwrapProjects(response: unknown): ProjectPage {
   if (Array.isArray(response)) {
-    return response;
+    return { projects: response, total: null, page: null };
   }
 
   if (isRecord(response) && Array.isArray(response.projetos)) {
-    return response.projetos;
+    if (!Number.isInteger(response.total) || Number(response.total) < 0) {
+      throw new ApiContractError("Resposta de listagem de projetos inválida: total ausente ou inválido.", response);
+    }
+    if (!Number.isInteger(response.page) || Number(response.page) < 1) {
+      throw new ApiContractError("Resposta de listagem de projetos inválida: página ausente ou inválida.", response);
+    }
+    return {
+      projects: response.projetos,
+      total: Number(response.total),
+      page: Number(response.page),
+    };
   }
 
   throw new ApiContractError("Resposta de listagem de projetos inválida.", response);
 }
 
 export async function listProjects(token: string): Promise<OnlineProject[]> {
-  const response = await requestApi<unknown>("/projetos", token);
-  return unwrapProjects(response).map(mapProject);
+  const projects: OnlineProject[] = [];
+  const pageLimit = 100;
+
+  for (let requestedPage = 1; requestedPage <= 1000; requestedPage += 1) {
+    const response = await requestApi<unknown>(
+      `/projetos?page=${requestedPage}&limit=${pageLimit}`,
+      token,
+    );
+    const page = unwrapProjects(response);
+
+    if (page.page !== null && page.page !== requestedPage) {
+      throw new ApiContractError("Resposta de listagem de projetos inválida: página fora de ordem.", response);
+    }
+
+    projects.push(...page.projects.map(mapProject));
+    if (page.total === null || page.projects.length === 0 || projects.length >= page.total) {
+      return projects;
+    }
+  }
+
+  throw new ApiContractError("Paginação de projetos excedeu o limite seguro.", projects);
 }
 
 export async function createProject(

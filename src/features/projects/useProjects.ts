@@ -23,7 +23,11 @@ export function useProjects(): {
   reload: () => Promise<void>;
 } {
   const { session, loading: sessionLoading } = useSession();
-  const [projects, setProjects] = useState<OnlineProject[]>([]);
+  const sessionIdentity = session?.user?.id ?? session?.access_token ?? null;
+  const [projectState, setProjectState] = useState<{
+    identity: string | null;
+    projects: OnlineProject[];
+  }>({ identity: null, projects: [] });
   const [activeProjectId, setActiveProjectIdState] = useState<string | null>(getPreferredProjectId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -31,26 +35,29 @@ export function useProjects(): {
 
   const reload = useCallback(async () => {
     const generation = ++requestGeneration.current;
+    const requestIdentity = sessionIdentity;
 
     if (!session?.access_token) {
       if (generation === requestGeneration.current) {
-        setProjects([]);
+        setProjectState({ identity: null, projects: [] });
+        setError(null);
         setLoading(false);
       }
       return;
     }
 
+    setProjectState({ identity: requestIdentity, projects: [] });
     setLoading(true);
     setError(null);
 
     try {
       const nextProjects = await listProjects(session.access_token);
       if (generation === requestGeneration.current) {
-        setProjects(nextProjects);
+        setProjectState({ identity: requestIdentity, projects: nextProjects });
       }
     } catch (reason) {
       if (generation === requestGeneration.current) {
-        setProjects([]);
+        setProjectState({ identity: requestIdentity, projects: [] });
         setError(reason instanceof Error ? reason : new Error("Não foi possível carregar os projetos."));
       }
     } finally {
@@ -58,7 +65,7 @@ export function useProjects(): {
         setLoading(false);
       }
     }
-  }, [session?.access_token]);
+  }, [session?.access_token, sessionIdentity]);
 
   useEffect(() => {
     if (sessionLoading) {
@@ -89,6 +96,7 @@ export function useProjects(): {
     }
   };
 
+  const projects = projectState.identity === sessionIdentity ? projectState.projects : [];
   const activeProject = useMemo(
     () => projects.find((project) => project.id === activeProjectId) ?? null,
     [activeProjectId, projects],

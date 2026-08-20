@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import type { BudgetRubric, PronacProject } from "../types";
+import type { BudgetRubric, PronacProject, TripartiteEntry } from "../types";
 import { TripartiteConciliationView } from "./TripartiteConciliationView";
 
 const project: PronacProject = {
@@ -55,6 +55,30 @@ const renderView = (rubrics: BudgetRubric[], onUpdateTripartiteEntries = vi.fn()
     />,
   );
 
+const renderViewWithEntries = (
+  entries: TripartiteEntry[],
+  onUpdateTripartiteEntries = vi.fn(),
+) => render(
+  <TripartiteConciliationView
+    project={project}
+    rubrics={[rubric]}
+    transactions={[]}
+    documents={[]}
+    tripartiteEntries={entries}
+    alerts={[]}
+    onUpdateTripartiteEntries={onUpdateTripartiteEntries}
+    onUpdateDocuments={() => undefined}
+    onUpdateTransactions={() => undefined}
+  />,
+);
+
+function fieldByLabel(label: RegExp): HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement {
+  const labelElement = screen.getByText(label);
+  const field = labelElement.parentElement?.querySelector("input, select, textarea");
+  expect(field).not.toBeNull();
+  return field as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+}
+
 it("keeps the new-entry action visible but disabled until a rubric exists", () => {
   const onUpdateTripartiteEntries = vi.fn();
   renderView([], onUpdateTripartiteEntries);
@@ -93,5 +117,71 @@ it("refuses submission safely if rubrics disappear while the form is open", () =
   const form = screen.getByRole("button", { name: /salvar lançamento/i }).closest("form");
   expect(form).not.toBeNull();
   expect(() => fireEvent.submit(form!)).not.toThrow();
+  expect(onUpdateTripartiteEntries).not.toHaveBeenCalled();
+});
+
+it("creates a declared manual entry as incomplete without synthetic bank or document evidence", () => {
+  const onUpdateTripartiteEntries = vi.fn();
+  renderView([rubric], onUpdateTripartiteEntries);
+
+  fireEvent.click(screen.getByRole("button", { name: /novo lançamento/i }));
+  fireEvent.change(fieldByLabel(/período \/ mês/i), { target: { value: "2026-08" } });
+  fireEvent.change(fieldByLabel(/número do documento/i), { target: { value: "NF-REAL-123" } });
+  fireEvent.change(fieldByLabel(/fornecedor \/ razão social/i), { target: { value: "Fornecedor real" } });
+  fireEvent.change(fieldByLabel(/valor bruto documento/i), { target: { value: "125" } });
+  fireEvent.change(fieldByLabel(/valor débito bb/i), { target: { value: "125" } });
+  fireEvent.click(screen.getByRole("button", { name: /salvar lançamento/i }));
+
+  const [created, ...previous] = onUpdateTripartiteEntries.mock.calls[0][0] as TripartiteEntry[];
+  expect(previous).toEqual([]);
+  expect(created).toMatchObject({
+    periodo: "2026-08",
+    idRubrica: rubric.id,
+    numeroDoc: "NF-REAL-123",
+    fornecedor: "Fornecedor real",
+    valorBrutoDoc: 125,
+    valorDebitoBB: 125,
+    statusTripartite: "PENDENTE DE VÍNCULO",
+    statusSalic: "Pendente",
+    checkTripe: {
+      fiscalDocAnexo: false,
+      comprovanteBancarioAnexo: false,
+      relatorioExecucaoAnexo: false,
+      rubricaValida: true,
+    },
+    gedArquivos: [],
+  });
+  expect(created.idDocFiscal).toBeUndefined();
+  expect(created.idTransacaoBB).toBeUndefined();
+  expect(created.dataEmissao).toBeUndefined();
+  expect(created.dataCompensacao).toBeUndefined();
+  expect(created.cnpjCpf).toBeUndefined();
+});
+
+it("offers no one-click action that fabricates a fiscal document file", () => {
+  const onUpdateTripartiteEntries = vi.fn();
+  renderViewWithEntries([
+    {
+      id: "manual-entry",
+      periodo: "2026-08",
+      idRubrica: rubric.id,
+      descricaoRubrica: rubric.nome,
+      fornecedor: "Fornecedor real",
+      valorBrutoDoc: 125,
+      valorDebitoBB: 125,
+      statusTripartite: "PENDENTE DE VÍNCULO",
+      statusSalic: "Pendente",
+      checkTripe: {
+        fiscalDocAnexo: false,
+        comprovanteBancarioAnexo: false,
+        relatorioExecucaoAnexo: false,
+        rubricaValida: true,
+      },
+      gedArquivos: [],
+    },
+  ], onUpdateTripartiteEntries);
+
+  expect(screen.queryByRole("button", { name: /gerar nf/i })).not.toBeInTheDocument();
+  expect(screen.getByText(/anexe um documento real/i)).toBeInTheDocument();
   expect(onUpdateTripartiteEntries).not.toHaveBeenCalled();
 });

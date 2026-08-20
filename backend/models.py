@@ -15,12 +15,13 @@ class ProjetoCreate(BaseModel):
     agencia: Optional[str] = None
     conta: Optional[str] = None
 
-    @field_validator('proponente')
+    @field_validator('pronac', 'nome', 'proponente')
     @classmethod
-    def proponente_not_blank(cls, v):
-        if len(v.strip()) == 0:
-            raise ValueError('Proponente não pode ser vazio')
-        return v
+    def required_text_is_trimmed_and_not_blank(cls, v, info):
+        trimmed = v.strip()
+        if not trimmed:
+            raise ValueError(f'{info.field_name} não pode ser vazio')
+        return trimmed
 
 
 class ProjetoOut(BaseModel):
@@ -67,16 +68,19 @@ class ProjetoUpdate(BaseModel):
     @field_validator('nome')
     @classmethod
     def nome_not_empty(cls, v):
-        if v is not None and len(v.strip()) == 0:
-            raise ValueError('Nome não pode ser vazio')
-        return v
+        if v is None:
+            return v
+        trimmed = v.strip()
+        if len(trimmed) < 3:
+            raise ValueError('Nome deve ter ao menos 3 caracteres')
+        return trimmed
 
     @field_validator('proponente')
     @classmethod
     def proponente_not_blank(cls, v):
         if v is None or len(v.strip()) == 0:
             raise ValueError('Proponente não pode ser vazio')
-        return v
+        return v.strip()
 
     class Config:
         json_schema_extra = {

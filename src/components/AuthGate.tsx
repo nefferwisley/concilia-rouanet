@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useState } from "react";
+import { Fragment, type FormEvent, type ReactNode, useState } from "react";
 import { useSession } from "../hooks/useSession";
 import { supabase } from "../services/supabaseClient";
 
@@ -27,7 +27,8 @@ export function AuthGate({ children }: AuthGateProps) {
   }
 
   if (session) {
-    return <>{children}</>;
+    const identityKey = session.user?.id || session.access_token || "authenticated-session";
+    return <Fragment key={identityKey}>{children}</Fragment>;
   }
 
   return (

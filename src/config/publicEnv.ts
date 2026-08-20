@@ -4,6 +4,12 @@ export type PublicEnv = {
   apiUrl: string;
 };
 
+const PUBLIC_VITE_ENV_ALLOWLIST = new Set([
+  "VITE_SUPABASE_URL",
+  "VITE_SUPABASE_PUBLISHABLE_KEY",
+  "VITE_API_URL",
+]);
+
 function hasServiceRoleJwt(key: string): boolean {
   const [, payload] = key.split(".");
   if (!payload) return false;
@@ -23,9 +29,21 @@ export function isPrivilegedSupabaseKey(key: string): boolean {
 }
 
 export function assertPublicEnvSafe(env: Record<string, string | undefined>): void {
-  const supabasePublishableKey = env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() ?? "";
-  if (isPrivilegedSupabaseKey(supabasePublishableKey)) {
-    throw new Error("Chave privilegiada não pode ser usada no navegador.");
+  const nonEmptyViteEntries = Object.entries(env).filter(
+    ([name, value]) => name.startsWith("VITE_") && Boolean(value?.trim()),
+  );
+
+  for (const [, value] of nonEmptyViteEntries) {
+    if (isPrivilegedSupabaseKey(value!.trim())) {
+      throw new Error("Chave privilegiada não pode ser usada no navegador.");
+    }
+  }
+
+  const unexpectedName = nonEmptyViteEntries.find(
+    ([name]) => !PUBLIC_VITE_ENV_ALLOWLIST.has(name),
+  )?.[0];
+  if (unexpectedName) {
+    throw new Error(`Variável pública não permitida no bundle: ${unexpectedName}.`);
   }
 }
 

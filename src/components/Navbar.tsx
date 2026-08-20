@@ -29,6 +29,7 @@ interface NavbarProps {
   onOpenLangChainModal?: () => void;
   onExportExcel: () => void;
   onExportPdf: () => void;
+  exportEnabled?: boolean;
   onRunAiAudit: () => void;
   isAuditing: boolean;
   alerts: AuditAlert[];
@@ -45,6 +46,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenLangChainModal,
   onExportExcel,
   onExportPdf,
+  exportEnabled = true,
   onRunAiAudit,
   isAuditing,
   alerts,
@@ -220,9 +222,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Quick Export Dropdown */}
             <div className="relative">
               <button
-                onClick={() => setIsExportOpen(!isExportOpen)}
-                className="text-[11px] sm:text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2 sm:px-3 py-2 rounded-xl flex items-center gap-1 transition min-h-[38px]"
-                title="Exportar dados do SALIC"
+                onClick={() => exportEnabled && setIsExportOpen(!isExportOpen)}
+                disabled={!exportEnabled}
+                className="text-[11px] sm:text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2 sm:px-3 py-2 rounded-xl flex items-center gap-1 transition min-h-[38px] disabled:cursor-not-allowed disabled:opacity-50"
+                title={exportEnabled ? "Exportar dados do SALIC" : "Ainda não calculado"}
               >
                 <Download className="w-3.5 h-3.5 text-slate-300" />
                 <span className="hidden sm:inline">Exportar</span>

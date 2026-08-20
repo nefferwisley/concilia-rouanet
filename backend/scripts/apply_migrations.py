@@ -1,13 +1,11 @@
 """
-apply_migrations.py — aplica migrations pendentes no startup do backend.
+apply_migrations.py — verifica ou, por opt-in operacional, aplica migrations.
 
-Por que existe: sem isso, o schema do banco fica atrasado (ex: produção sem
-a tabela `documentos_projeto`) até alguém rodar psql manualmente. Com este
-runner, toda vez que o app sobe, ele verifica quais arquivos de
-db/migrations/000X_*.sql já foram aplicados (tabela schema_migrations) e
-aplica os que faltam, em ordem.
+No startup normal o backend usa `verificar_migrations`, que é somente leitura
+e falha se o ledger estiver ausente ou atrasado. `aplicar_migrations` só é
+usado com opt-in explícito fora de produção ou como comando operacional.
 
-Uso (chamado no main.py, mas pode rodar standalone):
+Uso operacional standalone (nunca implícito em produção):
     python -m scripts.apply_migrations
 """
 import asyncio
@@ -55,6 +53,39 @@ async def _e_supabase(conn: asyncpg.Connection) -> bool:
         return False
 
 
+def _arquivos_migration() -> list[pathlib.Path]:
+    return sorted(MIGRATIONS_DIR.glob("[0-9][0-9][0-9][0-9]_*.sql"))
+
+
+async def verificar_migrations() -> None:
+    """Falha se o ledger não existir ou houver migration pendente; não escreve."""
+    conn = await asyncpg.connect(settings.database_url, statement_cache_size=0)
+    try:
+        ledger_exists = await conn.fetchval(
+            "select to_regclass('public.schema_migrations') is not null"
+        )
+        if ledger_exists is not True:
+            raise RuntimeError(
+                "schema_migrations ausente; aplique as migrations por uma operação controlada."
+            )
+
+        aplicadas = {r["id"] for r in await conn.fetch("select id from schema_migrations")}
+        supabase = await _e_supabase(conn)
+        esperadas = [
+            arquivo.name
+            for arquivo in _arquivos_migration()
+            if not (arquivo.name == SHIM_LOCAL and supabase)
+        ]
+        pendentes = [nome for nome in esperadas if nome not in aplicadas]
+        if pendentes:
+            raise RuntimeError(
+                "Migrations pendentes: " + ", ".join(pendentes)
+            )
+        log.info("Schema verificado: %d migration(s) aplicada(s), nenhuma pendente.", len(esperadas))
+    finally:
+        await conn.close()
+
+
 async def aplicar_migrations() -> None:
     # statement_cache_size=0 pelo mesmo motivo do pool (ver database.py): se a
     # DATABASE_URL apontar pro pooler em transaction mode, prepared statement
@@ -76,12 +107,12 @@ async def aplicar_migrations() -> None:
         }
         supabase = await _e_supabase(conn)
 
-        contagem_ok, contagem_pulada, falhas = 0, 0, []
+        contagem_ok, contagem_pulada = 0, 0
 
         # Quatro dígitos, não "000*": o glob antigo casava só até 0009 e teria
         # PULADO 0010 em diante — em silêncio, sem erro nenhum, que é o pior
         # modo de falhar (foi assim que 0009 não aplicou e derrubou produção).
-        arquivos = sorted(MIGRATIONS_DIR.glob("[0-9][0-9][0-9][0-9]_*.sql"))
+        arquivos = _arquivos_migration()
         for arquivo in arquivos:
             if arquivo.name in aplicadas:
                 contagem_pulada += 1
@@ -93,36 +124,21 @@ async def aplicar_migrations() -> None:
 
             sql = arquivo.read_text(encoding="utf-8")
             log.info("Aplicando migration %s ...", arquivo.name)
-            # Cada migration na SUA transação e com o erro contido aqui: antes,
-            # uma falha (ex: 0001 recriando tabela que já existe no Supabase)
-            # subia a exceção e abortava TODA a cadeia seguinte — foi assim que
-            # 0009 nunca rodou em produção e toda rota autenticada virou 500
-            # por `column t.razao_social does not exist`.
-            try:
-                async with conn.transaction():
-                    await conn.execute(sql)
-                    await conn.execute(
-                        "insert into schema_migrations (id) values ($1)",
-                        arquivo.name,
-                    )
-                contagem_ok += 1
-                log.info("Migration %s aplicada.", arquivo.name)
-            except Exception as e:  # noqa: BLE001 — seguir para a próxima
-                falhas.append((arquivo.name, str(e)))
-                log.error("FALHA na migration %s: %s", arquivo.name, e)
+            # O runner é o único dono da transação. Qualquer erro reverte SQL
+            # + registro no ledger e é propagado para o operador/startup.
+            async with conn.transaction():
+                await conn.execute(sql)
+                await conn.execute(
+                    "insert into schema_migrations (id) values ($1)",
+                    arquivo.name,
+                )
+            contagem_ok += 1
+            log.info("Migration %s aplicada.", arquivo.name)
 
         log.info(
-            "Resumo das migrations: %d aplicada(s), %d pulada(s), %d falha(s).",
-            contagem_ok, contagem_pulada, len(falhas),
+            "Resumo das migrations: %d aplicada(s), %d pulada(s), 0 falha(s).",
+            contagem_ok, contagem_pulada,
         )
-        if falhas:
-            # Berra alto: o modo de falha anterior era silencioso (o lifespan
-            # engolia tudo num log.warning) e ninguém notava schema atrasado.
-            log.error("=" * 60)
-            log.error("ATENÇÃO: %d migration(s) FALHARAM — schema pode estar atrasado.", len(falhas))
-            for nome, erro in falhas:
-                log.error("  - %s -> %s", nome, erro)
-            log.error("=" * 60)
     finally:
         await conn.close()
 

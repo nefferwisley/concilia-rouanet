@@ -1,8 +1,6 @@
 -- Foundation for real, tenant-isolated project imports.
 -- Existing projects are classified in place; this migration never seeds projects.
 
-begin;
-
 alter table public.projetos
   add column if not exists pacote_regulatorio text default 'FSA_ANCINE',
   add column if not exists status_processamento text default 'EMPTY';
@@ -61,6 +59,24 @@ $$;
 create index if not exists membros_projeto_user_project_idx
   on public.membros_projeto (user_id, projeto_id);
 
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.membros_projeto'::regclass
+      and conname = 'membros_projeto_papel_check'
+  ) then
+    alter table public.membros_projeto
+      add constraint membros_projeto_papel_check
+      check (papel in ('admin', 'membro')) not valid;
+  end if;
+end;
+$$;
+
+alter table public.membros_projeto
+  validate constraint membros_projeto_papel_check;
+
 drop function if exists public.criar_projeto_com_membro(text, text, text, text, text);
 
 create or replace function public.pode_acessar_projeto(p_projeto_id uuid)
@@ -82,25 +98,131 @@ $$;
 revoke all on function public.pode_acessar_projeto(uuid) from public, anon;
 grant execute on function public.pode_acessar_projeto(uuid) to authenticated;
 
+create or replace function public.eh_admin_projeto(p_projeto_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select (select auth.uid()) is not null
+    and exists (
+      select 1
+      from public.membros_projeto as mp
+      where mp.projeto_id = p_projeto_id
+        and mp.user_id = (select auth.uid())
+        and mp.papel = 'admin'
+    );
+$$;
+
+revoke all on function public.eh_admin_projeto(uuid) from public, anon;
+grant execute on function public.eh_admin_projeto(uuid) to authenticated;
+
+create or replace function public.proteger_ultimo_admin_projeto()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if old.papel <> 'admin' then
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE'
+     and new.papel = 'admin'
+     and new.projeto_id = old.projeto_id
+     and new.user_id = old.user_id then
+    return new;
+  end if;
+
+  -- Serializa remoções/rebaixamentos por projeto para que dois admins não
+  -- consigam se remover simultaneamente após ambos observarem o outro.
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(old.projeto_id::text, 0)
+  );
+
+  -- Cascata da exclusão do próprio projeto não é uma mutação isolada da
+  -- composição administrativa e deve continuar permitida.
+  if not exists (
+    select 1 from public.projetos where id = old.projeto_id
+  ) then
+    return old;
+  end if;
+
+  if not exists (
+    select 1
+    from public.membros_projeto as mp
+    where mp.projeto_id = old.projeto_id
+      and mp.papel = 'admin'
+      and mp.id <> old.id
+  ) then
+    raise exception 'project must keep at least one admin'
+      using errcode = 'check_violation';
+  end if;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.proteger_ultimo_admin_projeto() from public, anon;
+
+drop trigger if exists membros_projeto_proteger_ultimo_admin_delete
+  on public.membros_projeto;
+create trigger membros_projeto_proteger_ultimo_admin_delete
+before delete on public.membros_projeto
+for each row execute function public.proteger_ultimo_admin_projeto();
+
+drop trigger if exists membros_projeto_proteger_ultimo_admin_update
+  on public.membros_projeto;
+create trigger membros_projeto_proteger_ultimo_admin_update
+before update of papel, projeto_id, user_id on public.membros_projeto
+for each row execute function public.proteger_ultimo_admin_projeto();
+
 alter table public.membros_projeto enable row level security;
 alter table public.projetos enable row level security;
 
 drop policy if exists p_membros on public.membros_projeto;
-create policy p_membros on public.membros_projeto for all
+drop policy if exists p_membros_select on public.membros_projeto;
+drop policy if exists p_membros_insert on public.membros_projeto;
+drop policy if exists p_membros_update on public.membros_projeto;
+drop policy if exists p_membros_delete on public.membros_projeto;
+
+create policy p_membros_select on public.membros_projeto
+  for select to authenticated
   using (
-    (select auth.uid()) is not null
-    and (
-      user_id = (select auth.uid())
-      or public.pode_acessar_projeto(projeto_id)
-    )
-  )
-  with check (
     (select auth.uid()) is not null
     and public.pode_acessar_projeto(projeto_id)
   );
 
+create policy p_membros_insert on public.membros_projeto
+  for insert to authenticated
+  with check (
+    public.eh_admin_projeto(projeto_id)
+    and papel in ('admin', 'membro')
+  );
+
+create policy p_membros_update on public.membros_projeto
+  for update to authenticated
+  using (public.eh_admin_projeto(projeto_id))
+  with check (
+    public.eh_admin_projeto(projeto_id)
+    and papel in ('admin', 'membro')
+  );
+
+create policy p_membros_delete on public.membros_projeto
+  for delete to authenticated
+  using (public.eh_admin_projeto(projeto_id));
+
 drop policy if exists p_projetos_select on public.projetos;
-create policy p_projetos_select on public.projetos for select
+create policy p_projetos_select on public.projetos
+  for select to authenticated
   using (
     (select auth.uid()) is not null
     and exists (
@@ -112,7 +234,8 @@ create policy p_projetos_select on public.projetos for select
   );
 
 drop policy if exists p_projetos_update on public.projetos;
-create policy p_projetos_update on public.projetos for update
+create policy p_projetos_update on public.projetos
+  for update to authenticated
   using (
     (select auth.uid()) is not null
     and exists (
@@ -133,7 +256,8 @@ create policy p_projetos_update on public.projetos for update
   );
 
 drop policy if exists p_projetos_delete on public.projetos;
-create policy p_projetos_delete on public.projetos for delete
+create policy p_projetos_delete on public.projetos
+  for delete to authenticated
   using (
     (select auth.uid()) is not null
     and exists (
@@ -168,6 +292,16 @@ begin
       using errcode = 'insufficient_privilege';
   end if;
 
+  if p_pronac is null or btrim(p_pronac) = '' then
+    raise exception 'project identifier is required'
+      using errcode = 'check_violation';
+  end if;
+
+  if p_nome is null or btrim(p_nome) = '' then
+    raise exception 'project name is required'
+      using errcode = 'check_violation';
+  end if;
+
   if p_proponente is null or btrim(p_proponente) = '' then
     raise exception 'proponent is required'
       using errcode = 'check_violation';
@@ -182,7 +316,7 @@ begin
   select id
   into v_existing_id
   from public.projetos
-  where pronac = p_pronac;
+  where pronac = btrim(p_pronac);
 
   if v_existing_id is not null then
     if not exists (
@@ -212,9 +346,9 @@ begin
     pacote_regulatorio
   )
   values (
-    p_pronac,
-    p_nome,
-    p_proponente,
+    btrim(p_pronac),
+    btrim(p_nome),
+    btrim(p_proponente),
     p_controller,
     p_banco,
     p_pacote_regulatorio
@@ -237,5 +371,3 @@ revoke all on function public.criar_projeto_com_membro(text, text, text, text, t
   from public, anon;
 grant execute on function public.criar_projeto_com_membro(text, text, text, text, text, text)
   to authenticated;
-
-commit;

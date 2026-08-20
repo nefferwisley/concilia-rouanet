@@ -17,6 +17,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AccessibilityToolbar } from "./components/AccessibilityToolbar";
 import { EmptyProjectState } from "./components/EmptyProjectState";
 import { FinancialReviewWorkflowView } from "./components/FinancialReviewWorkflowView";
+import { FinancialDataGate } from "./components/FinancialDataGate";
 import {
   PronacProject,
   BudgetRubric,
@@ -34,6 +35,7 @@ import { useProjects } from "./features/projects/useProjects";
 import { createProject } from "./features/projects/projectApi";
 import type { CreateOnlineProjectInput, OnlineProject } from "./features/projects/projectTypes";
 import { useSession } from "./hooks/useSession";
+import { canRevealFinancialMetrics } from "./utils/financialMetricGate";
 
 function mapOnlineProject(project: OnlineProject, imported?: PronacProject): PronacProject {
   const regulatoryLabel = project.regulatoryPackage === "ROUANET" ? "Lei Rouanet" : "FSA / ANCINE";
@@ -148,6 +150,15 @@ export default function App() {
         valorExecutado: totalExecutadoCalc > 0 ? totalExecutadoCalc : activeProject.valorExecutado,
       }
     : null;
+
+  const financialMetricsAvailable = currentProjectWithLiveStats
+    ? canRevealFinancialMetrics(currentProjectWithLiveStats, {
+        rubrics: currentRubrics,
+        transactions: currentTransactions,
+        documents: currentDocuments,
+        tripartiteEntries: currentTripartiteEntries,
+      })
+    : false;
 
   // State Updaters for active project
   const setRubrics = (action: BudgetRubric[] | ((prev: BudgetRubric[]) => BudgetRubric[])) => {
@@ -422,6 +433,7 @@ export default function App() {
         onOpenNewProjectModal={() => setIsNewProjectModalOpen(true)}
         onOpenDriveImportModal={() => setIsDriveModalOpen(true)}
         onOpenLangChainModal={() => setIsLangChainModalOpen(true)}
+        exportEnabled={financialMetricsAvailable}
         onExportExcel={() =>
           exportSalicExcel(
             currentProjectWithLiveStats,
@@ -477,6 +489,13 @@ export default function App() {
               )}
 
               {activeTab === "reviewWorkflow" && (
+                <FinancialDataGate
+                  project={currentProjectWithLiveStats}
+                  rubrics={currentRubrics}
+                  transactions={currentTransactions}
+                  documents={currentDocuments}
+                  tripartiteEntries={currentTripartiteEntries}
+                >
                 <FinancialReviewWorkflowView
                   project={currentProjectWithLiveStats}
                   transactions={currentTransactions}
@@ -506,9 +525,17 @@ export default function App() {
                     )
                   }
                 />
+                </FinancialDataGate>
               )}
 
               {activeTab === "tripartite" && (
+                <FinancialDataGate
+                  project={currentProjectWithLiveStats}
+                  rubrics={currentRubrics}
+                  transactions={currentTransactions}
+                  documents={currentDocuments}
+                  tripartiteEntries={currentTripartiteEntries}
+                >
                 <TripartiteConciliationView
                   project={currentProjectWithLiveStats}
                   rubrics={currentRubrics}
@@ -522,9 +549,16 @@ export default function App() {
                   onUpdateRubrics={setRubrics}
                   onUpdateAlerts={setAlerts}
                 />
+                </FinancialDataGate>
               )}
 
               {activeTab === "reconciliation_core" && (
+                <FinancialDataGate
+                  project={currentProjectWithLiveStats}
+                  rubrics={currentRubrics}
+                  transactions={currentTransactions}
+                  documents={currentDocuments}
+                >
                 <ReconciliationCoreSkillsView
                   project={currentProjectWithLiveStats}
                   transactions={currentTransactions}
@@ -533,18 +567,33 @@ export default function App() {
                   onRefreshAll={handleSelfHealAndSyncAll}
                   onAutoLinkSplinkMatch={handleAutoLinkSplinkMatch}
                 />
+                </FinancialDataGate>
               )}
 
               {activeTab === "budget" && (
+                <FinancialDataGate
+                  project={currentProjectWithLiveStats}
+                  rubrics={currentRubrics}
+                  transactions={currentTransactions}
+                  documents={currentDocuments}
+                >
                 <BudgetPlanView
                   rubrics={currentRubrics}
                   project={currentProjectWithLiveStats}
                   onAddRubric={handleAddRubric}
                   onUpdateRubric={handleUpdateRubric}
                 />
+                </FinancialDataGate>
               )}
 
               {activeTab === "reconciliation" && (
+                <FinancialDataGate
+                  project={currentProjectWithLiveStats}
+                  rubrics={currentRubrics}
+                  transactions={currentTransactions}
+                  documents={currentDocuments}
+                  tripartiteEntries={currentTripartiteEntries}
+                >
                 <ReconciliationView
                   transactions={currentTransactions}
                   documents={currentDocuments}
@@ -558,6 +607,7 @@ export default function App() {
                   onUpdateTripartiteEntries={setTripartiteEntries}
                   onUpdateAlerts={setAlerts}
                 />
+                </FinancialDataGate>
               )}
 
               {activeTab === "documents" && (
@@ -575,6 +625,12 @@ export default function App() {
               )}
 
               {activeTab === "audit" && (
+                <FinancialDataGate
+                  project={currentProjectWithLiveStats}
+                  rubrics={currentRubrics}
+                  transactions={currentTransactions}
+                  documents={currentDocuments}
+                >
                 <ComplianceAuditView
                   project={currentProjectWithLiveStats}
                   rubrics={currentRubrics}
@@ -585,9 +641,16 @@ export default function App() {
                   onRunAiAudit={handleRunAiAudit}
                   isAuditing={isAuditingGlobal}
                 />
+                </FinancialDataGate>
               )}
 
               {activeTab === "salic" && (
+                <FinancialDataGate
+                  project={currentProjectWithLiveStats}
+                  rubrics={currentRubrics}
+                  transactions={currentTransactions}
+                  documents={currentDocuments}
+                >
                 <SalicReportView
                   project={currentProjectWithLiveStats}
                   rubrics={currentRubrics}
@@ -595,6 +658,7 @@ export default function App() {
                   documents={currentDocuments}
                   alerts={currentAlerts}
                 />
+                </FinancialDataGate>
               )}
 
               {activeTab === "advisor" && (

@@ -30,20 +30,21 @@ export function runPanderaValidationSuite(
 
   const totalDebitos = debits.reduce((acc, t) => acc + (Number(t.valor) || 0), 0);
   const totalRendimentos = credits.reduce((acc, t) => acc + (Number(t.valor) || 0), 0);
-  const valorAprovado = project.valorCaptado || project.valorAprovado || 835000;
+  const valorAprovado = Number(project.valorCaptado) || Number(project.valorAprovado) || 0;
   const totalRecursos = valorAprovado + totalRendimentos;
 
   // -------------------------------------------------------------
   // TEST 1: Resource Availability Assertion (Aporte + Rendimentos)
   // -------------------------------------------------------------
-  const expectedTotalRecursos = 892414.32;
+  const expectedTotalRecursos =
+    valorAprovado + (Number(project.bancoInfo?.rendimentoAplicacao) || 0);
   const diffRecursos = Math.abs(totalRecursos - expectedTotalRecursos);
   const test1Passed = diffRecursos < 5.0; // Tolerância leve para centavos
 
   expectations.push({
     id: "EXP_001_TOTAL_RESOURCES",
     name: "expect_total_funding_and_earnings_to_balance",
-    description: "Verifica se a soma de Captação/Repasse FSA (835k) + Rendimentos de Poupança BB confere com o total de recursos disponíveis.",
+    description: "Verifica se a soma da captação/repasse declarada e dos rendimentos bancários importados confere com os valores do projeto.",
     category: "FINANCIAL_BALANCE",
     severity: "CRITICAL",
     passed: test1Passed,

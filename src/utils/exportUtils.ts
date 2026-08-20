@@ -10,6 +10,7 @@ import {
 } from "../types";
 import { formatCurrency, formatDate } from "./formatters";
 import { resolveProviderAndCompany } from "./providerHelper";
+import { assertFinancialMetricsAvailable } from "./financialMetricGate";
 
 export function exportTripartiteExcelWorkbook(
   project: PronacProject,
@@ -18,6 +19,12 @@ export function exportTripartiteExcelWorkbook(
   documents: FiscalDocument[],
   tripartiteEntries: TripartiteEntry[]
 ) {
+  assertFinancialMetricsAvailable(project, {
+    rubrics,
+    transactions,
+    documents,
+    tripartiteEntries,
+  });
   const wb = XLSX.utils.book_new();
 
   // ABA 1: 01_Orcamento_SALIC
@@ -101,7 +108,7 @@ export function exportTripartiteExcelWorkbook(
     d.retencaoInss || 0,
     d.retencaoIss || 0,
     d.valorLiquido,
-    d.arquivoNotaNome || `GED_${d.id}.pdf`,
+    d.arquivoNotaNome || "",
   ]);
   const wsDocs = XLSX.utils.aoa_to_sheet([docHeaders, ...docRows]);
   XLSX.utils.book_append_sheet(wb, wsDocs, "03_Documentos_Fiscais");
@@ -138,7 +145,7 @@ export function exportTripartiteExcelWorkbook(
     l.valorDebitoBB,
     l.statusTripartite,
     l.statusSalic,
-    l.checkTripe.fiscalDocAnexo && l.checkTripe.comprovanteBancarioAnexo ? "100% OK" : "Incompleto",
+    l.checkTripe?.fiscalDocAnexo && l.checkTripe?.comprovanteBancarioAnexo ? "100% OK" : "Incompleto",
     l.observacoes,
   ]);
   const wsLanc = XLSX.utils.aoa_to_sheet([lancHeaders, ...lancRows]);
@@ -153,12 +160,12 @@ export function exportTripartiteExcelWorkbook(
     [],
     ["INDICADOR", "VALOR (R$)", "PERCENTUAL / STATUS"],
     ["Valor Total Aprovado", project.valorAprovado, "100%"],
-    ["Valor Total Captado", project.valorCaptado, `${((project.valorCaptado / project.valorAprovado) * 100).toFixed(1)}%`],
-    ["Valor Executado (Débitos)", project.valorExecutado, `${((project.valorExecutado / project.valorCaptado) * 100).toFixed(1)}%`],
+    ["Valor Total Captado", project.valorCaptado, project.valorAprovado > 0 ? `${((project.valorCaptado / project.valorAprovado) * 100).toFixed(1)}%` : "Ainda não calculado"],
+    ["Valor Executado (Débitos)", project.valorExecutado, project.valorCaptado > 0 ? `${((project.valorExecutado / project.valorCaptado) * 100).toFixed(1)}%` : "Ainda não calculado"],
     ["Saldo Conta Movimento BB", project.bancoInfo.saldoMovimento, "Disponível"],
     ["Rendimento de Aplicação", project.bancoInfo.rendimentoAplicacao, "Fundo BB Curto Prazo"],
-    ["Débitos Conciliados", tripartiteEntries.filter((e) => e.statusTripartite.includes("CONCILIADO")).length, "Itens"],
-    ["Débitos Pendentes", tripartiteEntries.filter((e) => !e.statusTripartite.includes("CONCILIADO")).length, "Itens"],
+    ["Débitos Conciliados", tripartiteEntries.filter((e) => e.statusTripartite?.includes("CONCILIADO")).length, "Itens"],
+    ["Débitos Pendentes", tripartiteEntries.filter((e) => !e.statusTripartite?.includes("CONCILIADO")).length, "Itens"],
   ];
   const wsDash = XLSX.utils.aoa_to_sheet(dashHeaders);
   XLSX.utils.book_append_sheet(wb, wsDash, "05_Dashboard_Saldos");
@@ -175,6 +182,7 @@ export function exportSalicExcel(
   documents: FiscalDocument[],
   receipts: Record<string, any> = {}
 ) {
+  assertFinancialMetricsAvailable(project, { rubrics, transactions, documents });
   const wb = XLSX.utils.book_new();
 
   // 1. Sheet: 01_Resumo_Execucao_REF
@@ -187,11 +195,11 @@ export function exportSalicExcel(
     ["Enquadramento Legal:", project.artigoEnquadramento],
     [""],
     ["CONSOLIDAÇÃO FINANCEIRA"],
-    ["Valor Total Aprovado (Captação):", project.valorAprovado || 835000],
-    ["Rendimentos de Aplicação Financeira (BB):", project.bancoInfo?.rendimentoAplicacao || 57414.32],
-    ["Total de Recursos Disponíveis:", (project.valorAprovado || 835000) + (project.bancoInfo?.rendimentoAplicacao || 57414.32)],
-    ["Total de Despesas Executadas:", project.valorExecutado || 897759.15],
-    ["Saldo Remanescente a Recolher ao Fundo:", ((project.valorAprovado || 835000) + (project.bancoInfo?.rendimentoAplicacao || 57414.32)) - (project.valorExecutado || 897759.15)],
+    ["Valor Total Aprovado (Captação):", Number(project.valorAprovado) || 0],
+    ["Rendimentos de Aplicação Financeira (BB):", Number(project.bancoInfo?.rendimentoAplicacao) || 0],
+    ["Total de Recursos Disponíveis:", (Number(project.valorAprovado) || 0) + (Number(project.bancoInfo?.rendimentoAplicacao) || 0)],
+    ["Total de Despesas Executadas:", Number(project.valorExecutado) || 0],
+    ["Saldo Remanescente a Recolher ao Fundo:", (Number(project.valorAprovado) || 0) + (Number(project.bancoInfo?.rendimentoAplicacao) || 0) - (Number(project.valorExecutado) || 0)],
     [""],
     ["Data de Emissão do Dossiê:", new Date().toLocaleDateString("pt-BR")],
   ];
@@ -241,17 +249,17 @@ export function exportSalicExcel(
 
     return [
       `#${String(idx + 1).padStart(3, "0")}`,
-      formatDate(tx.data || tx.dataTransacao || "2023-01-01"),
+      formatDate(tx.data || tx.dataTransacao || ""),
       resolved.personName,
       resolved.companyName,
       resolved.cnpjCpf || tx.cnpjCpfFavorecido || "",
-      tx.documentoBancario || `DOC-${idx + 1}`,
+      tx.documentoBancario || "",
       Number(doc?.valorBruto) || txVal,
       (Number(doc?.retencaoIss) || 0) + (Number(doc?.retencaoIrrf) || 0) + (Number(doc?.retencaoInss) || 0),
       txVal,
       doc ? `${doc.tipo} nº ${doc.numeroDoc}` : rec ? `Recibo nº ${rec.numeroRecibo}` : "Pendente",
       temComp ? "Anexado" : "Pendente",
-      rubric ? `${rubric.itemNumero || ""} ${rubric.nome || rubric.nomeRubrica || ""}`.trim() : "Produção / Execução",
+      rubric ? `${rubric.itemNumero || ""} ${rubric.nome || rubric.nomeRubrica || ""}`.trim() : "Pendente",
       statusComp,
       rec ? `${rec.status === "ASSINADO_ANEXADO" ? "Assinado" : "Com a Júlia"} (${rec.responsavelAssinatura})` : "Não exigido / NF",
     ];
@@ -322,8 +330,8 @@ export function exportSalicExcel(
     rec.favorecidoCpfCnpj,
     rec.valorLiquido,
     rec.funcaoOuServico,
-    rec.rubricaNome || "Despesa",
-    rec.responsavelAssinatura || "Júlia Bárbara",
+    rec.rubricaNome || "",
+    rec.responsavelAssinatura || "",
     rec.status === "ASSINADO_ANEXADO" ? "Assinado & Regularizado" : rec.status === "ENVIADO_ASSINATURA" ? "Enviado p/ Assinatura" : "Pendente Emissão",
   ]);
 
@@ -342,6 +350,7 @@ export function exportSalicPdf(
   documents: FiscalDocument[],
   alerts: AuditAlert[]
 ) {
+  assertFinancialMetricsAvailable(project, { rubrics, transactions, documents });
   const doc = new jsPDF();
 
   // Header

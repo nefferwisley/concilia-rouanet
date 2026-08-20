@@ -31,19 +31,32 @@ describe("useProjects", () => {
     expect(result.current.activeProject).toBeNull();
   });
 
-  it("keeps projects from the latest session when an earlier request resolves late", async () => {
-    const requestA = deferred<OnlineProject[]>();
+  it("clears user A immediately while user B GET is pending and ignores stale A responses", async () => {
     const requestB = deferred<OnlineProject[]>();
-    sessionState.value = { session: { access_token: "token-a" }, loading: false };
-    vi.mocked(listProjects).mockImplementation((token) => (token === "token-a" ? requestA.promise : requestB.promise));
+    sessionState.value = { session: { access_token: "token-a", user: { id: "user-a" } }, loading: false } as any;
+    vi.mocked(listProjects)
+      .mockResolvedValueOnce([
+        {
+          id: "project-a",
+          identifier: "123456",
+          name: "Projeto A",
+          proponent: "Associação A",
+          regulatoryPackage: "ROUANET",
+          status: "EMPTY",
+          createdAt: "2026-08-20T10:00:00+00:00",
+        },
+      ])
+      .mockImplementationOnce(() => requestB.promise);
 
     const { result, rerender } = renderHook(() => useProjects());
 
-    await waitFor(() => expect(listProjects).toHaveBeenCalledWith("token-a"));
+    await waitFor(() => expect(result.current.projects.map((project) => project.id)).toEqual(["project-a"]));
 
-    sessionState.value = { session: { access_token: "token-b" }, loading: false };
+    sessionState.value = { session: { access_token: "token-b", user: { id: "user-b" } }, loading: false } as any;
     rerender();
 
+    expect(result.current.projects).toEqual([]);
+    expect(result.current.activeProject).toBeNull();
     await waitFor(() => expect(listProjects).toHaveBeenCalledWith("token-b"));
 
     await act(async () => {
@@ -61,20 +74,6 @@ describe("useProjects", () => {
     });
 
     await waitFor(() => expect(result.current.projects).toHaveLength(1));
-
-    await act(async () => {
-      requestA.resolve([
-        {
-          id: "project-a",
-          identifier: "123456",
-          name: "Projeto A",
-          proponent: "Associação A",
-          regulatoryPackage: "ROUANET",
-          status: "EMPTY",
-          createdAt: "2026-08-20T10:00:00+00:00",
-        },
-      ]);
-    });
 
     expect(result.current.projects.map((project) => project.id)).toEqual(["project-b"]);
   });

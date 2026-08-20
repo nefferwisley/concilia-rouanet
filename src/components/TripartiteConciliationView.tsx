@@ -6,7 +6,6 @@ import {
   FiscalDocument,
   AuditAlert,
   TripartiteEntry,
-  TripartiteStatus,
   StatusSalic,
   PeriodValidationSummary,
 } from "../types";
@@ -28,7 +27,6 @@ import {
   Plus,
   Trash2,
   Calendar,
-  Sparkles,
   ShieldCheck,
   FileCheck,
   FileX,
@@ -109,31 +107,29 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
     if (onUpdateAlerts) onUpdateAlerts(result.alerts);
 
     setSyncFeedback(
-      `Sincronização instantânea: ${result.matchedCount} débitos vinculados, ${result.healedCount} documentos recuperados e 100% de nexo causal estabelecido.`
+      `Sincronização concluída: ${result.matchedCount} débitos possuem vínculos explícitos e evidências completas. Itens sem anexos reais continuam pendentes.`
     );
   };
 
   // New Entry Form State
   const [newEntryForm, setNewEntryForm] = useState<Partial<TripartiteEntry>>({
-    periodo: "2024-11",
+    periodo: "",
     idRubrica: safeRubrics[0]?.id || "",
     descricaoRubrica: safeRubrics[0]?.nome || "",
     tipoDoc: "NFS-e (Serviço)",
     numeroDoc: "",
-    dataEmissao: new Date().toISOString().slice(0, 10),
     fornecedor: "",
     cnpjCpf: "",
     idTransacaoBB: "",
-    dataCompensacao: new Date().toISOString().slice(0, 10),
     valorBrutoDoc: 0,
     valorLiquidoPagar: 0,
     retencoes: { irrf: 0, iss: 0, inss: 0, outras: 0 },
     valorDebitoBB: 0,
-    statusTripartite: "CONCILIADO LÍQUIDO/BRUTO",
+    statusTripartite: "PENDENTE DE VÍNCULO",
     statusSalic: "Pendente",
     checkTripe: {
-      fiscalDocAnexo: true,
-      comprovanteBancarioAnexo: true,
+      fiscalDocAnexo: false,
+      comprovanteBancarioAnexo: false,
       relatorioExecucaoAnexo: false,
       rubricaValida: true,
     },
@@ -318,36 +314,8 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
     };
   }, [filteredEntries]);
 
-  // Handle Quick Create and Link Document for an Entry
-  const handleQuickCreateDocForEntry = (entry: TripartiteEntry) => {
-    const updatedEntries = safeTripartiteEntries.map((e) => {
-      if (e.idLancamento === entry.idLancamento) {
-        return {
-          ...e,
-          numeroDoc: `NF-${Math.floor(1000 + Math.random() * 9000)}`,
-          statusTripartite: "CONCILIADO LÍQUIDO/BRUTO" as TripartiteStatus,
-          statusSalic: "Lançado no SALIC" as StatusSalic,
-          checkTripe: {
-            ...e.checkTripe,
-            fiscalDocAnexo: true,
-          },
-          gedArquivos: [
-            ...e.gedArquivos,
-            {
-              tipo: "NOTA_FISCAL" as const,
-              nomeArquivo: `${e.idRubrica}_${e.idLancamento}_NFSe_${e.fornecedor.slice(0, 12)}.pdf`,
-              tamanhoFormatado: "1.1 MB",
-              status: "VALIDADO" as const,
-            },
-          ],
-          observacoes: "Documento fiscal vinculado e validado com sucesso.",
-        };
-      }
-      return e;
-    });
-
-    onUpdateTripartiteEntries(updatedEntries);
-  };
+  const entryIdentity = (entry: TripartiteEntry): string | undefined =>
+    entry.id || entry.idLancamento;
 
   // Toggle Salic Status for an Entry
   const handleToggleSalicStatus = (entry: TripartiteEntry) => {
@@ -358,20 +326,33 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
       "Comprovado 100%": "Pendente",
     };
 
-    const updated = tripartiteEntries.map((e) => {
-      if (e.idLancamento === entry.idLancamento) {
-        return { ...e, statusSalic: nextStatusMap[e.statusSalic] };
+    const identity = entryIdentity(entry);
+    const requestedStatus = nextStatusMap[entry.statusSalic || "Pendente"];
+    const hasCompleteEvidence =
+      Boolean(entry.checkTripe?.fiscalDocAnexo) &&
+      Boolean(entry.checkTripe?.comprovanteBancarioAnexo) &&
+      Boolean(entry.checkTripe?.rubricaValida);
+
+    if (requestedStatus === "Comprovado 100%" && !hasCompleteEvidence) {
+      setSyncFeedback("O status comprovado exige documento fiscal, comprovante bancário e rubrica reais.");
+      return;
+    }
+
+    const updated = safeTripartiteEntries.map((candidate) => {
+      if (entryIdentity(candidate) === identity) {
+        return { ...candidate, statusSalic: requestedStatus };
       }
-      return e;
+      return candidate;
     });
     onUpdateTripartiteEntries(updated);
   };
 
   // Delete Entry
-  const handleDeleteEntry = (idLancamento: string) => {
+  const handleDeleteEntry = (identity: string | undefined) => {
+    if (!identity) return;
     if (confirm("Deseja realmente remover este lançamento da conciliação tripartite?")) {
       onUpdateTripartiteEntries(
-        tripartiteEntries.filter((e) => e.idLancamento !== idLancamento)
+        safeTripartiteEntries.filter((entry) => entryIdentity(entry) !== identity)
       );
     }
   };
@@ -385,48 +366,44 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
       setIsNewEntryModalOpen(false);
       return;
     }
-    const newId = `LANC-${String(safeTripartiteEntries.length + 1).padStart(4, "0")}`;
+    const period = newEntryForm.periodo?.trim();
+    if (!period) {
+      setSyncFeedback("Informe o período declarado para criar o lançamento.");
+      return;
+    }
+
+    const documentNumber = newEntryForm.numeroDoc?.trim();
+    const supplier = newEntryForm.fornecedor?.trim();
+    const supplierTaxId = newEntryForm.cnpjCpf?.trim();
+    const observation = newEntryForm.observacoes?.trim();
+    const grossValue = Number(newEntryForm.valorBrutoDoc) || 0;
+    const netValue = Number(newEntryForm.valorLiquidoPagar) || 0;
+    const debitValue = Number(newEntryForm.valorDebitoBB) || 0;
 
     const entryToAdd: TripartiteEntry = {
-      idLancamento: newId,
-      periodo: newEntryForm.periodo || "2024-11",
+      id: `manual-${Date.now()}`,
+      periodo: period,
       idRubrica: selectedRub.id,
-      descricaoRubrica: selectedRub.nome || selectedRub.nomeRubrica || "Rubrica sem descrição",
-      idDocFiscal: `doc-${Date.now()}`,
+      ...(selectedRub.nome || selectedRub.nomeRubrica
+        ? { descricaoRubrica: selectedRub.nome || selectedRub.nomeRubrica }
+        : {}),
       tipoDoc: newEntryForm.tipoDoc || "NFS-e (Serviço)",
-      numeroDoc: newEntryForm.numeroDoc || `DOC-${Math.floor(1000 + Math.random() * 9000)}`,
-      dataEmissao: newEntryForm.dataEmissao || new Date().toISOString().slice(0, 10),
-      fornecedor: newEntryForm.fornecedor || "Prestador Cultural",
-      cnpjCpf: newEntryForm.cnpjCpf || "00.000.000/0001-00",
-      idTransacaoBB: newEntryForm.idTransacaoBB || `tx-${Date.now()}`,
-      dataCompensacao: newEntryForm.dataCompensacao || new Date().toISOString().slice(0, 10),
-      valorBrutoDoc: Number(newEntryForm.valorBrutoDoc) || 0,
-      valorLiquidoPagar: Number(newEntryForm.valorLiquidoPagar) || Number(newEntryForm.valorBrutoDoc) || 0,
-      retencoes: newEntryForm.retencoes || { irrf: 0, iss: 0, inss: 0, outras: 0 },
-      valorDebitoBB: Number(newEntryForm.valorDebitoBB) || Number(newEntryForm.valorBrutoDoc) || 0,
-      statusTripartite: (newEntryForm.statusTripartite as TripartiteStatus) || "CONCILIADO LÍQUIDO/BRUTO",
-      statusSalic: (newEntryForm.statusSalic as StatusSalic) || "Lançado no SALIC",
+      ...(documentNumber ? { numeroDoc: documentNumber } : {}),
+      ...(supplier ? { fornecedor: supplier } : {}),
+      ...(supplierTaxId ? { cnpjCpf: supplierTaxId } : {}),
+      valorBrutoDoc: grossValue,
+      ...(netValue > 0 ? { valorLiquidoPagar: netValue } : {}),
+      valorDebitoBB: debitValue,
+      statusTripartite: "PENDENTE DE VÍNCULO",
+      statusSalic: "Pendente",
       checkTripe: {
-        fiscalDocAnexo: true,
-        comprovanteBancarioAnexo: true,
-        relatorioExecucaoAnexo: true,
+        fiscalDocAnexo: false,
+        comprovanteBancarioAnexo: false,
+        relatorioExecucaoAnexo: false,
         rubricaValida: true,
       },
-      gedArquivos: [
-        {
-          tipo: "NOTA_FISCAL",
-          nomeArquivo: `${selectedRub.id}_${newId}_ComprovanteFiscal.pdf`,
-          tamanhoFormatado: "1.2 MB",
-          status: "VALIDADO",
-        },
-        {
-          tipo: "COMPROVANTE_BANCARIO",
-          nomeArquivo: `${selectedRub.id}_${newId}_ExtratoBB_Comprovante.pdf`,
-          tamanhoFormatado: "340 KB",
-          status: "VALIDADO",
-        },
-      ],
-      observacoes: newEntryForm.observacoes || "Lançamento tripartite inserido com sucesso.",
+      gedArquivos: [],
+      ...(observation ? { observacoes: observation } : {}),
     };
 
     onUpdateTripartiteEntries([entryToAdd, ...safeTripartiteEntries]);
@@ -733,24 +710,27 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {filteredEntries.map((entry) => {
+                  {filteredEntries.map((entry, entryIndex) => {
                     const hasFiscal = Boolean(entry?.checkTripe?.fiscalDocAnexo);
                     const hasBank = Boolean(entry?.checkTripe?.comprovanteBancarioAnexo);
                     const isTripodComplete = hasFiscal && hasBank;
 
                     return (
                       <tr
-                        key={entry.idLancamento}
+                        key={entryIdentity(entry) || `entry-${entryIndex}`}
                         className="hover:bg-slate-800/40 transition group"
                       >
                         {/* ID and Period */}
                         <td className="py-3.5 px-4">
                           <div className="font-mono font-bold text-emerald-400">
-                            {entry.idLancamento}
+                            {entry.idLancamento || "Ainda não vinculado"}
                           </div>
                           <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
                             <Calendar className="w-3 h-3 text-slate-500" />
-                            {entry.periodo} ({formatDate(entry.dataCompensacao)})
+                            {entry.periodo}
+                            {entry.dataCompensacao
+                              ? ` (${formatDate(entry.dataCompensacao)})`
+                              : ""}
                           </div>
                         </td>
 
@@ -792,7 +772,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                             {formatCurrency(entry.valorDebitoBB)}
                           </div>
                           <div className="text-[10px] text-slate-500 font-mono">
-                            Aut: {entry.idTransacaoBB}
+                            Aut: {entry.idTransacaoBB || "Ainda não vinculada"}
                           </div>
                         </td>
 
@@ -849,12 +829,9 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                                 <ShieldCheck className="w-3 h-3 text-emerald-400" /> Dossiê 100% OK
                               </div>
                             ) : (
-                              <button
-                                onClick={() => handleQuickCreateDocForEntry(entry)}
-                                className="text-[10px] text-amber-400 hover:text-amber-300 underline flex items-center gap-1 font-semibold"
-                              >
-                                <Sparkles className="w-3 h-3" /> Gerar NF em 1 clique
-                              </button>
+                              <span className="text-[10px] text-amber-400 font-semibold">
+                                Anexe um documento real no módulo Documentos
+                              </span>
                             )}
                           </div>
                         </td>
@@ -889,7 +866,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                               <Eye className="w-3.5 h-3.5 text-emerald-400" />
                             </button>
                             <button
-                              onClick={() => handleDeleteEntry(entry.idLancamento)}
+                              onClick={() => handleDeleteEntry(entryIdentity(entry))}
                               title="Excluir Lançamento"
                               className="p-1.5 bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-lg transition border border-slate-700"
                             >
@@ -1279,7 +1256,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                       {formatCurrency(d.valorLiquido || 0)}
                     </td>
                     <td className="p-3 font-mono text-[11px] text-sky-400">
-                      {d.arquivoNotaNome || "GED_Doc.pdf"}
+                      {d.arquivoNotaNome || "Nenhum arquivo anexado"}
                     </td>
                   </tr>
                 ))}
@@ -1299,7 +1276,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                   GED Padronizado MinC (Art. 68)
                 </span>
                 <h3 className="text-lg font-bold text-slate-100 mt-1">
-                  Dossiê Comprobatório: {viewingEntryGed.idLancamento}
+                  Dossiê Comprobatório: {viewingEntryGed.idLancamento || "ainda não vinculado"}
                 </h3>
               </div>
               <button

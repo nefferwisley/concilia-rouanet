@@ -10,6 +10,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/projetos", tags=["projetos"])
 
 
+def _map_project_row(row) -> ProjetoOut:
+    return ProjetoOut(
+        id=str(row["id"]),
+        pronac=row["pronac"],
+        nome=row["nome"],
+        proponente=row["proponente"],
+        pacote_regulatorio=row["pacote_regulatorio"],
+        status_processamento=row["status_processamento"],
+        banco=row["banco"],
+        valor_captado=float(row["valor_captado"]) if row["valor_captado"] is not None else None,
+        criado_em=row["created_at"],
+    )
+
+
 @router.post("", status_code=201, response_model=ProjetoOut)
 async def criar_projeto(body: ProjetoCreate, dep=Depends(get_conn)):
     conn, user_id = dep
@@ -41,13 +55,7 @@ async def criar_projeto(body: ProjetoCreate, dep=Depends(get_conn)):
             row["id"], body.banco_nome, body.agencia, body.conta,
         )
 
-    return ProjetoOut(
-        id=str(row["id"]), pronac=row["pronac"], nome=row["nome"],
-        proponente=row["proponente"], pacote_regulatorio=row["pacote_regulatorio"],
-        status_processamento=row["status_processamento"], banco=row["banco"],
-        valor_captado=float(row["valor_captado"]) if row["valor_captado"] is not None else None,
-        criado_em=row["created_at"],
-    )
+    return _map_project_row(row)
 
 
 @router.get("")
@@ -66,7 +74,7 @@ async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = N
                    p.status_processamento, p.created_at,
                    (select count(*) from transacoes t where t.projeto_id = p.id) as transacoes_count
             from projetos p where p.pronac ilike $1
-            order by p.created_at desc limit $2 offset $3
+            order by p.created_at desc, p.id desc limit $2 offset $3
             """,
             filtro, limit, offset,
         )
@@ -77,7 +85,7 @@ async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = N
             select p.id, p.pronac, p.nome, p.proponente, p.pacote_regulatorio,
                    p.status_processamento, p.created_at,
                    (select count(*) from transacoes t where t.projeto_id = p.id) as transacoes_count
-            from projetos p order by p.created_at desc limit $1 offset $2
+            from projetos p order by p.created_at desc, p.id desc limit $1 offset $2
             """,
             limit, offset,
         )
@@ -99,13 +107,13 @@ async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = N
     }
 
 
-@router.get("/{projeto_id}")
+@router.get("/{projeto_id}", response_model=ProjetoOut)
 async def obter_projeto(projeto_id: str, dep=Depends(get_conn)):
     conn, _ = dep
     row = await conn.fetchrow("select * from projetos where id = $1", projeto_id)
     if not row:
         raise HTTPException(404, "Projeto não encontrado (ou sem permissão).")
-    return dict(row)
+    return _map_project_row(row)
 
 
 # ============================================================
@@ -221,17 +229,7 @@ async def update_projeto(
 
         logger.info(f"Projeto {projeto_id} atualizado pelo user {user_id}")
 
-        return ProjetoOut(
-            id=str(projeto["id"]),
-            pronac=projeto["pronac"],
-            nome=projeto["nome"],
-            proponente=projeto["proponente"],
-            pacote_regulatorio=projeto["pacote_regulatorio"],
-            status_processamento=projeto["status_processamento"],
-            banco=projeto["banco"],
-            valor_captado=float(projeto["valor_captado"]) if projeto["valor_captado"] is not None else None,
-            criado_em=projeto["created_at"]
-        )
+        return _map_project_row(projeto)
 
     except HTTPException:
         raise

@@ -36,36 +36,45 @@ log = logging.getLogger("rouanet-api")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await get_pool()
-    log.info("Pool de conexões pronto.")
+    watcher_started = False
     try:
-        from backend.scripts.apply_migrations import aplicar_migrations
+        await get_pool()
+        log.info("Pool de conexões pronto.")
 
-        await aplicar_migrations()
-        log.info("Migrations verificadas/aplicadas no startup.")
-    except Exception as e:  # noqa: BLE001 — não derrubar o app se o banco estiver fora
-        log.warning("Migrations não puderam ser aplicadas no startup: %s", e)
+        from backend.scripts.apply_migrations import aplicar_migrations, verificar_migrations
 
-    # Inicia o monitoramento em tempo real da pasta de uploads.
-    # O watcher detecta arquivos adicionados/removidos e notifica os clientes
-    # via WebSocket (/ws/projeto/{id}/sincronia) sem precisar de F5.
-    try:
-        from backend.services.watcher import iniciar_watcher
-        iniciar_watcher()
-        log.info("Watcher de arquivos iniciado.")
-    except Exception as e:  # noqa: BLE001
-        log.warning("Watcher de arquivos não pôde ser iniciado: %s", e)
+        if settings.auto_apply_migrations:
+            if settings.app_env.strip().lower() == "production":
+                raise RuntimeError(
+                    "AUTO_APPLY_MIGRATIONS não pode ser habilitado em produção; "
+                    "aplique migrations por uma operação controlada."
+                )
+            await aplicar_migrations()
+            log.info("Migrations aplicadas por opt-in explícito de ambiente não produtivo.")
+        else:
+            await verificar_migrations()
+            log.info("Migrations verificadas no startup (verify-only).")
 
-    yield
+        # Inicia o monitoramento em tempo real da pasta de uploads.
+        try:
+            from backend.services.watcher import iniciar_watcher
 
-    # Encerra o watcher de arquivos limpo ao desligar a aplicação
-    try:
-        from backend.services.watcher import encerrar_watcher
-        encerrar_watcher()
-    except Exception:  # noqa: BLE001
-        pass
+            iniciar_watcher()
+            watcher_started = True
+            log.info("Watcher de arquivos iniciado.")
+        except Exception as e:  # noqa: BLE001
+            log.warning("Watcher de arquivos não pôde ser iniciado: %s", e)
 
-    await close_pool()
+        yield
+    finally:
+        if watcher_started:
+            try:
+                from backend.services.watcher import encerrar_watcher
+
+                encerrar_watcher()
+            except Exception:  # noqa: BLE001
+                pass
+        await close_pool()
 
 
 app = FastAPI(title="RouanetConcilia API", version="1.0.0", lifespan=lifespan)

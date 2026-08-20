@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from backend.models import ProjetoCreate, ProjetoOut, ProjetoUpdate
-from backend.routes.projetos import criar_projeto, listar_projetos
+from backend.routes.projetos import criar_projeto, listar_projetos, obter_projeto
 
 
 MIGRATION = Path("db/migrations/0015_real_import_foundation.sql")
@@ -43,6 +43,57 @@ def test_project_rls_uses_authenticated_membership_and_index():
     assert "(user_id, projeto_id)" in normalized
     assert "mp.user_id = (select auth.uid())" in normalized
     assert "mp.projeto_id = projetos.id" in normalized
+
+
+def test_every_foundation_policy_is_scoped_to_authenticated():
+    statements = [statement.strip() for statement in _read_sql().split(";")]
+    policies = [statement for statement in statements if statement.startswith("create policy")]
+
+    assert policies
+    assert all(" to authenticated " in f" {policy} " for policy in policies)
+
+
+def test_membership_read_and_admin_only_write_policies_are_separate_and_non_recursive():
+    normalized = _read_sql()
+    membership_policies = [
+        statement.strip()
+        for statement in normalized.split(";")
+        if statement.strip().startswith("create policy p_membros_")
+    ]
+
+    assert {policy.split()[2] for policy in membership_policies} == {
+        "p_membros_select",
+        "p_membros_insert",
+        "p_membros_update",
+        "p_membros_delete",
+    }
+    assert "create policy p_membros on public.membros_projeto for all" not in normalized
+    assert "membros_projeto_papel_check" in normalized
+    assert "papel in ('admin', 'membro')" in normalized
+    assert "validate constraint membros_projeto_papel_check" in normalized
+    assert "public.eh_admin_projeto(projeto_id)" in normalized
+    assert all("from public.membros_projeto" not in policy for policy in membership_policies)
+
+
+def test_last_admin_is_protected_by_a_security_definer_trigger():
+    normalized = _read_sql()
+
+    assert "function public.proteger_ultimo_admin_projeto()" in normalized
+    assert "security definer" in normalized
+    assert "if old.papel <> 'admin'" in normalized
+    assert "papel = 'admin'" in normalized
+    assert "pg_advisory_xact_lock" in normalized
+    assert "raise exception" in normalized
+    assert "create trigger" in normalized
+    assert "before delete" in normalized
+    assert "before update" in normalized
+
+
+def test_migration_leaves_transaction_ownership_to_the_runner():
+    statements = [statement.strip() for statement in _read_sql().split(";")]
+
+    assert "begin" not in statements
+    assert "commit" not in statements
 
 
 def test_project_creation_rpc_validates_identity_and_limits_execution():
@@ -130,6 +181,34 @@ def test_project_create_and_patch_reject_blank_or_null_proponents():
     for invalid_proponent in (None, "", "   "):
         with pytest.raises(ValidationError):
             ProjetoUpdate(proponente=invalid_proponent)
+
+
+def test_project_identity_and_name_are_trimmed_and_blank_values_are_rejected():
+    created = ProjetoCreate(
+        pronac="  TEST-001  ",
+        nome="  Projeto real  ",
+        proponente="  Proponente real  ",
+        pacote_regulatorio="ROUANET",
+    )
+
+    assert created.pronac == "TEST-001"
+    assert created.nome == "Projeto real"
+    assert created.proponente == "Proponente real"
+
+    for field in ("pronac", "nome"):
+        payload = {
+            "pronac": "TEST-001",
+            "nome": "Projeto real",
+            "proponente": "Proponente real",
+            "pacote_regulatorio": "ROUANET",
+        }
+        payload[field] = "   "
+        with pytest.raises(ValidationError):
+            ProjetoCreate(**payload)
+
+    assert ProjetoUpdate(nome="  Projeto atualizado  ").nome == "Projeto atualizado"
+    with pytest.raises(ValidationError):
+        ProjetoUpdate(nome="   ")
 
 
 def test_project_output_requires_proponent_key_but_allows_legacy_null():
@@ -231,3 +310,45 @@ def test_project_create_passes_package_to_rpc_and_returns_empty_project():
     assert response.status_processamento == "EMPTY"
     assert response.pacote_regulatorio == "ROUANET"
     assert response.valor_captado is None
+
+
+class _ProjectDetailConnection:
+    async def fetchrow(self, query, *args):
+        return {
+            "id": "project-id",
+            "pronac": "TEST-001",
+            "nome": "Projeto",
+            "proponente": "Proponente",
+            "banco": None,
+            "valor_captado": None,
+            "pacote_regulatorio": "FSA_ANCINE",
+            "status_processamento": "REVIEW",
+            "created_at": datetime(2026, 8, 20, tzinfo=timezone.utc),
+            "updated_at": datetime(2026, 8, 20, tzinfo=timezone.utc),
+        }
+
+
+def test_project_detail_uses_the_same_explicit_output_contract_as_create():
+    response = asyncio.run(
+        obter_projeto("project-id", dep=(_ProjectDetailConnection(), "user-id"))
+    )
+
+    assert isinstance(response, ProjetoOut)
+    assert response.model_dump() == {
+        "id": "project-id",
+        "pronac": "TEST-001",
+        "nome": "Projeto",
+        "proponente": "Proponente",
+        "pacote_regulatorio": "FSA_ANCINE",
+        "status_processamento": "REVIEW",
+        "banco": None,
+        "valor_captado": None,
+        "criado_em": datetime(2026, 8, 20, tzinfo=timezone.utc),
+    }
+
+    detail_route = next(
+        route
+        for route in obter_projeto.__globals__["router"].routes
+        if route.path == "/api/v1/projetos/{projeto_id}" and "GET" in route.methods
+    )
+    assert detail_route.response_model is ProjetoOut

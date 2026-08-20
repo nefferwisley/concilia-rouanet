@@ -92,9 +92,9 @@ export const BudgetPlanView: React.FC<BudgetPlanViewProps> = ({
     0
   );
 
-  // Se o cálculo somar 0 por inconsistência de schema, adota o valor auditado do projeto
-  const totalAprovado = calcAprovado > 0 ? calcAprovado : (project?.valorAprovado || 835000);
-  const totalExecutado = calcExecutado > 0 ? calcExecutado : (project?.valorExecutado || 897759.15);
+  // Source-backed project totals are the only fallback when no rubric total is available.
+  const totalAprovado = calcAprovado > 0 ? calcAprovado : (Number(project?.valorAprovado) || 0);
+  const totalExecutado = calcExecutado > 0 ? calcExecutado : (Number(project?.valorExecutado) || 0);
   const saldoGeral = totalAprovado - totalExecutado;
 
   // Form state

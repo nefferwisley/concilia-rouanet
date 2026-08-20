@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import time
 from pathlib import Path
@@ -43,11 +44,10 @@ def test_render_blueprint_is_fail_closed_and_uses_backend_ocr_key():
 
 
 def _migration_body() -> str:
-    lines = MIGRATION_0015.read_text(encoding="utf-8").splitlines()
-    begin_index = next(index for index, line in enumerate(lines) if line.strip().lower() == "begin;")
-    commit_index = max(index for index, line in enumerate(lines) if line.strip().lower() == "commit;")
-    assert begin_index < commit_index, "migration 0015 must keep explicit transaction boundaries"
-    return "\n".join(lines[:begin_index] + lines[begin_index + 1 : commit_index] + lines[commit_index + 1 :])
+    sql = MIGRATION_0015.read_text(encoding="utf-8")
+    statements = {line.strip().lower() for line in sql.splitlines()}
+    assert "begin;" not in statements and "commit;" not in statements
+    return sql
 
 
 def _signed_token(user_id: str, email: str) -> str:
@@ -284,8 +284,8 @@ async def _exercise_lifecycle(test_database_url: str, monkeypatch) -> None:
                 "base (0001-0014 e auth nativo ou shim 0000) já provisionadas."
             )
 
-        # Apply only the migration under test. Its own BEGIN/COMMIT wrappers are
-        # removed so every DDL and data mutation remains inside this rollback.
+        # Apply the complete migration under test. It deliberately leaves
+        # transaction ownership to this disposable gate.
         await connection.execute(_migration_body())
 
         _bind_production_connection(monkeypatch, connection)
@@ -293,6 +293,7 @@ async def _exercise_lifecycle(test_database_url: str, monkeypatch) -> None:
 
         user_a = str(uuid4())
         user_b = str(uuid4())
+        user_c = str(uuid4())
         token_a = _signed_token(user_a, f"{user_a}@integration.invalid")
         token_b = _signed_token(user_b, f"{user_b}@integration.invalid")
         pronac = f"TEST-EMPTY-{uuid4().hex[:12].upper()}"
@@ -333,6 +334,71 @@ async def _exercise_lifecycle(test_database_url: str, monkeypatch) -> None:
                 headers=_authorization(token_b),
             )
             assert unrelated_read.status_code == 404
+
+        await connection.execute(
+            """
+            insert into auth.users (id, email)
+            values ($1::uuid, $2)
+            on conflict (id) do nothing
+            """,
+            user_c,
+            f"{user_c}@integration.invalid",
+        )
+
+        async def execute_as(user_id: str, query: str, *args):
+            claims = json.dumps({"sub": user_id, "role": "authenticated"})
+            async with connection.transaction():
+                await connection.execute(
+                    "select set_config('request.jwt.claims', $1, true)",
+                    claims,
+                )
+                await connection.execute("set local role authenticated")
+                return await connection.execute(query, *args)
+
+        project_id = created_body["id"]
+        await execute_as(
+            user_a,
+            "insert into public.membros_projeto (projeto_id, user_id, papel) values ($1, $2, 'membro')",
+            project_id,
+            user_b,
+        )
+
+        with pytest.raises(asyncpg.InsufficientPrivilegeError):
+            await execute_as(
+                user_b,
+                "insert into public.membros_projeto (projeto_id, user_id, papel) values ($1, $2, 'membro')",
+                project_id,
+                user_c,
+            )
+
+        with pytest.raises(asyncpg.CheckViolationError):
+            await execute_as(
+                user_a,
+                "update public.membros_projeto set papel = 'membro' where projeto_id = $1 and user_id = $2",
+                project_id,
+                user_a,
+            )
+
+        await execute_as(
+            user_a,
+            "update public.membros_projeto set papel = 'admin' where projeto_id = $1 and user_id = $2",
+            project_id,
+            user_b,
+        )
+        await execute_as(
+            user_a,
+            "update public.membros_projeto set papel = 'membro' where projeto_id = $1 and user_id = $2",
+            project_id,
+            user_a,
+        )
+
+        with pytest.raises(asyncpg.CheckViolationError):
+            await execute_as(
+                user_b,
+                "delete from public.membros_projeto where projeto_id = $1 and user_id = $2",
+                project_id,
+                user_b,
+            )
     finally:
         if transaction_started:
             assert transaction is not None

@@ -12,6 +12,7 @@ import {
 import { PronacProject, BudgetRubric, BankTransaction, FiscalDocument, AuditAlert } from "../types";
 import { formatCurrency, formatDate, formatCnpjCpf } from "../utils/formatters";
 import { exportSalicExcel, exportSalicPdf } from "../utils/exportUtils";
+import { FinancialDataGate } from "./FinancialDataGate";
 
 interface SalicReportViewProps {
   project: PronacProject;
@@ -29,6 +30,13 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
   alerts = [],
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<"pagamentos" | "receitas" | "metas">("pagamentos");
+
+  const financialGate = {
+    project,
+    rubrics,
+    transactions,
+    documents,
+  };
 
   // Reconciled items for the SALIC report
   const paymentRows = transactions
@@ -56,6 +64,7 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
   const totalLiquidoRelatorio = paymentRows.reduce((acc, r) => acc + r.tx.valor, 0);
 
   return (
+    <FinancialDataGate {...financialGate}>
     <div className="space-y-6">
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-5 rounded-2xl">
@@ -297,5 +306,6 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
         </div>
       )}
     </div>
+    </FinancialDataGate>
   );
 };

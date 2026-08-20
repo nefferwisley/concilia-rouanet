@@ -30,7 +30,7 @@ Toda variável com prefixo `VITE_` é incorporada ao bundle e pode ser vista no 
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_...` ou a chave `anon` legada | Chave pública para login no navegador. Nunca use `service_role`. |
 | `VITE_API_URL` | `https://api.exemplo.com/api/v1` | Base pública da API; mantenha o sufixo `/api/v1`. |
 
-Use `.env.example` como referência local. O build rejeita chaves com aparência de `service_role`, `sb_secret_` ou JWT de service role.
+Use `.env.example` como referência local. A allowlist é exata: qualquer outro nome `VITE_*` não vazio interrompe o build. O mesmo gate rejeita valores com aparência de `service_role`, `sb_secret_` ou JWT privilegiado, mesmo que tenham sido colocados sob outro nome.
 
 ## Configuração privada do backend
 
@@ -44,6 +44,7 @@ Segredos são configurados somente no serviço FastAPI e nunca recebem prefixo `
 | `GOOGLE_API_KEY` | sim | OCR Gemini opcional no backend. |
 | `SUPABASE_URL` | não | URL usada pelo backend para obter o JWKS e validar tokens ES256. |
 | `APP_ENV` | não | O default fail-closed é `production`; use `dev` apenas por configuração local explícita. |
+| `AUTO_APPLY_MIGRATIONS` | não | Default `false` (verify-only). Pode ser `true` somente por opt-in operacional explícito fora de produção. Em `production`, o startup recusa esse valor. |
 | `CORS_ORIGINS` | não | Lista, separada por vírgulas, das origens permitidas do frontend. Não use `*` em produção. |
 
 `backend/.env.example` contém o formato dos principais segredos locais. Arquivos `.env` reais e valores dos painéis de deploy não devem entrar no Git.
@@ -68,7 +69,7 @@ $env:APP_ENV = "dev"
 & .\.venv\Scripts\python.exe -B -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-O `docker-compose.yml` já define `APP_ENV=dev` para o container local. Se iniciar o backend diretamente como acima, remova a variável do terminal ao encerrar: `Remove-Item Env:APP_ENV`.
+O `docker-compose.yml` já define `APP_ENV=dev` para o container local. O startup continua verify-only por padrão. Para aplicar migrations automaticamente apenas nesse ambiente descartável, defina também `$env:AUTO_APPLY_MIGRATIONS = "true"`; remova ambas as variáveis do terminal ao encerrar.
 
 Em outro terminal:
 
@@ -86,16 +87,15 @@ Não execute o runner genérico contra produção durante este gate. Aplique som
 2. Teste primeiro em uma cópia de homologação.
 3. Confirme que as migrations `0001` a `0014` já estão presentes e que o alvo não é o banco de produção usado por testes.
 4. Use uma variável temporária com nome específico; não reutilize `TEST_DATABASE_URL`.
-5. Execute o arquivo com interrupção no primeiro erro e só depois registre a migration.
+5. Execute o arquivo e o registro no ledger dentro de uma única transação, com interrupção no primeiro erro.
 
 ```powershell
 $env:MIGRATION_DATABASE_URL = "postgresql://usuario:senha@host:5432/banco_alvo"
-psql "$env:MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/0015_real_import_foundation.sql
-psql "$env:MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1 -c "insert into schema_migrations (id) values ('0015_real_import_foundation.sql') on conflict (id) do nothing;"
+psql "$env:MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f db/migrations/0015_real_import_foundation.sql -c "insert into schema_migrations (id) values ('0015_real_import_foundation.sql') on conflict (id) do nothing;"
 Remove-Item Env:MIGRATION_DATABASE_URL
 ```
 
-A própria `0015` usa `BEGIN`/`COMMIT`. Ela adiciona os campos regulatórios, restringe seus valores, recria as policies de RLS e a função atômica de criação, sem inserir projetos. Após a execução, verifique:
+A `0015` não contém `BEGIN`/`COMMIT`: o executor é o único dono da transação. Ela adiciona os campos regulatórios, restringe seus valores, recria as policies de RLS e a função atômica de criação, sem inserir projetos. As policies são `TO authenticated`; membros podem ler os vínculos, mas somente administradores do projeto podem inserir, alterar ou excluir membros. Uma constraint limita os papéis a `admin|membro`, e triggers impedem remover ou rebaixar o último administrador sem consultar a própria tabela por RLS recursivo. Após a execução, verifique:
 
 ```sql
 select column_name, is_nullable, column_default
@@ -104,9 +104,9 @@ where table_schema = 'public'
   and table_name = 'projetos'
   and column_name in ('pacote_regulatorio', 'status_processamento');
 
-select policyname
+select policyname, roles
 from pg_policies
-where schemaname = 'public' and tablename = 'projetos';
+where schemaname = 'public' and tablename in ('projetos', 'membros_projeto');
 
 select to_regprocedure(
   'public.criar_projeto_com_membro(text,text,text,text,text,text)'
@@ -131,12 +131,12 @@ Abra uma nova conexão depois do `ALTER DATABASE`. O gate exige tanto `current_s
 
 Depois da validação do marcador, o teste faz o seguinte dentro de uma única transação:
 
-- aplica apenas a `0015`, removendo os delimitadores internos `BEGIN`/`COMMIT`;
-- assina JWTs HS256 de teste para dois UUIDs distintos;
+- aplica a `0015` integral, que já não possui delimitadores internos de transação;
+- assina JWTs HS256 de teste para usuários distintos;
 - usa o `get_conn` de produção e substitui somente a aquisição/liberação do pool para vinculá-lo à transação externa;
 - cria os usuários e um projeto temporários;
 - prova o ciclo vazio → criar (`EMPTY`) → listar novamente;
-- prova que o segundo usuário não lista nem abre o projeto;
+- prova o isolamento entre usuários, a escrita de membros restrita a admin e a proteção do último administrador;
 - reverte usuários, projeto e mudanças de schema no final, mesmo após falha.
 
 O banco descartável precisa ter as migrations base `0001` a `0014` e o schema `auth` nativo do Supabase ou o shim local `0000`. Nunca aponte esta variável para produção:

@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     # Fail closed: somente APP_ENV=dev explícito habilita o login de
     # demonstração sem autenticação (routes/dev_demo.py).
     app_env: str = "production"
+    # Startup é verify-only por padrão. Aplicação automática exige opt-in
+    # explícito e é recusada em APP_ENV=production.
+    auto_apply_migrations: bool = False
     # Backend de leitura automática de documentos (P4): "" (auto: Gemini se
     # houver chave, Ollama local caso contrário), "gemini" ou "ollama".
     ocr_backend: str = ""

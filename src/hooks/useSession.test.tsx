@@ -22,6 +22,7 @@ vi.mock("../services/supabaseClient", () => ({
 }));
 
 import { useSession } from "./useSession";
+import { SessionProvider } from "./SessionProvider";
 
 describe("useSession", () => {
   it("keeps the newer logged-out state when the initial session resolves late", async () => {
@@ -32,7 +33,7 @@ describe("useSession", () => {
       }),
     );
 
-    const { result } = renderHook(() => useSession());
+    const { result } = renderHook(() => useSession(), { wrapper: SessionProvider });
 
     act(() => {
       auth.emit("SIGNED_OUT", null);
