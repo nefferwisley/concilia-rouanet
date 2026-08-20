@@ -34,6 +34,14 @@ def sanitizar_chave(caminho: str) -> str:
     return nfkd.encode("ascii", "ignore").decode("ascii")
 
 
+def build_storage_key(user_id: str, project_id: str, sha256: str, original_name: str) -> str:
+    for seg in (user_id, project_id, sha256, original_name):
+        if ".." in str(seg) or not str(seg).strip():
+            raise ValueError("Segmento inválido para chave de armazenamento")
+    safe_name = sanitizar_chave(original_name).replace("/", "_")
+    return f"{user_id.strip()}/{project_id.strip()}/{sha256.strip()}/{safe_name}"
+
+
 def get_supabase_client() -> Client | None:
     """
     Retorna o cliente do Supabase configurado se disponível.
