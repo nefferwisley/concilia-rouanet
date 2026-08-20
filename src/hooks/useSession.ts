@@ -8,9 +8,11 @@ export function useSession(): { session: Session | null; loading: boolean } {
 
   useEffect(() => {
     let active = true;
+    let stateVersion = 0;
+    const initialStateVersion = stateVersion;
 
     void supabase.auth.getSession().then(({ data }) => {
-      if (active) {
+      if (active && stateVersion === initialStateVersion) {
         setSession(data.session);
         setLoading(false);
       }
@@ -18,6 +20,7 @@ export function useSession(): { session: Session | null; loading: boolean } {
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (active) {
+        stateVersion += 1;
         setSession(nextSession);
         setLoading(false);
       }
