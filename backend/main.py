@@ -13,6 +13,7 @@ from backend.routes import (
     dev_demo,
     divergencias,
     documentos,
+    dossier,
     importacoes,
     organizacao,
     orquestrador,
@@ -100,6 +101,7 @@ app.include_router(projetos.router)
 app.include_router(real_imports.router)
 app.include_router(reconciliations.router)
 app.include_router(reviews.router)
+app.include_router(dossier.router)
 app.include_router(importacoes.router)
 app.include_router(conciliacao.router)
 app.include_router(relatorios.router)
