@@ -2,12 +2,60 @@
  * apiClient.ts - Conector Unificado Frontend <-> Backend FastAPI
  * 
  * Permite que o frontend React se comunique diretamente com a API FastAPI (porta 8000)
- * com fallback inteligente para LocalStorage caso o backend ou o banco estejam offline.
+ * para as APIs FastAPI.
  */
 
 import { PronacProject } from "../types";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
+export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
+
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly body: unknown,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+function errorMessage(body: unknown, status: number): string {
+  if (typeof body === "object" && body !== null && "detail" in body && typeof body.detail === "string") {
+    return body.detail;
+  }
+
+  return `A API respondeu com status ${status}.`;
+}
+
+export async function requestApi<T>(
+  path: string,
+  token: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const headers = new Headers(options.headers);
+  headers.set("Authorization", `Bearer ${token}`);
+
+  if (options.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  if (!response.ok) {
+    const rawBody = await response.text();
+    let body: unknown = rawBody;
+
+    try {
+      body = rawBody ? JSON.parse(rawBody) : null;
+    } catch {
+      // Plain-text API errors remain available to callers.
+    }
+
+    throw new ApiError(response.status, errorMessage(body, response.status), body);
+  }
+
+  return response.json() as Promise<T>;
+}
 
 export interface BackendStatus {
   online: boolean;
@@ -19,9 +67,7 @@ export class ApiClient {
   private static instance: ApiClient;
   private authToken: string | null = null;
 
-  private constructor() {
-    this.authToken = localStorage.getItem("rouanet_auth_token");
-  }
+  private constructor() {}
 
   public static getInstance(): ApiClient {
     if (!ApiClient.instance) {
@@ -32,7 +78,6 @@ export class ApiClient {
 
   public setToken(token: string) {
     this.authToken = token;
-    localStorage.setItem("rouanet_auth_token", token);
   }
 
   public getToken(): string | null {
