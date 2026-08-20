@@ -43,7 +43,7 @@ Segredos são configurados somente no serviço FastAPI e nunca recebem prefixo `
 | `SUPABASE_SERVICE_ROLE_KEY` | sim | Acesso administrativo ao Storage. Deixe vazia quando esse acesso não for usado. |
 | `GOOGLE_API_KEY` | sim | OCR Gemini opcional no backend. |
 | `SUPABASE_URL` | não | URL usada pelo backend para obter o JWKS e validar tokens ES256. |
-| `APP_ENV` | não | Use `dev` apenas localmente e `production` no deploy. |
+| `APP_ENV` | não | O default fail-closed é `production`; use `dev` apenas por configuração local explícita. |
 | `CORS_ORIGINS` | não | Lista, separada por vírgulas, das origens permitidas do frontend. Não use `*` em produção. |
 
 `backend/.env.example` contém o formato dos principais segredos locais. Arquivos `.env` reais e valores dos painéis de deploy não devem entrar no Git.
@@ -56,7 +56,7 @@ Defina no backend de produção:
 APP_ENV=production
 ```
 
-Somente `APP_ENV=dev` habilita `POST /api/v1/dev/demo-login`. Em `production` (ou qualquer outro valor), a API responde `404` antes de consultar o banco.
+Somente `APP_ENV=dev` explícito habilita `POST /api/v1/dev/demo-login`. Se a variável for omitida, o backend assume `production`; em `production` (ou qualquer outro valor), a API responde `404` antes de consultar o banco. O `render.yaml` também fixa `APP_ENV=production`.
 
 ## Execução local
 
@@ -64,8 +64,11 @@ Suba o PostgreSQL local e configure um `.env` na raiz a partir de `.env.example`
 
 ```powershell
 docker compose up -d postgres
+$env:APP_ENV = "dev"
 & .\.venv\Scripts\python.exe -B -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+O `docker-compose.yml` já define `APP_ENV=dev` para o container local. Se iniciar o backend diretamente como acima, remova a variável do terminal ao encerrar: `Remove-Item Env:APP_ENV`.
 
 Em outro terminal:
 
@@ -114,10 +117,23 @@ O rollback operacional é restaurar o snapshot/backup. Não tente desfazer parci
 
 ## Gate de integração isolado
 
-O teste backend nunca lê `DATABASE_URL` como alvo. Ele exige `TEST_DATABASE_URL`, recusa o mesmo valor configurado em `DATABASE_URL` e faz o seguinte dentro de uma única transação:
+O teste backend nunca lê `DATABASE_URL` como alvo. Ele exige `TEST_DATABASE_URL`, mantém a comparação de host/porta/banco com `DATABASE_URL` como defesa adicional e, antes de abrir transação ou executar DDL, exige um marcador administrativo persistente no banco descartável.
+
+Crie o marcador uma única vez usando uma conexão administrativa com o banco descartável. O teste nunca cria esse marcador:
+
+```powershell
+$env:TEST_DATABASE_ADMIN_URL = "postgresql://administrador:senha@localhost:5432/concilia_integration"
+psql "$env:TEST_DATABASE_ADMIN_URL" -v ON_ERROR_STOP=1 -c "alter database concilia_integration set concilia.test_database = 'on';"
+Remove-Item Env:TEST_DATABASE_ADMIN_URL
+```
+
+Abra uma nova conexão depois do `ALTER DATABASE`. O gate exige tanto `current_setting('concilia.test_database', true) = 'on'` quanto o registro de database-level em `pg_db_role_setting` com `setrole=0`; passar `options=-c concilia.test_database=on` na URL não atende ao gate.
+
+Depois da validação do marcador, o teste faz o seguinte dentro de uma única transação:
 
 - aplica apenas a `0015`, removendo os delimitadores internos `BEGIN`/`COMMIT`;
 - assina JWTs HS256 de teste para dois UUIDs distintos;
+- usa o `get_conn` de produção e substitui somente a aquisição/liberação do pool para vinculá-lo à transação externa;
 - cria os usuários e um projeto temporários;
 - prova o ciclo vazio → criar (`EMPTY`) → listar novamente;
 - prova que o segundo usuário não lista nem abre o projeto;

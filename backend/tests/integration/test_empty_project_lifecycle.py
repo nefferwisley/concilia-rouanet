@@ -1,5 +1,4 @@
 import asyncio
-import json
 import os
 import time
 from pathlib import Path
@@ -10,16 +9,37 @@ import asyncpg
 import httpx
 import jwt as pyjwt
 import pytest
-from fastapi import FastAPI, Header, HTTPException
+import yaml
+from fastapi import FastAPI, HTTPException
 
 import backend.database as database_module
-from backend.config import settings
+from backend.config import Settings, settings
 from backend.database import get_conn
 from backend.routes import dev_demo, projetos
 
 
 MIGRATION_0015 = Path("db/migrations/0015_real_import_foundation.sql")
 TEST_JWT_SECRET = "integration-only-secret-at-least-32-chars"
+
+
+def test_backend_environment_defaults_to_production(monkeypatch):
+    monkeypatch.delenv("APP_ENV", raising=False)
+
+    isolated_settings = Settings(_env_file=None)
+
+    assert isolated_settings.app_env == "production"
+
+
+def test_render_blueprint_is_fail_closed_and_uses_backend_ocr_key():
+    blueprint = yaml.safe_load(Path("render.yaml").read_text(encoding="utf-8"))
+    environment = {
+        item["key"]: item
+        for item in blueprint["services"][0]["envVars"]
+    }
+
+    assert environment["APP_ENV"]["value"] == "production"
+    assert "GOOGLE_API_KEY" in environment
+    assert "GEMINI_API_KEY" not in environment
 
 
 def _migration_body() -> str:
@@ -58,16 +78,197 @@ def _database_identity(database_url: str) -> tuple[str | None, int, str]:
     return host, parsed.port or 5432, unquote(parsed.path).rstrip("/")
 
 
-async def _exercise_lifecycle(test_database_url: str) -> None:
+class _BoundConnectionPool:
+    def __init__(self, connection):
+        self.connection = connection
+        self.release_count = 0
+
+    async def release(self, connection):
+        assert connection is self.connection
+        self.release_count += 1
+        try:
+            await connection.execute("reset role")
+        finally:
+            await connection.execute("select set_config('request.jwt.claims', '{}', true)")
+
+
+def _bind_production_connection(monkeypatch, connection) -> _BoundConnectionPool:
+    bound_pool = _BoundConnectionPool(connection)
+
+    async def acquire_bound_connection():
+        return bound_pool, connection
+
+    monkeypatch.setattr(database_module, "adquirir_conn", acquire_bound_connection)
+    return bound_pool
+
+
+def _project_api_app() -> FastAPI:
+    app = FastAPI()
+    app.include_router(projetos.router)
+    return app
+
+
+async def _rollback_and_close(connection, transaction) -> None:
+    try:
+        try:
+            await connection.execute("reset role")
+        except Exception:
+            pass
+        await transaction.rollback()
+    finally:
+        await connection.close()
+
+
+def test_marker_is_required_before_transaction_or_ddl(monkeypatch):
+    class MarkerlessConnection:
+        def __init__(self):
+            self.events = []
+
+        async def fetchval(self, query):
+            verifies_persistent_marker = (
+                "concilia.test_database" in query
+                and "pg_db_role_setting" in query
+                and "setrole = 0" in query
+            )
+            self.events.append(("fetchval", verifies_persistent_marker))
+            return None
+
+        def transaction(self):
+            self.events.append(("transaction", False))
+            raise AssertionError("transaction must not open before the exclusive marker")
+
+        async def close(self):
+            self.events.append(("close", True))
+
+    connection = MarkerlessConnection()
+
+    async def connect_only_to_markerless_database(*args, **kwargs):
+        return connection
+
+    monkeypatch.setattr(asyncpg, "connect", connect_only_to_markerless_database)
+
+    with pytest.raises(pytest.fail.Exception, match="concilia.test_database"):
+        asyncio.run(_exercise_lifecycle("postgresql://integration.invalid/disposable", monkeypatch))
+
+    assert connection.events == [
+        ("fetchval", True),
+        ("close", True),
+    ]
+
+
+def test_project_app_keeps_the_production_get_conn_dependency():
+    app = _project_api_app()
+    project_routes = [
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/projetos"
+    ]
+
+    assert app.dependency_overrides == {}
+    assert len(project_routes) == 2
+    assert all(
+        any(dependency.call is get_conn for dependency in route.dependant.dependencies)
+        for route in project_routes
+    )
+
+
+def test_bound_connection_runs_production_claims_and_role_path(monkeypatch):
+    class RecordingTransaction:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+    class RecordingConnection:
+        def __init__(self):
+            self.queries = []
+
+        def transaction(self):
+            return RecordingTransaction()
+
+        async def execute(self, query, *args):
+            self.queries.append((" ".join(query.split()), args))
+
+    connection = RecordingConnection()
+    bound_pool = _bind_production_connection(monkeypatch, connection)
+    monkeypatch.setattr(settings, "supabase_jwt_secret", TEST_JWT_SECRET)
+    monkeypatch.setattr(database_module, "_jwks_client", None)
+    user_id = str(uuid4())
+    token = _signed_token(user_id, f"{user_id}@integration.invalid")
+
+    async def consume_dependency():
+        dependency = database_module.get_conn(f"Bearer {token}")
+        yielded = await anext(dependency)
+        await dependency.aclose()
+        return yielded
+
+    yielded_connection, yielded_user_id = asyncio.run(consume_dependency())
+    normalized_queries = [query for query, _ in connection.queries]
+
+    assert yielded_connection is connection
+    assert yielded_user_id == user_id
+    assert any("insert into auth.users" in query for query in normalized_queries)
+    assert any("set_config('request.jwt.claims'" in query for query in normalized_queries)
+    assert "set local role authenticated" in normalized_queries
+    assert bound_pool.release_count == 1
+
+
+def test_connection_closes_even_when_rollback_raises():
+    events = []
+
+    class ClosingConnection:
+        async def execute(self, query):
+            events.append("reset")
+
+        async def close(self):
+            events.append("close")
+
+    class FailingTransaction:
+        async def rollback(self):
+            events.append("rollback")
+            raise RuntimeError("rollback failed")
+
+    with pytest.raises(RuntimeError, match="rollback failed"):
+        asyncio.run(_rollback_and_close(ClosingConnection(), FailingTransaction()))
+
+    assert events == ["reset", "rollback", "close"]
+
+
+async def _exercise_lifecycle(test_database_url: str, monkeypatch) -> None:
     connection = await asyncpg.connect(
         test_database_url,
         statement_cache_size=0,
         command_timeout=30,
     )
-    transaction = connection.transaction()
-    await transaction.start()
+    transaction = None
+    transaction_started = False
 
     try:
+        test_database_marker = await connection.fetchval(
+            """
+            select current_setting('concilia.test_database', true) = 'on'
+               and exists (
+                 select 1
+                 from pg_db_role_setting
+                 where setdatabase = (
+                   select oid from pg_database where datname = current_database()
+                 )
+                   and setrole = 0
+                   and 'concilia.test_database=on' = any(setconfig)
+               )
+            """
+        )
+        if test_database_marker is not True:
+            pytest.fail(
+                "TEST_DATABASE_URL recusada: o administrador precisa executar ALTER DATABASE "
+                "... SET concilia.test_database=on no banco descartável antes do gate."
+            )
+
+        transaction = connection.transaction()
+        await transaction.start()
+        transaction_started = True
+
         base_schema_ready = await connection.fetchval(
             """
             select to_regclass('public.projetos') is not null
@@ -87,39 +288,8 @@ async def _exercise_lifecycle(test_database_url: str) -> None:
         # removed so every DDL and data mutation remains inside this rollback.
         await connection.execute(_migration_body())
 
-        app = FastAPI()
-        app.include_router(projetos.router)
-
-        async def isolated_connection(authorization: str | None = Header(default=None)):
-            if not authorization or not authorization.startswith("Bearer "):
-                raise HTTPException(status_code=401, detail="Bearer token obrigatório.")
-
-            token = authorization.removeprefix("Bearer ").strip()
-            user_id = database_module.verificar_jwt(token)
-            payload = pyjwt.decode(token, options={"verify_signature": False})
-
-            await connection.execute("reset role")
-            await connection.execute(
-                """
-                insert into auth.users (id, email)
-                values ($1, $2)
-                on conflict (id) do update set email = excluded.email
-                """,
-                user_id,
-                payload["email"],
-            )
-            await connection.execute(
-                "select set_config('request.jwt.claims', $1, true)",
-                json.dumps({"sub": user_id, "role": "authenticated"}),
-            )
-            await connection.execute("set local role authenticated")
-            try:
-                yield connection, user_id
-            finally:
-                await connection.execute("reset role")
-                await connection.execute("select set_config('request.jwt.claims', '{}', true)")
-
-        app.dependency_overrides[get_conn] = isolated_connection
+        _bind_production_connection(monkeypatch, connection)
+        app = _project_api_app()
 
         user_a = str(uuid4())
         user_b = str(uuid4())
@@ -164,12 +334,11 @@ async def _exercise_lifecycle(test_database_url: str) -> None:
             )
             assert unrelated_read.status_code == 404
     finally:
-        try:
-            await connection.execute("reset role")
-        except Exception:
-            pass
-        await transaction.rollback()
-        await connection.close()
+        if transaction_started:
+            assert transaction is not None
+            await _rollback_and_close(connection, transaction)
+        else:
+            await connection.close()
 
 
 def test_new_user_starts_empty_then_sees_only_created_project(monkeypatch):
@@ -191,7 +360,7 @@ def test_new_user_starts_empty_then_sees_only_created_project(monkeypatch):
 
     monkeypatch.setattr(settings, "supabase_jwt_secret", TEST_JWT_SECRET)
     monkeypatch.setattr(database_module, "_jwks_client", None)
-    asyncio.run(_exercise_lifecycle(test_database_url))
+    asyncio.run(_exercise_lifecycle(test_database_url, monkeypatch))
 
 
 def test_production_disables_the_unauthenticated_demo_login(monkeypatch):

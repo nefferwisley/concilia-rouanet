@@ -11,5 +11,7 @@ services:
         sync: false # Cole a Connection String do Supabase aqui
       - key: SUPABASE_JWT_SECRET
         sync: false # Cole o JWT Secret do Supabase aqui
-      - key: GEMINI_API_KEY
+      - key: APP_ENV
+        value: production
+      - key: GOOGLE_API_KEY
         sync: false

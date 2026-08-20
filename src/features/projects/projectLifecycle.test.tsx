@@ -29,8 +29,9 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function installHttpBoundary(): void {
+function installHttpBoundary(): { projectGetCount: () => number } {
   const projects: typeof persistedProject[] = [];
+  let projectGetCount = 0;
 
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : null;
@@ -50,10 +51,16 @@ function installHttpBoundary(): void {
     }
 
     if (method === "GET") {
+      projectGetCount += 1;
+      const listedProjects = projects.map((project) => (
+        projectGetCount >= 3
+          ? { ...project, nome: "Projeto vazio retornado somente no remount" }
+          : project
+      ));
       return jsonResponse({
-        total: projects.length,
+        total: listedProjects.length,
         page: 1,
-        projetos: projects.map((project) => ({ ...project, transacoes_count: 0 })),
+        projetos: listedProjects.map((project) => ({ ...project, transacoes_count: 0 })),
       });
     }
 
@@ -77,6 +84,8 @@ function installHttpBoundary(): void {
 
     return jsonResponse({ detail: "Método não permitido." }, 405);
   }));
+
+  return { projectGetCount: () => projectGetCount };
 }
 
 function renderAuthenticatedApp() {
@@ -94,10 +103,11 @@ afterEach(() => {
 });
 
 it("starts empty, creates a project, and reloads it from HTTP without demo fallback", async () => {
-  installHttpBoundary();
+  const httpBoundary = installHttpBoundary();
 
   const firstMount = renderAuthenticatedApp();
   fireEvent.click(await screen.findByRole("button", { name: /criar primeiro projeto/i }));
+  expect(httpBoundary.projectGetCount()).toBe(1);
 
   fireEvent.change(screen.getByRole("textbox", { name: /pronac \/ identificador/i }), {
     target: { value: "TEST-EMPTY-001" },
@@ -114,12 +124,14 @@ it("starts empty, creates a project, and reloads it from HTTP without demo fallb
   fireEvent.click(screen.getByRole("button", { name: /criar e abrir projeto/i }));
 
   await waitFor(() => expect(screen.getAllByText("Projeto vazio").length).toBeGreaterThan(0));
+  expect(httpBoundary.projectGetCount()).toBe(2);
   firstMount.unmount();
   localStorage.clear();
 
   renderAuthenticatedApp();
 
-  expect((await screen.findAllByText("Projeto vazio")).length).toBeGreaterThan(0);
+  await waitFor(() => expect(httpBoundary.projectGetCount()).toBe(3));
+  expect((await screen.findAllByText("Projeto vazio retornado somente no remount")).length).toBeGreaterThan(0);
   expect(screen.queryByText(/Festival de Cinema 2026/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/Circunstância Cinematográfica/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/^1961$/i)).not.toBeInTheDocument();
