@@ -23,6 +23,7 @@ from backend.routes import (
     regularizacao,
     relatorios,
     revisao,
+    reviews,
     rubricas,
     salic,
     websocket,
@@ -98,6 +99,7 @@ app.add_middleware(
 app.include_router(projetos.router)
 app.include_router(real_imports.router)
 app.include_router(reconciliations.router)
+app.include_router(reviews.router)
 app.include_router(importacoes.router)
 app.include_router(conciliacao.router)
 app.include_router(relatorios.router)
