@@ -8713,31 +8713,55 @@ export const initialDocuments: Record<string, FiscalDocument[]> = {
 
 export const initialAlerts: Record<string, AuditAlert[]> = {
   "proj-1961": [
-  {
-    "id": "alt-1961-1",
-    "gravidade": "INFO",
-    "categoria": "Remanejamento Orçamentário",
-    "titulo": "Remanejamentos Internos de Rubricas (FSA)",
-    "descricao": "Identificados remanejamentos entre itens de Desenvolvimento e Produção somando R$ 68.169,57.",
-    "itemAfetado": "Planilha Orçamentária 1961",
-    "baseLegal": "IN ANCINE: Remanejamentos até 20% do valor total do projeto não necessitam de prévia autorização da ANCINE.",
-    "acaoRecomendada": "Registrar na memória de cálculo e manter notas fiscais vinculadas.",
-    "justificativaSugeridaSalic": "Remanejamentos necessários para aprofundamento de pesquisa de arquivos de 1961 e finalização técnica.",
-    "resolvido": true
-  },
-  {
-    "id": "alt-1961-2",
-    "gravidade": "INFO",
-    "categoria": "Rendimento de Aplicação",
-    "titulo": "Rendimento de Aplicação Financeira (Conta 8768-8)",
-    "descricao": "Rendimentos acumulados na conta de aplicação vinculada ao BRDE.",
-    "itemAfetado": "Conta 8768-8",
-    "baseLegal": "Regulamento FSA/BRDE: Os rendimentos de aplicação financeira integram os recursos do projeto.",
-    "acaoRecomendada": "Utilizar conforme plano complementar aprovado ou recolher ao FSA no encerramento.",
-    "justificativaSugeridaSalic": "Rendimentos mantidos na conta vinculada.",
-    "resolvido": true
-  }
-],
+    {
+      "id": "alt-1961-1",
+      "gravidade": "INFO",
+      "categoria": "Remanejamento Orçamentário",
+      "titulo": "Remanejamentos Internos de Rubricas (FSA)",
+      "descricao": "Identificados remanejamentos entre itens de Desenvolvimento e Produção somando R$ 68.169,57.",
+      "itemAfetado": "Planilha Orçamentária 1961",
+      "baseLegal": "IN ANCINE: Remanejamentos até 20% do valor total do projeto não necessitam de prévia autorização da ANCINE.",
+      "acaoRecomendada": "Registrar na memória de cálculo e manter notas fiscais vinculadas.",
+      "justificativaSugeridaSalic": "Remanejamentos necessários para aprofundamento de pesquisa de arquivos de 1961 e finalização técnica.",
+      "resolvido": true
+    },
+    {
+      "id": "alt-1961-2",
+      "gravidade": "INFO",
+      "categoria": "Rendimento de Aplicação",
+      "titulo": "Rendimento de Aplicação Financeira (Conta 8768-8)",
+      "descricao": "Rendimentos acumulados na conta de aplicação vinculada ao BRDE.",
+      "itemAfetado": "Conta 8768-8",
+      "baseLegal": "Regulamento FSA/BRDE: Os rendimentos de aplicação financeira integram os recursos do projeto.",
+      "acaoRecomendada": "Utilizar conforme plano complementar aprovado ou recolher ao FSA no encerramento.",
+      "justificativaSugeridaSalic": "Rendimentos mantidos na conta vinculada.",
+      "resolvido": true
+    },
+    {
+      "id": "alt-1961-passagens",
+      "gravidade": "MEDIA",
+      "categoria": "Comprovação Física de Viagem",
+      "titulo": "Passagens Aéreas sem Cartão de Embarque Anexado (8 Lançamentos)",
+      "descricao": "Identificados 8 lançamentos de compra de bilhetes aéreos (André Manfrin, Luis Cipullo, Thiago Cunha, Frico Guimarães) somando R$ 12.000,00 que exigem a vinculação do comprovante de emissão do bilhete (BP-e/E-Ticket) e respectivo canhoto/cartão de embarque da equipe.",
+      "itemAfetado": "Rubrica 3.11.2 - Passagem Aérea",
+      "baseLegal": "IN ANCINE / Portaria MinC: A despesa com passagens aéreas deve ser comprovada com bilhete emitido e comprovação física do efetivo embarque da equipe.",
+      "acaoRecomendada": "Anexar os bilhetes eletrônicos e cartões de embarque no repositório de documentos fiscais.",
+      "justificativaSugeridaSalic": "Deslocamentos necessários para gravações de campo do documentário.",
+      "resolvido": false
+    },
+    {
+      "id": "alt-1961-alimentacao",
+      "gravidade": "MEDIA",
+      "categoria": "Comprovação de Diárias / Alimentação",
+      "titulo": "Transferências de Verba de Alimentação sem Recibo de Diária Assinado (10 Lançamentos)",
+      "descricao": "Identificados 10 lançamentos de transferência de verba de alimentação somando R$ 10.800,00 para equipe em trânsito (Ida Leal, Anne Santos, Motorista, André, Frico, Luis, Thiago) pendentes da via assinada do Recibo de Diária/Alimentação.",
+      "itemAfetado": "Rubrica 3.10.1 - Alimentação",
+      "baseLegal": "IN MinC nº 01/2023: Despesas de alimentação e diárias pagas diretamente ao profissional exigem formulário de recibo de diária assinado pelo beneficiário com CPF e período.",
+      "acaoRecomendada": "Digitalizar e anexar os Recibos de Diária / Verba de Alimentação assinados pelos profissionais.",
+      "justificativaSugeridaSalic": "Alimentação fornecida à equipe técnica durante as diárias de filmagem e produção no Rio de Janeiro e São Paulo.",
+      "resolvido": false
+    }
+  ],
   "proj-1": [
   {
     "id": "alt-1961-1",
