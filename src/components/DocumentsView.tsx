@@ -26,6 +26,7 @@ import { FiscalDocument, BudgetRubric, FiscalDocType, BudgetStageName, PronacPro
 import { formatCurrency, formatDate, formatCnpjCpf } from "../utils/formatters";
 import { resolveProviderAndCompany } from "../utils/providerHelper";
 import { analyzeDocumentWithAi } from "../services/geminiService";
+import { taxAuthorityIntegrationService } from "../services/taxAuthorityIntegrationService";
 
 interface DocumentsViewProps {
   documents: FiscalDocument[];
@@ -135,6 +136,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
     valorLiquido: 0,
     rubricaId: safeRubrics[0]?.id || "RUB-01",
     statusComprovacao: "Completo",
+    validacaoSefaz: "PENDENTE",
   });
 
   const filteredDocs = safeDocuments.filter((d) => {
@@ -157,7 +159,6 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
   );
   const totalLiquido = safeDocuments.reduce((acc, d) => acc + (Number(d?.valorLiquido) || 0), 0);
 
-  // Recalculate net value on changes
   const updateGrossOrTaxes = (gross: number, iss: number, irrf: number, inss: number) => {
     const net = Math.max(0, gross - (iss + irrf + inss));
     setFormState((prev) => ({
@@ -168,6 +169,21 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
       retencaoInss: inss,
       valorLiquido: net,
     }));
+  };
+
+  const [validatingSefazId, setValidatingSefazId] = useState<string | null>(null);
+
+  const handleValidateSefaz = async (doc: FiscalDocument) => {
+    try {
+      setValidatingSefazId(doc.id);
+      const res = await taxAuthorityIntegrationService.validateDocument(doc);
+      onUpdateDocument({ ...doc, validacaoSefaz: res.status });
+      alert(`Validação Sefaz/Receita: ${res.status}\n\n${res.mensagem}`);
+    } catch (err: any) {
+      alert("Erro ao conectar à Receita/Sefaz: " + err.message);
+    } finally {
+      setValidatingSefazId(null);
+    }
   };
 
   // Process a single file to extract data
@@ -944,13 +960,28 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
                       <td className="px-4 py-3 text-right font-mono font-bold text-emerald-400">
                         {formatCurrency(doc.valorLiquido)}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3 text-center space-y-1">
                         <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded">
                           <CheckCircle2 className="w-3 h-3 text-emerald-400" /> {doc.statusComprovacao}
                         </span>
+                        {doc.validacaoSefaz === "VALIDO" ? (
+                          <div className="text-[10px] text-emerald-400 font-bold">SEFAZ OK</div>
+                        ) : doc.validacaoSefaz === "INVALIDO" ? (
+                          <div className="text-[10px] text-rose-400 font-bold flex items-center gap-1 justify-center"><AlertTriangle className="w-3 h-3"/> SEFAZ REJEITOU</div>
+                        ) : (
+                          <div className="text-[10px] text-slate-400">Não Validado Sefaz</div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handleValidateSefaz(doc)}
+                            disabled={validatingSefazId === doc.id || doc.validacaoSefaz === "VALIDO"}
+                            className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded disabled:opacity-50"
+                            title="Consultar autenticidade na Receita Federal / SEFAZ"
+                          >
+                            {validatingSefazId === doc.id ? "..." : "SEFAZ"}
+                          </button>
                           <button
                             onClick={() => {
                               setEditingDoc(doc);

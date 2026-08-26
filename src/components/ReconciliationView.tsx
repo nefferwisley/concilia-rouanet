@@ -38,6 +38,7 @@ import {
   TripartiteMatchCandidate,
   AuditAlert,
   TripartiteEntry,
+  UserRole,
 } from "../types";
 import { formatCurrency, formatDate } from "../utils/formatters";
 import {
@@ -56,6 +57,7 @@ interface ReconciliationViewProps {
   project: PronacProject;
   alerts?: AuditAlert[];
   tripartiteEntries?: TripartiteEntry[];
+  userRole?: UserRole;
   onUpdateTransactions: (updated: BankTransaction[]) => void;
   onUpdateDocuments: (updated: FiscalDocument[]) => void;
   onUpdateRubrics?: (updated: BudgetRubric[]) => void;
@@ -200,6 +202,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
   project,
   alerts = [],
   tripartiteEntries = [],
+  userRole = "MINC_AUDITOR",
   onUpdateTransactions,
   onUpdateDocuments,
   onUpdateRubrics,
@@ -465,12 +468,38 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
     }
   };
 
+  // Helper para verificar limite de orçamento preventivo (IN MinC - 20%)
+  const checkBudgetLimit = (rubricId: string, additionalAmount: number): boolean => {
+    if (userRole !== "PRODUTOR") return true; // Somente PRODUTOR tem bloqueio ativo na UI, AUDITOR pode apenas ver o alerta
+
+    const rubric = safeRubrics.find((r) => r.id === rubricId);
+    if (!rubric) return true;
+
+    // Calcular total já executado nesta rubrica (transações conciliadas)
+    const currentExecuted = safeTransactions
+      .filter((t) => t.status === "CONCILIADO" && (t.matchedRubricId === rubricId || t.rubricaId === rubricId))
+      .reduce((sum, t) => sum + (Number(t.valor) || 0), 0);
+
+    const novoTotal = currentExecuted + additionalAmount;
+    
+    // Teto = 1.2 * valor aprovado (20% de remanejamento permitido)
+    const maxLimit = rubric.valorAprovado * 1.2;
+
+    if (novoTotal > maxLimit) {
+      alert(`Bloqueio de Prevenção: O remanejamento ultrapassa o limite de 20% da rubrica "${rubric.nome}".\n\nTeto Permitido: R$ ${formatCurrency(maxLimit)}\nTentativa de Execução Total: R$ ${formatCurrency(novoTotal)}\n\nAção bloqueada pelo perfil de Governança (PRODUTOR). Solicite autorização ao Ministério da Cultura para readequação.`);
+      return false;
+    }
+    return true;
+  };
+
   // Quick generate and link specific document types (e.g. Passagens Aéreas, Verba de Alimentação)
   const handleQuickGenerateAndLink = (tx: BankTransaction, type: "PASSAGEM" | "ALIMENTACAO" | "GENERIC") => {
     let newDoc: FiscalDocument;
 
     if (type === "PASSAGEM") {
       const passRubric = safeRubrics.find((r) => r.nome.toLowerCase().includes("passagem") || r.id === "rub-203") || safeRubrics[0];
+      if (passRubric && !checkBudgetLimit(passRubric.id, tx.valor)) return;
+
       newDoc = {
         id: `doc-bpe-${Date.now()}`,
         tipo: "Bilhete de Passagem Aérea (BP-e / E-Ticket)",
@@ -495,6 +524,8 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
       };
     } else if (type === "ALIMENTACAO") {
       const alimRubric = safeRubrics.find((r) => r.nome.toLowerCase().includes("alimenta") || r.nome.toLowerCase().includes("hospedagem") || r.id === "rub-205") || safeRubrics[0];
+      if (alimRubric && !checkBudgetLimit(alimRubric.id, tx.valor)) return;
+
       newDoc = {
         id: `doc-alim-${Date.now()}`,
         tipo: "Recibo de Diária / Verba de Alimentação",
@@ -519,6 +550,8 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
       };
     } else {
       const defaultRubric = safeRubrics[0];
+      if (defaultRubric && !checkBudgetLimit(defaultRubric.id, tx.valor)) return;
+
       newDoc = {
         id: `doc-gen-${Date.now()}`,
         tipo: "NFS-e (Serviço)",
@@ -568,6 +601,8 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
 
     const doc = safeDocuments.find((d) => d.id === selectedDocId);
     const rubricIdToUse = selectedRubricId || doc?.rubricaId || safeRubrics[0]?.id;
+
+    if (rubricIdToUse && !checkBudgetLimit(rubricIdToUse, selectedTxForLink.valor)) return;
 
     const updated = safeTransactions.map((t) => {
       if (t.id === selectedTxForLink.id) {

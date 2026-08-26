@@ -15,6 +15,9 @@ import { DriveFolderImportModal } from "./components/DriveFolderImportModal";
 import { LangChainRagSelfCorrectionModal } from "./components/LangChainRagSelfCorrectionModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AccessibilityToolbar } from "./components/AccessibilityToolbar";
+import { FinancialReviewWorkflowView } from "./components/FinancialReviewWorkflowView";
+import { SponsorshipManagerView } from "./components/SponsorshipManagerView";
+import { ContinuousRiskDashboardView } from "./components/ContinuousRiskDashboardView";
 import {
   initialProjects,
   initialRubrics,
@@ -23,7 +26,6 @@ import {
   initialAlerts,
   initialTripartiteEntries,
 } from "./data/mockData";
-import { FinancialReviewWorkflowView } from "./components/FinancialReviewWorkflowView";
 import {
   PronacProject,
   BudgetRubric,
@@ -32,6 +34,7 @@ import {
   AuditAlert,
   TripartiteEntry,
   ReceiptItem,
+  UserRole,
 } from "./types";
 import { auditComplianceWithAi } from "./services/geminiService";
 import { exportSalicExcel, exportSalicPdf } from "./utils/exportUtils";
@@ -85,6 +88,7 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard");
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [userRole, setUserRole] = useState<UserRole>("ADMIN");
 
   // Domain state stored per project
   const [allRubrics, setAllRubrics] = useState<Record<string, BudgetRubric[]>>(() => {
@@ -545,6 +549,20 @@ export default function App() {
         onToggleMobileMenu={() => setIsMobileNavOpen(!isMobileNavOpen)}
       />
 
+      {/* Seletor de Perfil (Role) para teste de RBAC */}
+      <div className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex items-center justify-end gap-3 text-xs">
+        <span className="text-slate-400 font-medium">Perfil Ativo (RBAC):</span>
+        <select
+          value={userRole}
+          onChange={(e) => setUserRole(e.target.value as UserRole)}
+          className="bg-slate-800 text-slate-200 border border-slate-700 rounded px-2 py-1 outline-none focus:border-emerald-500"
+        >
+          <option value="ADMIN">ADMIN</option>
+          <option value="AUDITOR">AUDITOR (MinC)</option>
+          <option value="PRODUTOR">PRODUTOR (Agente Cultural)</option>
+        </select>
+      </div>
+
       {/* Body Area with Sidebar + Content */}
       <div className="flex-1 flex overflow-hidden relative">
         <Sidebar
@@ -648,6 +666,7 @@ export default function App() {
                   project={currentProjectWithLiveStats}
                   alerts={currentAlerts}
                   tripartiteEntries={currentTripartiteEntries}
+                  userRole={userRole}
                   onUpdateTransactions={setTransactions}
                   onUpdateDocuments={setDocuments}
                   onUpdateRubrics={setRubrics}
@@ -702,6 +721,12 @@ export default function App() {
 
               {activeTab === "simulator" && (
                 <TaxSponsorshipSimulatorView project={currentProjectWithLiveStats} />
+              )}
+              {activeTab === "sponsorship" && (
+                <SponsorshipManagerView project={currentProjectWithLiveStats} />
+              )}
+              {activeTab === "risk_dashboard" && (
+                <ContinuousRiskDashboardView project={currentProjectWithLiveStats} alerts={currentAlerts} />
               )}
             </ErrorBoundary>
           </div>

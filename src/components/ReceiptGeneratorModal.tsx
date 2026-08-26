@@ -17,6 +17,8 @@ import { BankTransaction, BudgetRubric, PronacProject, ReceiptItem, ReceiptStatu
 import { formatCurrency, formatDate, formatCnpjCpf } from "../utils/formatters";
 import { resolveProviderAndCompany } from "../utils/providerHelper";
 
+import { generateDigitalSignatureDispatch } from "../services/digitalSignatureService";
+
 // Helper simples para valor por extenso em BRL
 function valorPorExtensoBRL(valor: number): string {
   if (!valor || valor <= 0) return "Zero reais";
@@ -104,12 +106,30 @@ export const ReceiptGeneratorModal: React.FC<ReceiptGeneratorModalProps> = ({
   const [selectedRubricId, setSelectedRubricId] = useState(
     existingReceipt?.rubricaId || transaction.matchedRubricId || rubrics[0]?.id || ""
   );
+  const [telefoneFavorecido, setTelefoneFavorecido] = useState("");
 
   const selectedRubric = rubrics.find((r) => r.id === selectedRubricId) || rubrics[0];
   const valorExtenso = valorPorExtensoBRL(txVal);
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDispararWhatsApp = () => {
+    const dispatch = generateDigitalSignatureDispatch({
+      receiptId: existingReceipt?.id || `rec-${Date.now()}`,
+      transacaoId: transaction.id || "",
+      favorecidoNome: resolved.personName,
+      favorecidoTelefone: telefoneFavorecido,
+      responsavelNome: responsavel,
+      valor: txVal,
+      funcaoOuServico: funcaoServico,
+      projetoNome: project.nome,
+      pronac: project.pronac,
+    });
+
+    handleSalvar("ENVIADO_ASSINATURA");
+    window.open(dispatch.whatsappDirectLink, "_blank");
   };
 
   const handleSalvar = (novoStatus?: ReceiptStatus) => {
@@ -232,6 +252,17 @@ export const ReceiptGeneratorModal: React.FC<ReceiptGeneratorModalProps> = ({
               </div>
 
               <div>
+                <label className="text-slate-400 block mb-1">WhatsApp do Favorecido (DDD + Número)</label>
+                <input
+                  type="text"
+                  placeholder="(11) 98765-4321"
+                  value={telefoneFavorecido}
+                  onChange={(e) => setTelefoneFavorecido(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 text-white rounded-lg px-3 py-2 font-mono"
+                />
+              </div>
+
+              <div>
                 <label className="text-slate-400 block mb-1">Status do Fluxo de Assinatura</label>
                 <select
                   value={status}
@@ -243,6 +274,16 @@ export const ReceiptGeneratorModal: React.FC<ReceiptGeneratorModalProps> = ({
                   <option value="ASSINADO_ANEXADO">🟢 Assinado & Regularizado</option>
                 </select>
               </div>
+
+              {/* Botão de Disparo WhatsApp */}
+              <button
+                type="button"
+                onClick={handleDispararWhatsApp}
+                className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-center gap-2 transition shadow-md mt-2"
+              >
+                <Send className="w-4 h-4" />
+                <span>Disparar Assinatura (WhatsApp / Gov.br)</span>
+              </button>
             </div>
           </div>
 

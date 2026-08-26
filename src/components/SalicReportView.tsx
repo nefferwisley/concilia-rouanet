@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { PronacProject, BudgetRubric, BankTransaction, FiscalDocument, AuditAlert } from "../types";
 import { formatCurrency, formatDate, formatCnpjCpf } from "../utils/formatters";
-import { exportSalicExcel, exportSalicPdf } from "../utils/exportUtils";
+import { exportSalicExcel, exportSalicPdf, exportBBGestaoAgilExcel } from "../utils/exportUtils";
 
 interface SalicReportViewProps {
   project: PronacProject;
@@ -70,11 +70,18 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
+            onClick={() => exportBBGestaoAgilExcel(project, transactions, documents)}
+            className="text-xs font-bold bg-blue-500 hover:bg-blue-600 text-slate-950 px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow transition"
+          >
+            <Download className="w-4 h-4" />
+            <span>Exportar BB Gestão Ágil</span>
+          </button>
+          <button
             onClick={() => exportSalicExcel(project, rubrics, transactions, documents)}
             className="text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-slate-950 px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow transition"
           >
             <Download className="w-4 h-4" />
-            <span>Exportar XLSX (Excel)</span>
+            <span>Exportar XLSX (SALIC)</span>
           </button>
           <button
             onClick={() => exportSalicPdf(project, rubrics, transactions, documents, alerts)}

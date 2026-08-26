@@ -27,7 +27,9 @@ export type ActiveTab =
   | "audit"
   | "salic"
   | "advisor"
-  | "simulator";
+  | "simulator"
+  | "sponsorship"
+  | "risk_dashboard";
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -119,6 +121,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: "Simulador de Patrocínio",
       icon: Calculator,
       badge: "Art. 18",
+    },
+    {
+      id: "sponsorship" as ActiveTab,
+      label: "Módulo de Captação & Recibos",
+      icon: Coins,
+      badge: "NOVO",
+      badgeColor: "bg-blue-500/20 text-blue-300 border border-blue-500/30",
+    },
+    {
+      id: "risk_dashboard" as ActiveTab,
+      label: "Painel de Risco Contínuo",
+      icon: ShieldCheck,
+      badge: "ALERTA",
+      badgeColor: "bg-red-500/20 text-red-300 border border-red-500/30",
     },
   ];
 

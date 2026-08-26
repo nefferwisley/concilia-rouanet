@@ -15,6 +15,34 @@ export type ProjectStatus =
   | "Aprovada com Ressalvas"
   | "Aprovada Plenamente";
 
+export type UserRole = "ADMIN" | "AUDITOR" | "PRODUTOR";
+
+export interface Sponsor {
+  id: string;
+  nome: string;
+  cnpjCpf: string;
+  tipo: "PESSOA_FISICA" | "PESSOA_JURIDICA";
+}
+
+export interface SponsorshipContribution {
+  id: string;
+  sponsorId: string;
+  projetoId: string;
+  dataAporte: string;
+  valor: number;
+  tipoIncentivo: "Artigo 18" | "Artigo 26" | "FSA" | string;
+  comprovanteBancarioUrl?: string;
+}
+
+export interface PatronageReceipt {
+  id: string;
+  contributionId: string;
+  numeroRecibo: string;
+  dataEmissao: string;
+  status: "RASCUNHO" | "EMITIDO" | "CANCELADO";
+  pdfUrl?: string;
+}
+
 export interface BankAccountInfo {
   banco: string; // Ex: "Banco do Brasil (001)"
   agencia: string;
@@ -152,6 +180,8 @@ export interface FiscalDocument {
   confiabilidadeIa?: number;
   divergenciasDetectadas?: string[];
   justificativaSalic?: string;
+  validacaoSefaz?: "PENDENTE" | "VALIDO" | "INVALIDO";
+  splits?: Array<{rubricId: string, value: number, justification: string}>;
   [key: string]: any;
 }
 
@@ -308,7 +338,11 @@ export interface TripartiteGedAttachment {
     | "GUIA_DARF"
     | "GUIA_ISS"
     | "TERMO_DIARIAS"
-    | "BPE_PASSAGEM";
+    | "BPE_PASSAGEM"
+    | "FOTO"
+    | "CLIPPING"
+    | "LISTA_PRESENCA"
+    | "TERMO_ENTREGA";
   nomeArquivo: string;
   tamanhoFormatado: string;
   status: "VALIDADO" | "PENDENTE" | "RESSALVA";
@@ -510,7 +544,7 @@ export interface AuditActivityLogEntry {
   id: string;
   timestamp: string;
   actorId: string;
-  actorRole: "AI_AGENT_ENGINE" | "HUMAN_AUDITOR" | "SYSTEM_INGESTION" | "MINC_AUDITOR";
+  actorRole: "AI_AGENT_ENGINE" | "HUMAN_AUDITOR" | "SYSTEM_INGESTION" | "MINC_AUDITOR" | "ADMIN" | "PRODUTOR" | "AUDITOR";
   action: AuditActionType;
   entityType: "TRANSACTION" | "DOCUMENT" | "RUBRIC" | "LEDGER_TRANSFER" | "COMPLIANCE_RULE";
   entityId: string;

@@ -464,3 +464,52 @@ export function exportSalicPdf(
   const filename = `Dossie_SALIC_PRONAC_${project.pronac}.pdf`;
   doc.save(filename);
 }
+
+export function exportBBGestaoAgilExcel(
+  project: PronacProject,
+  transactions: BankTransaction[],
+  documents: FiscalDocument[]
+) {
+  const wb = XLSX.utils.book_new();
+
+  const headers = [
+    "AGENCIA",
+    "CONTA_CORRENTE",
+    "DATA_LANCAMENTO",
+    "VALOR_LANCAMENTO",
+    "TIPO_LANCAMENTO",
+    "NATUREZA_LANCAMENTO",
+    "CPF_CNPJ_FAVORECIDO",
+    "NOME_FAVORECIDO",
+    "AUTENTICACAO_BANCARIA",
+    "NUMERO_NOTA_FISCAL",
+    "CHAVE_ACESSO_NFE",
+    "STATUS_COMPROVACAO"
+  ];
+
+  const debits = transactions.filter((t) => t && (t.tipo === "DEBITO" || t.tipoMovimento === "DEBIT" || !t.tipo));
+
+  const rows = debits.map(tx => {
+    const doc = documents.find((d) => d.id === tx.matchedDocId || d.id === tx.idDocumentoFiscalVinculado);
+    return [
+      project.bancoInfo?.agencia || "0000",
+      project.bancoInfo?.contaMovimento || "000000-0",
+      formatDate(tx.data || tx.dataTransacao || ""),
+      Number(tx.valor) || 0,
+      "D",
+      "PAGAMENTO_FORNECEDOR",
+      tx.cnpjCpfFavorecido || doc?.fornecedorCnpjCpf || "",
+      tx.favorecido || doc?.fornecedorNome || "",
+      tx.documentoBancario || "",
+      doc?.numeroDoc || "",
+      doc?.chaveAcesso || "",
+      doc ? "COMPROVADO" : "PENDENTE"
+    ];
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  XLSX.utils.book_append_sheet(wb, ws, "BB_Gestao_Agil");
+
+  const filename = `BB_Gestao_Agil_${project.pronac}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}

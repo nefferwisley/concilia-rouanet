@@ -50,7 +50,7 @@ class AuditTrailStore {
 
   public logActivity(params: {
     actorId: string;
-    actorRole: "AI_AGENT_ENGINE" | "HUMAN_AUDITOR" | "SYSTEM_INGESTION" | "MINC_AUDITOR";
+    actorRole: "AI_AGENT_ENGINE" | "HUMAN_AUDITOR" | "SYSTEM_INGESTION" | "MINC_AUDITOR" | "ADMIN" | "PRODUTOR" | "AUDITOR";
     action: AuditActionType;
     entityType: "TRANSACTION" | "DOCUMENT" | "RUBRIC" | "LEDGER_TRANSFER" | "COMPLIANCE_RULE";
     entityId: string;

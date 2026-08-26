@@ -97,6 +97,8 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
   const [viewingEntryGed, setViewingEntryGed] = useState<TripartiteEntry | null>(null);
   const [isNewEntryModalOpen, setIsNewEntryModalOpen] = useState(false);
   const [isLangChainModalOpen, setIsLangChainModalOpen] = useState(false);
+  const [isRateioModalOpen, setIsRateioModalOpen] = useState(false);
+  const [rateioEntry, setRateioEntry] = useState<TripartiteEntry | null>(null);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
   // Fast & Instant Real-Time Shadow Ledger Sync
@@ -108,9 +110,9 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
     if (onUpdateRubrics) onUpdateRubrics(result.rubrics);
     if (onUpdateAlerts) onUpdateAlerts(result.alerts);
 
-    setSyncFeedback(
-      `Sincronização instantânea: ${result.matchedCount} débitos vinculados, ${result.healedCount} documentos recuperados e 100% de nexo causal estabelecido.`
-    );
+    const feedbackMsg = `Sincronização instantânea concluída: ${result.matchedCount} débitos vinculados, ${result.healedCount} documentos recuperados e 100% de nexo causal estabelecido.`;
+    setSyncFeedback(feedbackMsg);
+    alert(feedbackMsg);
   };
 
   // New Entry Form State
@@ -870,13 +872,23 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                         {/* Actions */}
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => setViewingEntryGed(entry)}
-                              title="Visualizar Dossiê GED / Anexos"
-                              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition border border-slate-700"
-                            >
-                              <Eye className="w-3.5 h-3.5 text-emerald-400" />
-                            </button>
+                              <button
+                                onClick={() => {
+                                  setRateioEntry(entry);
+                                  setIsRateioModalOpen(true);
+                                }}
+                                title="Ratear Despesa (Dividir)"
+                                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition border border-slate-700"
+                              >
+                                <Split className="w-3.5 h-3.5 text-blue-400" />
+                              </button>
+                              <button
+                                onClick={() => setViewingEntryGed(entry)}
+                                title="Visualizar Dossiê GED / Anexos"
+                                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition border border-slate-700"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                              </button>
                             <button
                               onClick={() => handleDeleteEntry(entry.idLancamento)}
                               title="Excluir Lançamento"
@@ -1369,7 +1381,23 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                 </div>
               )}
             </div>
-
+            
+            <div className="pt-4 mt-4 border-t border-slate-800 space-y-3">
+              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Comprovação Física / Outros Anexos
+              </h4>
+              <div className="flex gap-2">
+                <select className="bg-slate-950 border border-slate-800 text-xs text-slate-300 rounded-lg p-2 flex-1">
+                  <option>Fotos do Evento</option>
+                  <option>Clipping de Mídia</option>
+                  <option>Lista de Presença</option>
+                  <option>Relatório Físico</option>
+                </select>
+                <button onClick={() => alert("Upload simulado concluído.")} className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 border border-slate-700">
+                  <Plus className="w-3.5 h-3.5" /> Adicionar Anexo
+                </button>
+              </div>
+            </div>
             <div className="pt-4 border-t border-slate-800 flex justify-end">
               <button
                 onClick={() => setViewingEntryGed(null)}
@@ -1588,6 +1616,63 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
           setSyncFeedback("Autocorreção LangChain aplicada com sucesso no Shadow Ledger.");
         }}
       />
+
+      {/* Modal de Rateio de Despesa */}
+      {isRateioModalOpen && rateioEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <Split className="w-5 h-5 text-blue-400" />
+                Rateio de Despesa
+              </h3>
+              <button
+                onClick={() => {
+                  setIsRateioModalOpen(false);
+                  setRateioEntry(null);
+                }}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1 space-y-4">
+              <p className="text-sm text-slate-300">
+                A despesa <strong>{rateioEntry.numeroDoc || "S/N"}</strong> no valor de <strong>{formatCurrency(rateioEntry.valorBrutoDoc || 0)}</strong> será rateada. 
+              </p>
+              <div className="bg-slate-950 p-4 border border-slate-800 rounded-xl space-y-3">
+                 <div className="flex justify-between items-center text-sm">
+                   <span className="text-slate-400">Rubrica Atual:</span>
+                   <span className="font-bold text-slate-200">{rateioEntry.descricaoRubrica}</span>
+                 </div>
+                 <div className="flex justify-between items-center text-sm">
+                   <span className="text-slate-400">Nova Rubrica de Destino:</span>
+                   <select className="bg-slate-800 text-sm text-slate-200 border border-slate-700 rounded p-1">
+                     {safeRubrics.map(r => (
+                       <option key={r.id} value={r.id}>{r.nome}</option>
+                     ))}
+                   </select>
+                 </div>
+                 <div className="flex justify-between items-center text-sm">
+                   <span className="text-slate-400">Valor a Mover:</span>
+                   <input type="number" className="bg-slate-800 text-sm text-slate-200 border border-slate-700 rounded p-1 w-32" defaultValue={(rateioEntry.valorBrutoDoc || 0) / 2} />
+                 </div>
+                 <div className="flex justify-between items-center text-sm">
+                   <span className="text-slate-400">Justificativa:</span>
+                   <input type="text" className="bg-slate-800 text-sm text-slate-200 border border-slate-700 rounded p-1 flex-1 ml-2" placeholder="Motivo do rateio" />
+                 </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                 <button onClick={() => setIsRateioModalOpen(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancelar</button>
+                 <button onClick={() => {
+                   alert("Rateio efetuado com sucesso (mock).");
+                   setIsRateioModalOpen(false);
+                 }} className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold">Aplicar Rateio</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
