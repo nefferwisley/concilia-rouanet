@@ -255,20 +255,22 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
     (t) => t && (t.tipo === "CREDITO" || t.tipo === "RENDIMENTO" || t.tipo === "RESGATE" || (t as any).tipoMovimento === "CREDIT")
   );
 
+  const isTxReconciled = (t: BankTransaction) =>
+    (t.status === "CONCILIADO" || t.statusConciliacao === "Conciliado" || (t as any).status === "Conciliado") &&
+    Boolean(t.matchedDocId || t.idDocumentoFiscalVinculado);
+
   const pendingDebitsCount = debitTransactions.filter(
-    (t) => t.status === "PENDENTE" || t.status === "PARCIAL" || (!t.matchedDocId && !t.idDocumentoFiscalVinculado)
+    (t) => !isTxReconciled(t) && t.status !== "ALERTA_GLOSA"
   ).length;
 
-  const reconciledDebitsCount = debitTransactions.filter(
-    (t) => t.status === "CONCILIADO" && (t.matchedDocId || t.idDocumentoFiscalVinculado)
-  ).length;
+  const reconciledDebitsCount = debitTransactions.filter(isTxReconciled).length;
 
   const glosaDebitsCount = debitTransactions.filter((t) => t.status === "ALERTA_GLOSA").length;
 
   const totalDebitos = debitTransactions.reduce((sum, t) => sum + (Number(t?.valor) || 0), 0);
   const totalCreditos = creditTransactions.reduce((sum, t) => sum + (Number(t?.valor) || 0), 0);
   const totalConciliado = debitTransactions
-    .filter((t) => t.status === "CONCILIADO")
+    .filter(isTxReconciled)
     .reduce((sum, t) => sum + (Number(t?.valor) || 0), 0);
 
   const debitsCount = debitTransactions.length;
@@ -280,9 +282,9 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
 
     let matchesStatus = true;
     if (statusFilter === "CONCILIADO") {
-      matchesStatus = isDebit && t.status === "CONCILIADO" && Boolean(t.matchedDocId || t.idDocumentoFiscalVinculado);
+      matchesStatus = isDebit && isTxReconciled(t);
     } else if (statusFilter === "PENDENTE") {
-      matchesStatus = isDebit && (t.status === "PENDENTE" || t.status === "PARCIAL" || (!t.matchedDocId && !t.idDocumentoFiscalVinculado));
+      matchesStatus = isDebit && !isTxReconciled(t) && t.status !== "ALERTA_GLOSA";
     } else if (statusFilter === "PARCIAL") {
       matchesStatus = t.status === "PARCIAL";
     } else if (statusFilter === "ALERTA_GLOSA") {
@@ -846,8 +848,13 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-800/80">
               {filteredTransactions.map((tx, idx) => {
-                const matchedDoc = documents.find((d) => d.id === tx.matchedDocId);
-                const matchedRubric = rubrics.find((r) => r.id === tx.matchedRubricId || r.id === tx.rubricaId);
+                const matchedDoc = documents.find((d) => d.id === tx.matchedDocId || d.id === tx.idDocumentoFiscalVinculado);
+                const matchedRubric = rubrics.find((r) => r.id === tx.matchedRubricId || r.id === tx.rubricaId || r.id === tx.idRubricaVinculada);
+                const isReconciled =
+                  tx.status === "CONCILIADO" ||
+                  tx.statusConciliacao === "Conciliado" ||
+                  (tx as any).status === "Conciliado" ||
+                  Boolean(matchedDoc);
                 const hasRetentions = matchedDoc && ((matchedDoc.retencaoIrrf || 0) > 0 || (matchedDoc.retencaoIss || 0) > 0 || (matchedDoc.retencaoInss || 0) > 0);
                 const isDebit = tx.tipo === "DEBITO" || tx.tipo === "TARIFA" || !tx.tipo || (tx as any).tipoMovimento === "DEBIT";
                 const isCredit = tx.tipo === "CREDITO" || tx.tipo === "RENDIMENTO" || tx.tipo === "RESGATE" || (tx as any).tipoMovimento === "CREDIT";
@@ -952,15 +959,15 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                     <td className="px-4 py-3 max-w-xs">
                       {matchedRubric ? (
                         <div>
-                          <div className="text-slate-200 font-medium truncate" title={matchedRubric.nome}>
-                            {matchedRubric.nome}
+                          <div className="text-slate-200 font-medium truncate" title={matchedRubric.nome || matchedRubric.nomeRubrica}>
+                            {matchedRubric.nome || matchedRubric.nomeRubrica}
                           </div>
                           <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5 flex-wrap">
                             <span className="bg-slate-800 px-1.5 py-0.2 rounded text-[9px] font-mono border border-slate-700 text-slate-300">
                               {matchedRubric.etapa}
                             </span>
                             <span className="font-mono text-slate-400">
-                              Item {matchedRubric.itemNumero || matchedRubric.codigo}
+                              Item {matchedRubric.itemNumero || matchedRubric.codigo || matchedRubric.id}
                             </span>
                           </div>
                         </div>
@@ -971,7 +978,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                       )}
                     </td>
                     <td className="px-3 py-3 text-center whitespace-nowrap">
-                      {tx.status === "CONCILIADO" ? (
+                      {isReconciled ? (
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded">
                           <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Conciliado
                         </span>
@@ -994,7 +1001,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                       )}
                     </td>
                     <td className="px-3 py-3 text-center whitespace-nowrap">
-                      {tx.status === "CONCILIADO" || tx.status === "ALERTA_GLOSA" ? (
+                      {isReconciled || tx.status === "ALERTA_GLOSA" ? (
                         <button
                           onClick={() => handleUnlink(tx.id)}
                           title="Desvincular documento"
