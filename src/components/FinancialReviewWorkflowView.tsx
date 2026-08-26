@@ -453,9 +453,16 @@ export const FinancialReviewWorkflowView: React.FC<FinancialReviewWorkflowViewPr
                     {/* Check Comprovante Bancário */}
                     <td className="px-3.5 py-3 text-center">
                       {temComp ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded">
-                          <CheckCircle2 className="w-3 h-3" /> OK
-                        </span>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded">
+                            <CheckCircle2 className="w-3 h-3" /> OK
+                          </span>
+                          {tx.arquivoComprovanteNome && (
+                            <span className="text-[9px] text-slate-400 font-mono truncate max-w-[130px]" title={tx.arquivoComprovanteNome}>
+                              📄 {tx.arquivoComprovanteNome}
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded">
                           <AlertTriangle className="w-3 h-3" /> Falta Comp
