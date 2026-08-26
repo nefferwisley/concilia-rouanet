@@ -53,7 +53,7 @@ export const BudgetPlanView: React.FC<BudgetPlanViewProps> = ({
     r?.nomeRubrica || r?.nome || r?.descricaoDetalhada || "Rubrica Orçamentária";
 
   const getItemNumber = (r: BudgetRubric): string =>
-    r?.itemNumero || r?.id?.replace("rub-1961-", "") || "1.0";
+    r?.itemNumero || r?.id?.replace("rub-1961-", "").replace(/-/g, ".") || "1.0";
 
   const getItemLimit20 = (r: BudgetRubric): number =>
     Number(r?.limiteRemanejamento20pct ?? r?.limiteRemanejamento20 ?? getItemApproved(r) * 1.2);
@@ -81,7 +81,9 @@ export const BudgetPlanView: React.FC<BudgetPlanViewProps> = ({
     return matchesStage && matchesSearch;
   });
 
-  // Cálculo de totais considerando apenas itens folha (ou o valor oficial do projeto como teto)
+  // Cáculo de totais. Em vez de somar dinamicamente os valores de schema de rubrica (que contêm sujeiras do mock),
+  // assumimos estritamente o valor aprovado do próprio projeto, caindo pro valor de auditoria do proj. 1961 (835k) em fallback.
+  // Isso impede que a plataforma apresente informações falsas sobre o teto do projeto.
   const leafRubrics = safeRubrics.filter((r) => isLeafRubric(r, safeRubrics));
   const calcAprovado = (leafRubrics.length > 0 ? leafRubrics : safeRubrics).reduce(
     (acc, r) => acc + getItemApproved(r),
@@ -92,9 +94,9 @@ export const BudgetPlanView: React.FC<BudgetPlanViewProps> = ({
     0
   );
 
-  // Se o cálculo somar 0 por inconsistência de schema, adota o valor auditado do projeto
-  const totalAprovado = calcAprovado > 0 ? calcAprovado : (project?.valorAprovado || 835000);
-  const totalExecutado = calcExecutado > 0 ? calcExecutado : (project?.valorExecutado || 897759.15);
+  // Valor do projeto em primeiríssimo lugar (evita totalizadores errados de schema)
+  const totalAprovado = project?.valorAprovado || 835000;
+  const totalExecutado = project?.valorExecutado || 897759.15;
   const saldoGeral = totalAprovado - totalExecutado;
 
   // Form state
