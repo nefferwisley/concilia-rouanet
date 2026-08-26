@@ -78,10 +78,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       : 0;
 
   // Reconciliation Stats
-  const debitTransactions = safeTransactions.filter((t) => t.tipo === "DEBITO" || t.tipo === "TARIFA" || !t.tipo || (t as any).tipoMovimento === "DEBIT");
-  const reconciledTransactions = safeTransactions.filter((t) => (t.tipo === "DEBITO" || t.tipo === "TARIFA" || !t.tipo || (t as any).tipoMovimento === "DEBIT") && t.status === "CONCILIADO" && Boolean(t.matchedDocId || t.idDocumentoFiscalVinculado));
-  const pendingTransactions = safeTransactions.filter((t) => (t.tipo === "DEBITO" || t.tipo === "TARIFA" || !t.tipo || (t as any).tipoMovimento === "DEBIT") && (t.status === "PENDENTE" || t.status === "PARCIAL" || (!t.matchedDocId && !t.idDocumentoFiscalVinculado)));
-  const glosaTransactions = safeTransactions.filter((t) => (t.tipo === "DEBITO" || t.tipo === "TARIFA" || !t.tipo || (t as any).tipoMovimento === "DEBIT") && t.status === "ALERTA_GLOSA");
+  const debitTransactions = safeTransactions.filter(
+    (t) => t.tipo === "DEBITO" || t.tipo === "TARIFA" || !t.tipo || (t as any).tipoMovimento === "DEBIT"
+  );
+  const isTxReconciled = (t: BankTransaction) =>
+    (t.status === "CONCILIADO" || t.statusConciliacao === "Conciliado" || (t as any).status === "Conciliado") &&
+    Boolean(t.matchedDocId || t.idDocumentoFiscalVinculado);
+  const reconciledTransactions = debitTransactions.filter(isTxReconciled);
+  const pendingTransactions = debitTransactions.filter(
+    (t) => !isTxReconciled(t) && t.status !== "ALERTA_GLOSA"
+  );
+  const glosaTransactions = debitTransactions.filter((t) => t.status === "ALERTA_GLOSA");
 
   // Stages breakdown
   const stages: Array<{
@@ -806,10 +813,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </tr>
               ) : (
                 filteredPreviewTransactions.slice(0, 10).map((tx, idx) => {
-                  const rubric = safeRubrics.find((r) => r.id === tx.rubricaId || r.id === tx.matchedRubricId);
+                  const rubric = safeRubrics.find(
+                    (r) => r.id === tx.rubricaId || r.id === tx.matchedRubricId || r.id === tx.idRubricaVinculada
+                  );
                   const isDebit = tx.tipo === "DEBITO" || tx.tipo === "TARIFA" || !tx.tipo || (tx as any).tipoMovimento === "DEBIT";
                   const isCredit = tx.tipo === "CREDITO" || tx.tipo === "RENDIMENTO" || tx.tipo === "RESGATE" || (tx as any).tipoMovimento === "CREDIT";
                   const matchedDoc = safeDocuments.find((d) => d.id === tx.matchedDocId || d.id === tx.idDocumentoFiscalVinculado);
+                  const isReconciled =
+                    tx.status === "CONCILIADO" ||
+                    tx.statusConciliacao === "Conciliado" ||
+                    (tx as any).status === "Conciliado" ||
+                    Boolean(matchedDoc);
 
                   const providerInfo = resolveProviderAndCompany(
                     matchedDoc?.fornecedorNome || tx.favorecido || tx.descricao || "",
@@ -862,8 +876,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <td className="py-2.5 px-3 max-w-xs truncate">
                         {rubric ? (
                           <div>
-                            <div className="text-slate-200 text-[11px] font-medium truncate" title={rubric.nome}>
-                              {rubric.codigo} - {rubric.nome}
+                            <div className="text-slate-200 text-[11px] font-medium truncate" title={rubric.nome || rubric.nomeRubrica}>
+                              {rubric.codigo || rubric.itemNumero || rubric.id} - {rubric.nome || rubric.nomeRubrica}
                             </div>
                             <span className="text-[9px] bg-slate-800 text-slate-400 px-1 py-0.2 rounded font-mono">
                               {rubric.etapa}
@@ -876,7 +890,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <td className="py-2.5 px-3 whitespace-nowrap text-center">
                         <span
                           className={`text-[10px] font-bold px-2 py-0.5 rounded inline-flex items-center gap-1 ${
-                            tx.status === "CONCILIADO"
+                            isReconciled
                               ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                               : tx.status === "ALERTA_GLOSA"
                               ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
@@ -885,9 +899,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                           }`}
                         >
-                          {tx.status === "CONCILIADO" && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
-                          {tx.status === "PENDENTE" && <AlertTriangle className="w-3 h-3 text-amber-400" />}
-                          {tx.status}
+                          {isReconciled && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
+                          {!isReconciled && <AlertTriangle className="w-3 h-3 text-amber-400" />}
+                          {isReconciled ? "CONCILIADO" : tx.status || tx.statusConciliacao || "PENDENTE"}
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-right whitespace-nowrap">
