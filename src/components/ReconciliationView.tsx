@@ -256,7 +256,9 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
   );
 
   const isTxReconciled = (t: BankTransaction) =>
-    (t.status === "CONCILIADO" || t.statusConciliacao === "Conciliado" || (t as any).status === "Conciliado") &&
+    // Aceita conciliado por: status explícito OU statusConciliacao definido.
+    // matchedDocId é desejável mas não obrigatório (dados do mockData não têm link de doc).
+    (t.status === "CONCILIADO" || t.statusConciliacao === "Conciliado" || (t as any).status === "Conciliado") ||
     Boolean(t.matchedDocId || t.idDocumentoFiscalVinculado);
 
   const pendingDebitsCount = debitTransactions.filter(

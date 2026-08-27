@@ -82,7 +82,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     (t) => t.tipo === "DEBITO" || t.tipo === "TARIFA" || !t.tipo || (t as any).tipoMovimento === "DEBIT"
   );
   const isTxReconciled = (t: BankTransaction) =>
-    (t.status === "CONCILIADO" || t.statusConciliacao === "Conciliado" || (t as any).status === "Conciliado") &&
+    // Status "Conciliado" é suficiente; matchedDocId é bônus mas não obrigatório
+    (t.status === "CONCILIADO" || t.statusConciliacao === "Conciliado" || (t as any).status === "Conciliado") ||
     Boolean(t.matchedDocId || t.idDocumentoFiscalVinculado);
   const reconciledTransactions = debitTransactions.filter(isTxReconciled);
   const pendingTransactions = debitTransactions.filter(
