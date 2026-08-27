@@ -332,6 +332,43 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
     setUploadedItems((prev) => prev.filter((item) => item.id !== id));
   };
 
+  // Funcao de Auto-Sync direto do Backend (Desktop Local)
+  const handleAutoSyncLocal = async () => {
+    setStatus("connecting");
+    setStatusMessage("Sincronizando arquivos diretos da pasta 3. 1961 pelo Backend...");
+    setProgressPercent(20);
+    try {
+      const resp = await fetch("/api/local-folder/sync", { method: "POST" });
+      const data = await resp.json();
+      
+      if (!data.success || data.error) {
+        throw new Error(data.error || "Erro desconhecido ao ler a pasta pelo backend.");
+      }
+
+      setProgressPercent(60);
+      
+      const newItems: UploadedFileItem[] = data.filesList.map((f: any, idx: number) => ({
+        id: `local-sync-${Date.now()}-${idx}`,
+        name: f.name,
+        relativePath: f.relativePath,
+        subfolder: "3. 1961 (Sincronização Automática)" + (f.subfolder !== "." && f.subfolder ? " / " + f.subfolder : ""),
+        size: f.size,
+        mimeType: f.mimeType,
+        base64: f.base64,
+        textContent: f.textContent
+      }));
+
+      setUploadedItems((prev) => [...prev, ...newItems]);
+      setProgressPercent(100);
+      setStatus("idle");
+      setStatusMessage("");
+    } catch (err: any) {
+      console.error("Erro no auto sync:", err);
+      setStatus("error");
+      setStatusMessage(err.message || "Falha ao escanear a pasta via Backend.");
+    }
+  };
+
   // Distinct subfolders list for grouping / filtering
   const distinctSubfolders = Array.from(new Set(uploadedItems.map((item) => item.subfolder))).sort();
 
@@ -636,14 +673,14 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
               </p>
 
               {/* 3 Upload Buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mt-4 pt-4 border-t border-slate-800">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 mt-4 pt-4 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => folderInputRef.current?.click()}
                   className="px-3 py-2.5 bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 hover:border-emerald-400 rounded-xl text-xs font-bold text-emerald-300 flex items-center justify-center gap-2 transition"
                 >
                   <FolderTree className="w-4 h-4 text-emerald-400" />
-                  📁 Pasta c/ Subpastas
+                  📁 Pasta
                 </button>
 
                 <button
@@ -652,7 +689,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
                   className="px-3 py-2.5 bg-indigo-950/40 hover:bg-indigo-900/50 border border-indigo-500/40 hover:border-indigo-400 rounded-xl text-xs font-bold text-indigo-300 flex items-center justify-center gap-2 transition"
                 >
                   <FileArchive className="w-4 h-4 text-indigo-400" />
-                  📦 Arquivo .ZIP do Drive
+                  📦 .ZIP
                 </button>
 
                 <button
@@ -661,7 +698,16 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
                   className="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-xl text-xs font-bold text-slate-200 flex items-center justify-center gap-2 transition"
                 >
                   <Files className="w-4 h-4 text-slate-300" />
-                  📄 Selecionar Arquivos
+                  📄 Arquivos
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAutoSyncLocal}
+                  className="px-3 py-2.5 bg-amber-950/40 hover:bg-amber-900/50 border border-amber-500/40 hover:border-amber-400 rounded-xl text-xs font-bold text-amber-300 flex items-center justify-center gap-2 transition"
+                >
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  Sync Disco C:
                 </button>
               </div>
             </div>

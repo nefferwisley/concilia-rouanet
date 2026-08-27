@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT || 3000);
 
 app.use(express.json({ limit: "250mb" }));
 app.use(express.urlencoded({ extended: true, limit: "250mb" }));
@@ -1991,6 +1991,72 @@ app.get("/api/projetos/1961/dossie-conclusivo", (_req, res) => {
     },
   };
   res.json({ success: true, data: dossie });
+});
+import fs from "fs";
+
+// =========================================================================
+// AUTO-SYNC PASTA LOCAL (BACKEND BYPASSING BROWSER UPLOAD)
+// =========================================================================
+app.post("/api/local-folder/sync", async (req, res) => {
+  try {
+    const targetFolder = "C:\\Users\\Dell\\Desktop\\meu_sistema_rouanet\\3. 1961";
+    if (!fs.existsSync(targetFolder)) {
+      return res.status(404).json({ error: "Pasta não encontrada no servidor: " + targetFolder });
+    }
+
+    const filesList: any[] = [];
+    const walkSync = (dir: string) => {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        const filepath = path.join(dir, file);
+        const stat = fs.statSync(filepath);
+        if (stat.isDirectory()) {
+          walkSync(filepath);
+        } else {
+          // Ignore hidden or temp files
+          if (file.startsWith(".") || file.startsWith("~")) continue;
+          
+          let mimeType = "application/octet-stream";
+          const lowerFile = file.toLowerCase();
+          if (lowerFile.endsWith(".pdf")) mimeType = "application/pdf";
+          else if (lowerFile.endsWith(".xlsx")) mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+          else if (lowerFile.endsWith(".csv")) mimeType = "text/csv";
+          else if (lowerFile.endsWith(".xml")) mimeType = "application/xml";
+          else if (lowerFile.endsWith(".png")) mimeType = "image/png";
+          else if (lowerFile.endsWith(".jpg") || lowerFile.endsWith(".jpeg")) mimeType = "image/jpeg";
+
+          let base64 = "";
+          let textContent = "";
+          
+          if (mimeType.includes("pdf") || mimeType.includes("spreadsheet") || mimeType.includes("image")) {
+            const buf = fs.readFileSync(filepath);
+            base64 = buf.toString("base64");
+          } else {
+            textContent = fs.readFileSync(filepath, "utf-8");
+          }
+
+          // Relative path for the frontend
+          const relPath = filepath.replace(targetFolder, "").replace(/^\\/, "");
+
+          filesList.push({
+            name: file,
+            relativePath: relPath,
+            subfolder: path.dirname(relPath).replace(/\\/g, " / "),
+            mimeType,
+            size: stat.size,
+            base64,
+            textContent
+          });
+        }
+      }
+    };
+
+    walkSync(targetFolder);
+    res.json({ success: true, filesList });
+  } catch (error: any) {
+    console.error("Erro na leitura local:", error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Vite Middleware & Static Serving
