@@ -685,6 +685,7 @@ export default function App() {
                   onAddDocument={handleAddDocument}
                   onUpdateDocument={handleUpdateDocument}
                   onDeleteDocument={handleDeleteDocument}
+                  onUpdateTransactions={setTransactions}
                   onSyncAll={handleSelfHealAndSyncAll}
                 />
               )}

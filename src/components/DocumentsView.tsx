@@ -37,6 +37,7 @@ interface DocumentsViewProps {
   onAddDocument: (doc: FiscalDocument) => void;
   onUpdateDocument: (doc: FiscalDocument) => void;
   onDeleteDocument: (docId: string) => void;
+  onUpdateTransactions?: (action: BankTransaction[] | ((prev: BankTransaction[]) => BankTransaction[])) => void;
   onSyncAll?: () => void;
 }
 
@@ -98,6 +99,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
   onAddDocument,
   onUpdateDocument,
   onDeleteDocument,
+  onUpdateTransactions,
   onSyncAll,
 }) => {
   const safeDocuments = Array.isArray(documents) ? documents : [];
@@ -138,6 +140,55 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
     statusComprovacao: "Completo",
     validacaoSefaz: "PENDENTE",
   });
+
+  // ─── Auto-Link: vincula documento ao lançamento bancário correspondente ───
+  // Após OCR ou cadastro manual, tenta casar o documento com um débito do extrato
+  // usando valor líquido (tolerância ±R$0,01) e data (tolerância ±5 dias).
+  const autoLinkDocToTransaction = (newDoc: FiscalDocument): { linked: boolean; txDesc?: string } => {
+    if (!onUpdateTransactions || safeTransactions.length === 0) return { linked: false };
+
+    const docValor = Number(newDoc.valorLiquido || newDoc.valorBruto || 0);
+    const docDate = newDoc.dataEmissao ? new Date(newDoc.dataEmissao) : null;
+    if (!docValor || !docDate) return { linked: false };
+
+    // Encontrar lançamento que ainda não está conciliado, com valor próximo e data próxima
+    const match = safeTransactions.find((tx) => {
+      if (!tx || tx.tipo === "CREDITO" || tx.tipo === "RENDIMENTO" || tx.tipo === "RESGATE") return false;
+      // Já conciliado com outro doc — pular
+      if (tx.matchedDocId && tx.matchedDocId !== newDoc.id) return false;
+      if (tx.idDocumentoFiscalVinculado && tx.idDocumentoFiscalVinculado !== newDoc.id) return false;
+
+      const txValor = Number(tx.valor || 0);
+      const txDate = tx.dataTransacao ? new Date(tx.dataTransacao) : null;
+      if (!txDate) return false;
+
+      const valorOk = Math.abs(txValor - docValor) <= 0.02;
+      const diffDias = Math.abs((txDate.getTime() - docDate.getTime()) / (1000 * 60 * 60 * 24));
+      const dataOk = diffDias <= 5;
+
+      return valorOk && dataOk;
+    });
+
+    if (!match) return { linked: false };
+
+    // Aplicar vínculo
+    onUpdateTransactions((prev) =>
+      prev.map((tx) =>
+        tx.id === match.id
+          ? {
+              ...tx,
+              matchedDocId: newDoc.id,
+              idDocumentoFiscalVinculado: newDoc.id,
+              status: "CONCILIADO",
+              statusConciliacao: "Conciliado",
+            }
+          : tx
+      )
+    );
+
+    return { linked: true, txDesc: match.descricaoOriginalExtrato || match.favorecido || match.id };
+  };
+
 
   const filteredDocs = safeDocuments.filter((d) => {
     if (!d) return false;
@@ -279,6 +330,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
   // Commit extracted queued items directly into project documents
   const handleApplyExtractedToDocuments = () => {
     let addedCount = 0;
+    let linkedCount = 0;
     queuedFiles.forEach((item) => {
       if (item.status === "success" && item.extractedData) {
         const res = item.extractedData;
@@ -317,15 +369,23 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
 
         onAddDocument(newDoc);
         addedCount++;
+
+        // ✅ Auto-Link: vincular ao lançamento bancário correspondente
+        const linkResult = autoLinkDocToTransaction(newDoc);
+        if (linkResult.linked) linkedCount++;
       }
     });
 
     if (addedCount > 0) {
       setQueuedFiles([]);
       setShowOcrDrawer(false);
-      alert(`Parabéns! ${addedCount} documento(s) fiscal(is) foram cadastrados com sucesso.`);
+      const linkMsg = linkedCount > 0
+        ? `\n🔗 ${linkedCount} lançamento(s) bancário(s) vinculado(s) e marcado(s) como ✅ CONCILIADO automaticamente!`
+        : "\n⚠️ Nenhum lançamento bancário correspondente foi encontrado. Verifique o extrato para vincular manualmente.";
+      alert(`✅ ${addedCount} documento(s) fiscal(is) cadastrado(s) com sucesso.${linkMsg}`);
     }
   };
+
 
   // Run AI OCR on Text Input
   const handleExtractFromText = async () => {
@@ -412,9 +472,15 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
         confiabilidadeIa: formState.confiabilidadeIa,
       };
       onAddDocument(newDoc);
+      // ✅ Auto-Link: tentar vincular ao extrato bancário
+      const linkResult = autoLinkDocToTransaction(newDoc);
+      if (linkResult.linked) {
+        alert(`✅ Documento cadastrado e vinculado automaticamente ao lançamento bancário:\n"${linkResult.txDesc}"\n\nStatus atualizado para ✅ CONCILIADO.`);
+      }
       setIsAddModalOpen(false);
     }
   };
+
 
   return (
     <div className="space-y-6">
