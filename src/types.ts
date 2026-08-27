@@ -347,6 +347,9 @@ export interface TripartiteGedAttachment {
   tamanhoFormatado: string;
   status: "VALIDADO" | "PENDENTE" | "RESSALVA";
   urlOuPrevia?: string;
+  documentId?: string;
+  fileId?: string;
+  detectedType?: string;
 }
 
 export interface TripartiteEntry {

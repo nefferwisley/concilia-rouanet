@@ -3,7 +3,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+import os
 
 from backend.config import settings
 from backend.database import adquirir_conn, close_pool, get_pool, reiniciar_pool
@@ -24,6 +26,7 @@ from backend.routes import (
     rubricas,
     salic,
     websocket,
+    real_imports,
 )
 # NOTA: backend/routes/conciliacao.py foi restaurado do commit c274379 — o
 # fluxo "Conciliar Pasta 1961" (001→006, POST /api/v1/conciliar, polling,
@@ -110,6 +113,7 @@ app.add_middleware(
 
 app.include_router(projetos.router)
 app.include_router(importacoes.router)
+app.include_router(real_imports.router)
 app.include_router(conciliacao.router)
 app.include_router(relatorios.router)
 app.include_router(websocket.router)
@@ -167,3 +171,14 @@ async def health_db():
             content={"status": "erro", "db": "inacessível", "detalhe": str(e)},
         )
     return {"status": "ok", "db": "reachable"}
+
+# Servir SPA React em producao
+if os.path.exists('dist'):
+    app.mount('/', StaticFiles(directory='dist', html=True), name='spa')
+
+    @app.exception_handler(404)
+    async def fallback_to_index(request: Request, exc: HTTPException):
+        if request.url.path.startswith('/api/'):
+            return JSONResponse(status_code=404, content={'detail': 'Not Found'})
+        return FileResponse('dist/index.html')
+

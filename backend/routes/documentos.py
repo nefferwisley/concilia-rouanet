@@ -929,3 +929,59 @@ async def listar_documentos_projeto(projeto_id: str, dep=Depends(get_conn)):
         }
         for r in rows
     ]
+f r o m   f a s t a p i   i m p o r t   A P I R o u t e r ,   D e p e n d s ,   H T T P E x c e p t i o n  
+ f r o m   b a c k e n d . d a t a b a s e   i m p o r t   g e t _ c o n n  
+ f r o m   b a c k e n d . s e r v i c e s . s t o r a g e _ s e r v i c e   i m p o r t   g e t _ s u p a b a s e _ c l i e n t  
+ f r o m   p y d a n t i c   i m p o r t   B a s e M o d e l  
+  
+ c l a s s   S i g n e d U r l R e s p o n s e ( B a s e M o d e l ) :  
+         u r l :   s t r  
+  
+ d e f   a d d _ s i g n e d _ u r l _ r o u t e ( r o u t e r ) :  
+         @ r o u t e r . g e t ( " / { d o c u m e n t _ i d } / s i g n e d - u r l " ,   r e s p o n s e _ m o d e l = S i g n e d U r l R e s p o n s e )  
+         a s y n c   d e f   g e t _ s i g n e d _ u r l ( d o c u m e n t _ i d :   s t r ,   d e p = D e p e n d s ( g e t _ c o n n ) ) :  
+                 c o n n ,   u s e r _ i d   =   d e p  
+                 r o w   =   a w a i t   c o n n . f e t c h r o w (  
+                         " S E L E C T   s t o r a g e _ k e y   F R O M   d o c u m e n t o s _ p r o j e t o   W H E R E   i d   =   " ,   d o c u m e n t _ i d  
+                 )  
+                 i f   n o t   r o w :  
+                         #   M a y b e   i t ' s   a   f i l e   f r o m   i m p o r t _ f i l e s  
+                         r o w   =   a w a i t   c o n n . f e t c h r o w (  
+                                 " S E L E C T   s t o r a g e _ k e y   F R O M   i m p o r t _ f i l e s   W H E R E   i d   =   " ,   d o c u m e n t _ i d  
+                         )  
+                         i f   n o t   r o w :  
+                                 r a i s e   H T T P E x c e p t i o n ( 4 0 4 ,   " D o c u m e n t o   n a o   e n c o n t r a d o   o u   s e m   p e r m i s s a o . " )  
+                  
+                 s t o r a g e _ k e y   =   r o w [ " s t o r a g e _ k e y " ]  
+                  
+                 c l i e n t   =   g e t _ s u p a b a s e _ c l i e n t ( )  
+                 i f   c l i e n t :  
+                         r e s   =   c l i e n t . s t o r a g e . f r o m _ ( " d o c u m e n t o s " ) . c r e a t e _ s i g n e d _ u r l ( s t o r a g e _ k e y ,   9 0 0 )  
+                         i f   " e r r o r "   i n   r e s :  
+                                 r a i s e   H T T P E x c e p t i o n ( 5 0 0 ,   " E r r o   a o   g e r a r   U R L   a s s i n a d a " )  
+                         r e t u r n   { " u r l " :   r e s [ " s i g n e d U R L " ] }  
+                 e l s e :  
+                         r e t u r n   { " u r l " :   f " / a p i / v 1 / d o c u m e n t o s / { d o c u m e n t _ i d } / c o n t e u d o " }  
+  
+         @ r o u t e r . g e t ( " / { d o c u m e n t _ i d } / c o n t e u d o " )  
+         a s y n c   d e f   g e t _ d o c u m e n t o _ c o n t e u d o ( d o c u m e n t _ i d :   s t r ,   d e p = D e p e n d s ( g e t _ c o n n ) ) :  
+                 f r o m   f a s t a p i . r e s p o n s e s   i m p o r t   R e s p o n s e  
+                 f r o m   b a c k e n d . s e r v i c e s . s t o r a g e _ s e r v i c e   i m p o r t   b a i x a r _ a r q u i v o  
+                 c o n n ,   u s e r _ i d   =   d e p  
+                 r o w   =   a w a i t   c o n n . f e t c h r o w (  
+                         " S E L E C T   s t o r a g e _ k e y ,   m i m e _ t y p e   a s   b r o w s e r _ m i m e   F R O M   d o c u m e n t o s _ p r o j e t o   W H E R E   i d   =   " ,   d o c u m e n t _ i d  
+                 )  
+                 i f   n o t   r o w :  
+                         r o w   =   a w a i t   c o n n . f e t c h r o w (  
+                                 " S E L E C T   s t o r a g e _ k e y ,   b r o w s e r _ m i m e   F R O M   i m p o r t _ f i l e s   W H E R E   i d   =   " ,   d o c u m e n t _ i d  
+                         )  
+                         i f   n o t   r o w :  
+                                 r a i s e   H T T P E x c e p t i o n ( 4 0 4 ,   " D o c u m e n t o   n a o   e n c o n t r a d o " )  
+                                  
+                 c o n t e u d o   =   b a i x a r _ a r q u i v o ( r o w [ " s t o r a g e _ k e y " ] )  
+                 i f   n o t   c o n t e u d o :  
+                         r a i s e   H T T P E x c e p t i o n ( 4 0 4 ,   " C o n t e u d o   n a o   e n c o n t r a d o   n o   d i s c o " )  
+                          
+                 r e t u r n   R e s p o n s e ( c o n t e n t = c o n t e u d o ,   m e d i a _ t y p e = r o w . g e t ( " b r o w s e r _ m i m e " ,   " a p p l i c a t i o n / o c t e t - s t r e a m " ) )  
+  
+ add_signed_url_route(router)

@@ -1,15 +1,16 @@
 services:
   - type: web
-    name: rouanet-concilia-api
+    name: concilia-rouanet
     env: python
-    buildCommand: pip install -r backend/requirements.txt
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
-    plan: free
-    healthCheckPath: /health
+    buildCommand: "npm install && npm run build && pip install -r requirements.txt"
+    startCommand: "python -m uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: DATABASE_URL
-        sync: false # Cole a Connection String do Supabase aqui
-      - key: SUPABASE_JWT_SECRET
-        sync: false # Cole o JWT Secret do Supabase aqui
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
+

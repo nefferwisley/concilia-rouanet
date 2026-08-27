@@ -321,8 +321,8 @@ export function resolveProviderAndCompany(
 
   return {
     personName: clean || "Favorecido",
-    companyName: defaultProponente,
-    cnpjCpf: rawCnpjCpf || "00.000.000/0000-00",
-    fullDisplay: clean ? `${clean} • ${defaultProponente}` : defaultProponente,
+    companyName: "Profissional Autônomo / PJ",
+    cnpjCpf: rawCnpjCpf || "000.000.000-00",
+    fullDisplay: clean ? `${clean} • Profissional Autônomo / PJ` : "Favorecido Não Identificado",
   };
 }

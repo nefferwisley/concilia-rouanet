@@ -44,9 +44,13 @@ import {
   X,
   Cpu,
   Zap,
+  FileText,
+  MessageSquareWarning,
+  Bot
 } from "lucide-react";
 import { runRealtimeTripartiteReconciliation } from "../utils/shadowLedger";
 import { LangChainRagSelfCorrectionModal } from "./LangChainRagSelfCorrectionModal";
+import { AttachmentThumbnail } from "./AttachmentThumbnail";
 
 interface TripartiteConciliationViewProps {
   project: PronacProject;
@@ -1343,35 +1347,40 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
               </h4>
 
               {viewingEntryGed.gedArquivos && viewingEntryGed.gedArquivos.length > 0 ? (
-                <div className="space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {viewingEntryGed.gedArquivos.map((file, idx) => (
                     <div
                       key={idx}
-                      className="flex items-center justify-between p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs"
+                      className="flex flex-col bg-slate-950 rounded-xl border border-slate-800 text-xs overflow-hidden"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-slate-900 rounded-lg text-emerald-400">
+                      <div className="p-2 border-b border-slate-800 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
                           {file.tipo === "NOTA_FISCAL" || file.tipo === "BPE_PASSAGEM" ? (
-                            <Receipt className="w-4 h-4" />
+                            <Receipt className="w-4 h-4 text-emerald-400" />
                           ) : file.tipo === "COMPROVANTE_BANCARIO" ? (
-                            <CheckCircle2 className="w-4 h-4" />
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                           ) : file.tipo === "TERMO_DIARIAS" ? (
-                            <Utensils className="w-4 h-4" />
+                            <Utensils className="w-4 h-4 text-emerald-400" />
                           ) : (
-                            <FileCheck className="w-4 h-4" />
+                            <FileCheck className="w-4 h-4 text-emerald-400" />
                           )}
+                          <span className="font-semibold text-slate-200 truncate" title={file.nomeArquivo}>
+                            {file.nomeArquivo}
+                          </span>
                         </div>
-                        <div>
-                          <div className="font-semibold text-slate-200">{file.nomeArquivo}</div>
-                          <div className="text-[10px] text-slate-500">
-                            {file.tipo} • {file.tamanhoFormatado}
-                          </div>
-                        </div>
+                        <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                          {file.status}
+                        </span>
                       </div>
-
-                      <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] px-2 py-0.5 rounded-full font-bold">
-                        {file.status}
-                      </span>
+                      <div className="p-2">
+                        <AttachmentThumbnail 
+                           documentId={file.documentId} 
+                           fileId={file.fileId} 
+                           detectedType={file.detectedType} 
+                           fileName={file.nomeArquivo} 
+                           fallbackUrl={file.urlOuPrevia}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>

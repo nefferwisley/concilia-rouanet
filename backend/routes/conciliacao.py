@@ -383,7 +383,7 @@ async def listar_extrato_pendentes(projeto_id: str, dep=Depends(get_conn)):
     )
     transacoes = await conn.fetch(
         """
-        select t.id, t.fornecedor, t.razao_social, t.prestador, t.documento,
+        select t.id, t.fornecedor, t.razao_social, t.prestador, t.documento as fornecedor_doc,
                t.data_pagamento, t.valor_bruto, t.status,
                (select r.codigo from despesas d
                  join rubricas r on r.id = d.rubrica_id
@@ -396,11 +396,11 @@ async def listar_extrato_pendentes(projeto_id: str, dep=Depends(get_conn)):
                (
                    select id from documentos_transacao doc
                    where doc.transacao_id = t.id order by created_at desc limit 1
-               ) as documento_id,
+               ) as old_documento_id,
                (
                    select arquivo_ref from documentos_transacao doc
                    where doc.transacao_id = t.id order by created_at desc limit 1
-               ) as documento
+               ) as old_documento
         from transacoes t
         where t.projeto_id = $1
         order by t.data_pagamento nulls last, t.created_at, t.id
@@ -408,23 +408,67 @@ async def listar_extrato_pendentes(projeto_id: str, dep=Depends(get_conn)):
         projeto_id,
     )
 
-    transacoes_serializadas = [
-        {
-            "id": str(t["id"]),
+    # Buscar links de evidencia
+    evidence_links = await conn.fetch(
+        """
+        select el.lancamento_id, el.document_id, el.file_id, el.evidence_type, el.match_type, el.revoked_at,
+               coalesce(f.original_name, dp.nome_arquivo) as original_name,
+               coalesce(f.size_bytes, dp.tamanho_bytes) as size_bytes,
+               f.detected_type, f.status as file_status, dp.status as doc_status
+        from evidence_links el
+        left join import_files f on f.id = el.file_id
+        left join documentos_projeto dp on dp.id = el.document_id
+        where el.lancamento_id = any($1::uuid[])
+        order by el.created_at desc
+        """,
+        [t["id"] for t in transacoes] if transacoes else []
+    )
+    
+    ev_map = {}
+    for ev in evidence_links:
+        lid = str(ev["lancamento_id"])
+        if lid not in ev_map:
+            ev_map[lid] = []
+        
+        attachment = {
+            "document_id": str(ev["document_id"]) if ev["document_id"] else None,
+            "file_id": str(ev["file_id"]) if ev["file_id"] else None,
+            "evidence_type": ev["evidence_type"],
+            "match_type": ev["match_type"],
+            "original_name": ev["original_name"],
+            "size_bytes": ev["size_bytes"],
+            "detected_type": ev["detected_type"],
+            "status": ev["file_status"] or ev["doc_status"],
+            "revoked_at": ev["revoked_at"].isoformat() if ev["revoked_at"] else None
+        }
+        ev_map[lid].append(attachment)
+
+    transacoes_serializadas = []
+    for t in transacoes:
+        tid = str(t["id"])
+        attachments = ev_map.get(tid, [])
+        active_attachments = [a for a in attachments if not a.get("revoked_at")]
+        primary = active_attachments[0] if active_attachments else None
+        if primary:
+            # Drop revoked_at and match_type for primary_attachment
+            primary = {k: v for k, v in primary.items() if k not in ["revoked_at", "match_type"]}
+        
+        transacoes_serializadas.append({
+            "id": tid,
             "fornecedor": t["fornecedor"],
             "razao_social": t["razao_social"],
             "prestador": t["prestador"],
-            "documento": t["documento"],
+            "documento": t["fornecedor_doc"], # changed key to match original JSON payload (was aliased differently earlier, wait, it was "documento")
             "data_pagamento": t["data_pagamento"].isoformat() if t["data_pagamento"] else None,
             "valor_bruto": float(t["valor_bruto"]) if t["valor_bruto"] is not None else None,
             "status": t["status"],
             "rubrica_codigo": t["rubrica_codigo"],
             "rubrica_descricao": t["rubrica_descricao"],
-            "documento_id": str(t["documento_id"]) if t["documento_id"] else None,
-            "documento": t["documento"],
-        }
-        for t in transacoes
-    ]
+            "documento_id": primary["document_id"] if primary and primary["document_id"] else (str(t["old_documento_id"]) if t["old_documento_id"] else None),
+            "primary_attachment": primary,
+            "attachments": attachments,
+            "old_documento": t["old_documento"],
+        })
 
     movimentos_serializados = []
     for m in movimentos:
