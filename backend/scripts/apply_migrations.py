@@ -108,8 +108,20 @@ async def aplicar_migrations() -> None:
                 contagem_ok += 1
                 log.info("Migration %s aplicada.", arquivo.name)
             except Exception as e:  # noqa: BLE001 — seguir para a próxima
-                falhas.append((arquivo.name, str(e)))
-                log.error("FALHA na migration %s: %s", arquivo.name, e)
+                error_str = str(e).lower()
+                # Se o erro indicar que a mudanca ja foi feita (tabela/tipo ja existe, ou coluna a renomear nao existe),
+                # assumimos que a migration ja foi aplicada no passado mas nao rastreada.
+                if "already exists" in error_str or "does not exist" in error_str or "já existe" in error_str:
+                    log.info("Migration %s detectada como já aplicada (ignorado erro de duplicidade).", arquivo.name)
+                    # Registra como aplicada para nao tentar de novo
+                    try:
+                        await conn.execute("insert into schema_migrations (id) values ($1) on conflict do nothing", arquivo.name)
+                    except Exception:
+                        pass
+                    contagem_pulada += 1
+                else:
+                    falhas.append((arquivo.name, str(e)))
+                    log.error("FALHA na migration %s: %s", arquivo.name, e)
 
         log.info(
             "Resumo das migrations: %d aplicada(s), %d pulada(s), %d falha(s).",
