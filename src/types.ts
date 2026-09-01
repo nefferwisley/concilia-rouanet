@@ -151,6 +151,7 @@ export interface BankTransaction {
 
 export type FiscalDocType =
   | "NF-e (Produto)"
+  | "NF-e (Mercantil)"
   | "NFS-e (Serviço)"
   | "Bilhete de Passagem Aérea (BP-e / E-Ticket)"
   | "Recibo de Diária / Verba de Alimentação"
@@ -191,7 +192,7 @@ export interface FiscalDocument {
   confiabilidadeIa?: number;
   divergenciasDetectadas?: string[];
   justificativaSalic?: string;
-  validacaoSefaz?: "PENDENTE" | "VALIDO" | "INVALIDO";
+  validacaoSefaz?: "PENDENTE" | "VALIDO" | "INVALIDO" | "INDISPONIVEL";
   splits?: Array<{rubricId: string, value: number, justification: string}>;
   [key: string]: any;
 }
