@@ -14,6 +14,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, Response
@@ -539,3 +540,117 @@ async def listar_regras_aprendidas(projeto_id: str, dep=Depends(get_conn)):
     regras = await run_in_threadpool(carregar_regras)
     total = sum(len(v) for v in regras.values())
     return {"projeto_id": projeto_id, "total_regras": total, "regras": regras}
+
+
+@router.post("/projetos/{projeto_id}/decisoes-revisao")
+async def registrar_decisao_revisao(
+    projeto_id: str,
+    lancamento_id: str = Form(...),
+    action: str = Form(...),
+    file_id: Optional[str] = Form(None),
+    document_id: Optional[str] = Form(None),
+    reason: Optional[str] = Form(None),
+    idempotency_key: Optional[str] = Form(None),
+    dep=Depends(get_conn),
+):
+    """
+    Aplica uma decisão humana estruturada e imutável sobre o vínculo de um documento.
+    Ações: APPROVE, REJECT, REPLACE, MANUAL_LINK.
+    """
+    conn, user_id = dep
+    from backend.services.review_service import apply_review_decision
+
+    try:
+        resultado = await apply_review_decision(
+            conn=conn,
+            user_id=user_id,
+            projeto_id=projeto_id,
+            lancamento_id=lancamento_id,
+            action=action,
+            file_id=file_id,
+            document_id=document_id,
+            reason=reason,
+            idempotency_key=idempotency_key,
+        )
+        return resultado
+    except ValueError as ve:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(ve))
+    except Exception as e:
+        logger.exception("Erro ao aplicar decisão de revisão: %s", e)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Erro interno ao aplicar decisão: {e}")
+
+
+@router.get("/projetos/{projeto_id}/trilha-auditoria")
+async def listar_trilha_auditoria(
+    projeto_id: str,
+    limit: int = 50,
+    dep=Depends(get_conn),
+):
+    """
+    Retorna a trilha de auditoria imutável do projeto com eventos de decisão e alterações.
+    """
+    conn, _ = dep
+    events = await conn.fetch(
+        """
+        SELECT id, entity_type, entity_id, action, before_state, after_state, reason, actor_id, created_at
+        FROM audit_events
+        WHERE projeto_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+        """,
+        projeto_id, limit
+    )
+    return [
+        {
+            "id": str(e["id"]),
+            "entity_type": e["entity_type"],
+            "entity_id": str(e["entity_id"]),
+            "action": e["action"],
+            "before_state": e["before_state"],
+            "after_state": e["after_state"],
+            "reason": e["reason"],
+            "actor_id": str(e["actor_id"]) if e["actor_id"] else None,
+            "created_at": e["created_at"].isoformat(),
+        }
+        for e in events
+    ]
+
+
+@router.get("/documentos/{documento_id}/visualizacao")
+async def obter_visualizacao_documento(documento_id: str, dep=Depends(get_conn)):
+    """
+    Gera uma URL assinada e segura para visualização de comprovante/documento.
+    """
+    conn, _ = dep
+    # Tenta achar em documentos_transacao ou documentos_projeto ou import_files
+    row = await conn.fetchrow(
+        """
+        SELECT d.arquivo_ref, t.projeto_id, d.confianca_ocr
+        FROM documentos_transacao d
+        JOIN transacoes t ON t.id = d.transacao_id
+        WHERE d.id = $1
+        """,
+        documento_id
+    )
+    if not row:
+        row = await conn.fetchrow(
+            "SELECT storage_key as arquivo_ref, projeto_id, 1.0 as confianca_ocr FROM import_files WHERE id = $1",
+            documento_id
+        )
+    if not row:
+        row = await conn.fetchrow(
+            "SELECT arquivo_ref, projeto_id, 1.0 as confianca_ocr FROM documentos_projeto WHERE id = $1",
+            documento_id
+        )
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Documento não encontrado.")
+
+    arquivo_ref = row["arquivo_ref"]
+    signed_url = storage_service.gerar_url_assinada(arquivo_ref) or f"/api/v1/documentos/{documento_id}/arquivo"
+
+    return {
+        "documento_id": documento_id,
+        "arquivo_ref": arquivo_ref,
+        "signed_url": signed_url,
+        "confianca_ocr": row.get("confianca_ocr"),
+    }
