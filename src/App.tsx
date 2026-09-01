@@ -611,9 +611,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950">
-      <div className="bg-amber-400 px-4 py-1 text-center text-xs font-semibold text-slate-950">
-        Modo demonstração: os dados abaixo são locais e não representam a operação online.
-      </div>
       {/* Top Accessibility Toolbar (eMAG / WCAG 2.1) */}
       <AccessibilityToolbar onNavigateTab={(tab) => setActiveTab(tab as any)} />
 
