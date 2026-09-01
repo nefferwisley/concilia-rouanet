@@ -49,6 +49,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001 — não derrubar o app se o banco estiver fora
         log.warning("Migrations não puderam ser aplicadas no startup: %s", e)
 
+    # Recupera jobs órfãos que possam ter ficado em processamento em caso de reinicialização prévia
+    try:
+        from backend.services.batch_worker_service import reclaim_orphaned_jobs
+        await reclaim_orphaned_jobs()
+    except Exception as e:
+        log.warning("Não foi possível recuperar jobs órfãos no startup: %s", e)
+
+
     # Inicia o monitoramento em tempo real da pasta de uploads.
     # O watcher detecta arquivos adicionados/removidos e notifica os clientes
     # via WebSocket (/ws/projeto/{id}/sincronia) sem precisar de F5.

@@ -17,6 +17,7 @@ import base64
 import json
 import logging
 import os
+import re
 import time
 
 import google.generativeai as genai
@@ -231,20 +232,100 @@ def extract_with_ollama(
     return dados
 
 
+def extract_native_pdf_text(bytes_data: bytes, max_pages: int = 10) -> dict | None:
+    """
+    Tenta extrair texto nativo de um PDF digital sem chamar IA.
+    Se o PDF contiver texto selecionável rico com marcadores fiscais (CNPJ/CPF,
+    Data, Valor), devolve o dicionário estruturado com _fonte_extracao='native_pdf_text'.
+    Se for PDF digitalizado (imagem escaneada) ou com pouco texto, retorna None.
+    """
+    try:
+        import pymupdf
+        doc = pymupdf.open(stream=bytes_data, filetype="pdf")
+        if doc.page_count == 0:
+            return None
+        
+        texto_completo = []
+        for p in range(min(doc.page_count, max_pages)):
+            texto_completo.append(doc[p].get_text())
+        
+        full_text = "\n".join(texto_completo).strip()
+        if len(full_text) < 50:
+            return None
+        
+        # Procura CNPJ ou CPF
+        cnpj_match = re.search(r"\b(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})\b", full_text)
+        cpf_match = re.search(r"\b(\d{3}\.\d{3}\.\d{3}-\d{2})\b", full_text)
+        cnpj_cpf = cnpj_match.group(1) if cnpj_match else (cpf_match.group(1) if cpf_match else None)
+        
+        # Procura Data
+        data_match = re.search(r"\b(\d{2})[/.-](\d{2})[/.-](\d{4})\b", full_text)
+        data_emissao = None
+        if data_match:
+            d, m, y = data_match.groups()
+            data_emissao = f"{y}-{m}-{d}"
+            
+        # Procura Valor Total
+        valor_match = re.search(r"(?:valor\s*total|total\s*da\s*nota|valor\s*l[ií]quido|valor\s*pago|total\s*a\s*pagar|valor)[^\d\n\r]*R?\$?\s*([\d\.]+(?:,\d{2}))", full_text, re.IGNORECASE)
+        valor_total = None
+        if valor_match:
+            try:
+                v_str = valor_match.group(1).replace(".", "").replace(",", ".")
+                valor_total = float(v_str)
+            except ValueError:
+                pass
+                
+        # Procura Número da Nota
+        num_match = re.search(r"(?:n[uú]mero|n[oº]|nf-?e|nfs-?e|recibo)[^\d\n\r]*(\d{1,9})", full_text, re.IGNORECASE)
+        numero_doc = num_match.group(1) if num_match else None
+
+        if cnpj_cpf and (valor_total is not None or data_emissao):
+            dados = {
+                "CNPJ_CPF": cnpj_cpf,
+                "Razao_Social": None,
+                "Data_Emissao": data_emissao,
+                "Valor_Total": valor_total,
+                "Subtotal": valor_total,
+                "Impostos_Retencoes": 0.0,
+                "Descricao": full_text[:150],
+                "Chave_Acesso_NFe_44_digitos": None,
+                "Numero_Nota_Recibo": numero_doc,
+                "Forma_Pagamento": "Transferência / Boleto / PIX",
+                "_fonte_extracao": "native_pdf_text"
+            }
+            confianca, motivos = _calcular_confianca(dados)
+            dados["confianca_ocr"] = confianca
+            dados["_motivos_confianca"] = motivos
+            if confianca >= 0.70:
+                log.info("Extração de texto nativo do PDF bem-sucedida (confiança: %.2f)", confianca)
+                return dados
+    except Exception as e:
+        log.debug("Extração de texto nativo do PDF falhou (%s). Prosseguindo para OCR via IA.", e)
+        
+    return None
+
+
 def extract_documento(
     conteudo: bytes,
     mime_type: str,
     api_key: str | None = None,
     backend: str | None = None,
     modelo_ollama: str = "llava",
+    tentar_texto_nativo: bool = True,
 ) -> dict | None:
-    """Dispatcher P4: escolhe o backend de extração.
+    """Dispatcher P4: escolhe o melhor método de extração.
 
-    backend explícito ("gemini" | "ollama") vence; sem ele:
+    1. Tenta extrair texto nativo digital (sem custo de IA).
+    2. Se não conseguir, usa backend explícito ("gemini" | "ollama"):
         - OCR_BACKEND no ambiente (ou settings.ocr_backend) decide;
         - senão: Gemini se houver api_key, Ollama caso contrário.
     Retorna None se nenhum backend estiver disponível na prática.
     """
+    if tentar_texto_nativo and (mime_type == "application/pdf" or str(conteudo[:4]) == "%PDF"):
+        native_data = extract_native_pdf_text(conteudo)
+        if native_data is not None and native_data.get("confianca_ocr", 0) >= 0.85:
+            return native_data
+
     if not backend:
         backend = os.environ.get("OCR_BACKEND", "gemini" if api_key else "ollama")
     if backend == "ollama":
@@ -252,3 +333,4 @@ def extract_documento(
     if api_key:
         return extract_with_gemini(conteudo, mime_type, api_key)
     return None
+

@@ -50,7 +50,14 @@ async def demo_login():
     Usado pelo botão 'Entrar com Token de Demonstração' da tela de login, para
     a avaliadora entrar sem depender do Supabase remoto estando ativo.
     """
+    if settings.app_env != "dev":
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Login de demonstração desabilitado em ambiente de produção."},
+        )
+
     acquired_pool, conn = await adquirir_conn()
+
     try:
         # Conexão como dono (role 'rouanet') ignora RLS — é o único caminho de
         # descobrir o membro demo ANTES de qualquer sessão existir.

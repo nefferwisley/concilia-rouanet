@@ -96,12 +96,15 @@ def upload_arquivo(caminho_logico: str, conteudo: bytes) -> str:
             logger.error("Falha ao subir arquivo pro Supabase Storage (documentos/%s): %s", caminho_clean, e)
             raise e
     else:
+        if settings.app_env == "production":
+            raise RuntimeError("Em ambiente de produção, Supabase Storage é obrigatório para persistência de arquivos.")
         # Fallback local para desenvolvimento/testes
         local_path = UPLOAD_DIR / caminho_clean
         local_path.parent.mkdir(parents=True, exist_ok=True)
         local_path.write_bytes(conteudo)
         logger.info("Supabase não configurado. Gravado em disco local (fallback): %s", local_path)
         return caminho_clean
+
 
 def baixar_arquivo(caminho_logico: str) -> bytes | None:
     """
@@ -128,3 +131,24 @@ def baixar_arquivo(caminho_logico: str) -> bytes | None:
         if local_abs.is_file():
             return local_abs.read_bytes()
         return None
+
+
+def gerar_url_assinada(caminho_logico: str, expires_in: int = 3600) -> str | None:
+    """
+    Gera uma URL assinada temporária para visualização/download seguro de comprovantes
+    no bucket privado do Supabase Storage.
+    """
+    client = get_supabase_client()
+    caminho_clean = sanitizar_chave(caminho_logico)
+
+    if client:
+        try:
+            res = client.storage.from_("documentos").create_signed_url(caminho_clean, expires_in)
+            if isinstance(res, dict):
+                return res.get("signedURL") or res.get("signedUrl")
+            return getattr(res, "signed_url", None) or str(res)
+        except Exception as e:
+            logger.warning("Falha ao gerar URL assinada para %s: %s", caminho_clean, e)
+            return None
+    return None
+
