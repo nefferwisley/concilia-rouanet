@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Navbar } from "./components/Navbar";
 import { Sidebar, ActiveTab } from "./components/Sidebar";
 import { DashboardView } from "./components/DashboardView";
@@ -15,6 +15,7 @@ import { DriveFolderImportModal } from "./components/DriveFolderImportModal";
 import { LangChainRagSelfCorrectionModal } from "./components/LangChainRagSelfCorrectionModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AccessibilityToolbar } from "./components/AccessibilityToolbar";
+import { OnlineSessionBoundary } from "./components/online/OnlineSessionBoundary";
 import { FinancialReviewWorkflowView } from "./components/FinancialReviewWorkflowView";
 import { SponsorshipManagerView } from "./components/SponsorshipManagerView";
 import { ContinuousRiskDashboardView } from "./components/ContinuousRiskDashboardView";
@@ -37,6 +38,9 @@ import {
   UserRole,
 } from "./types";
 import { auditComplianceWithAi } from "./services/geminiService";
+import { apiClient } from "./services/apiClient";
+import { loadOnlineSession } from "./services/onlineSession";
+import type { OnlineSessionState } from "./contracts/online";
 import { exportSalicExcel, exportSalicPdf } from "./utils/exportUtils";
 import { runRealtimeTripartiteReconciliation, selfHealDocumentsAndTransactions } from "./utils/shadowLedger";
 import {
@@ -61,6 +65,9 @@ const STORAGE_KEYS = {
   RECEIPTS: "concilia_rouanet_receipts_v6",
   PROJECT_1961_PENDING_MAPPING: "concilia_rouanet_project_1961_pending_mapping_v6",
 };
+
+const IS_DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true";
+const ONLINE_ACTIVE_PROJECT_STORAGE_KEY = "concilia_rouanet_online_active_project_v1";
 
 const isSummaryItem = (item: any) => {
   if (!item) return false;
@@ -99,6 +106,24 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard");
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>("ADMIN");
+  const [onlineSession, setOnlineSession] = useState<OnlineSessionState>({
+    status: "loading",
+    projects: [],
+    activeProjectId: null,
+    message: null,
+  });
+
+  const refreshOnlineSession = useCallback(async () => {
+    const preferredProjectId = localStorage.getItem(ONLINE_ACTIVE_PROJECT_STORAGE_KEY);
+    setOnlineSession({ status: "loading", projects: [], activeProjectId: null, message: null });
+    setOnlineSession(await loadOnlineSession(apiClient, preferredProjectId));
+  }, []);
+
+  useEffect(() => {
+    if (!IS_DEMO_MODE) {
+      void refreshOnlineSession();
+    }
+  }, [refreshOnlineSession]);
 
   // Domain state stored per project
   const [allRubrics, setAllRubrics] = useState<Record<string, BudgetRubric[]>>(() => {
@@ -254,6 +279,8 @@ export default function App() {
 
   // Persist to LocalStorage on change
   useEffect(() => {
+    if (!IS_DEMO_MODE) return;
+
     try {
       localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
       localStorage.setItem(STORAGE_KEYS.ACTIVE_ID, activeProjectId);
@@ -383,6 +410,8 @@ export default function App() {
 
   // Auto-heal documents and tripartite entries on mount or project change if any document is unlinked or has zero value
   useEffect(() => {
+    if (!IS_DEMO_MODE) return;
+
     const hasUnhealedDocs =
       currentDocuments.length > 0 &&
       (currentDocuments.some((d) => !d.valorBruto || Number(d.valorBruto) <= 0 || !d.idTransacao) ||
@@ -554,8 +583,35 @@ export default function App() {
     setIsNewProjectModalOpen(false);
   };
 
+  if (!IS_DEMO_MODE) {
+    return (
+      <OnlineSessionBoundary
+        session={onlineSession}
+        isDemoMode={false}
+        onRetry={() => void refreshOnlineSession()}
+        onSelectProject={(projectId) => {
+          localStorage.setItem(ONLINE_ACTIVE_PROJECT_STORAGE_KEY, projectId);
+          setOnlineSession((current) => ({ ...current, activeProjectId: projectId }));
+        }}
+      >
+        <main className="min-h-screen bg-slate-950 px-4 py-12 text-slate-100">
+          <section className="mx-auto max-w-3xl rounded-2xl border border-slate-800 bg-slate-900 p-8">
+            <h1 className="text-2xl font-bold">Sessão online preparada</h1>
+            <p className="mt-3 text-slate-300">
+              O projeto foi identificado pela API. Lançamentos, documentos e indicadores financeiros
+              serão conectados nas próximas etapas, sempre a partir de dados online.
+            </p>
+          </section>
+        </main>
+      </OnlineSessionBoundary>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950">
+      <div className="bg-amber-400 px-4 py-1 text-center text-xs font-semibold text-slate-950">
+        Modo demonstração: os dados abaixo são locais e não representam a operação online.
+      </div>
       {/* Top Accessibility Toolbar (eMAG / WCAG 2.1) */}
       <AccessibilityToolbar onNavigateTab={(tab) => setActiveTab(tab as any)} />
 
