@@ -230,6 +230,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             </span>
           </div>
+          <div className="flex justify-between text-amber-400 pt-1 border-t border-slate-800/60">
+            <span>Pendente:</span>
+            <span className="font-mono font-semibold">
+              {formatCurrency(
+                activeProject.resumoFinanceiroValidado?.totalAConciliar ??
+                  (activeProject.resumoFinanceiroValidado?.totalExecutado ??
+                    activeProject.valorExecutado ??
+                    897759.15) -
+                  (activeProject.resumoFinanceiroValidado?.totalConciliado ?? 0)
+              )}
+            </span>
+          </div>
         </div>
 
         <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
