@@ -11,9 +11,13 @@ import { PronacProject } from "../types";
 const DEFAULT_API_BASE_URL = "http://localhost:8000/api/v1";
 
 export function resolveApiUrls(
-  apiBaseUrl = import.meta.env.VITE_API_URL || DEFAULT_API_BASE_URL,
+  apiBaseUrl?: string,
 ) {
-  const normalized = apiBaseUrl.replace(/\/$/, "");
+  const browserOrigin = typeof window !== "undefined" && window.location?.origin
+    ? `${window.location.origin}/api/v1`
+    : DEFAULT_API_BASE_URL;
+  const baseUrl = apiBaseUrl || import.meta.env?.VITE_API_URL || browserOrigin;
+  const normalized = baseUrl.replace(/\/$/, "");
 
   return {
     apiBaseUrl: normalized,

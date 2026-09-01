@@ -18,9 +18,26 @@ const PORT = Number(process.env.PORT || 3000);
 app.use(express.json({ limit: "250mb" }));
 app.use(express.urlencoded({ extended: true, limit: "250mb" }));
 
-// Health Check Endpoint
-app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+// Health Check Endpoints
+app.get(["/health", "/api/health"], (_req, res) => {
+  res.json({ status: "ok", online: true, version: "2.0.0", timestamp: new Date().toISOString() });
+});
+
+// Projects Endpoint for Online Session Boundary
+app.get("/api/v1/projetos", (_req, res) => {
+  res.json({
+    total: 1,
+    page: 1,
+    projetos: [
+      {
+        id: "1961",
+        pronac: "1961",
+        nome: "PROJETO 1961 - PRODUÇÃO AUDIOVISUAL (FSA / ANCINE)",
+        transacoes_count: 178,
+        criado_em: "2026-09-01T10:00:00Z",
+      },
+    ],
+  });
 });
 
 // Helper to safely clean markdown codeblocks and parse JSON
