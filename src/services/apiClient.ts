@@ -5,9 +5,31 @@
  * com fallback inteligente para LocalStorage caso o backend ou o banco estejam offline.
  */
 
+import type { OnlineProjectList } from "../contracts/online";
 import { PronacProject } from "../types";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
+const DEFAULT_API_BASE_URL = "http://localhost:8000/api/v1";
+
+export function resolveApiUrls(
+  apiBaseUrl = import.meta.env.VITE_API_URL || DEFAULT_API_BASE_URL,
+) {
+  const normalized = apiBaseUrl.replace(/\/$/, "");
+
+  return {
+    apiBaseUrl: normalized,
+    healthUrl: `${new URL(normalized).origin}/health`,
+  };
+}
+
+export class ApiClientError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiClientError";
+  }
+}
 
 export interface BackendStatus {
   online: boolean;
@@ -18,9 +40,16 @@ export interface BackendStatus {
 export class ApiClient {
   private static instance: ApiClient;
   private authToken: string | null = null;
+  private readonly apiBaseUrl: string;
+  private readonly healthUrl: string;
 
-  private constructor() {
-    this.authToken = localStorage.getItem("rouanet_auth_token");
+  private constructor(apiBaseUrl?: string) {
+    const urls = resolveApiUrls(apiBaseUrl);
+    this.apiBaseUrl = urls.apiBaseUrl;
+    this.healthUrl = urls.healthUrl;
+    this.authToken = typeof localStorage === "undefined"
+      ? null
+      : localStorage.getItem("rouanet_auth_token");
   }
 
   public static getInstance(): ApiClient {
@@ -30,9 +59,15 @@ export class ApiClient {
     return ApiClient.instance;
   }
 
+  public static createForTesting(apiBaseUrl: string): ApiClient {
+    return new ApiClient(apiBaseUrl);
+  }
+
   public setToken(token: string) {
     this.authToken = token;
-    localStorage.setItem("rouanet_auth_token", token);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("rouanet_auth_token", token);
+    }
   }
 
   public getToken(): string | null {
@@ -44,7 +79,7 @@ export class ApiClient {
    */
   public async checkHealth(): Promise<BackendStatus> {
     try {
-      const res = await fetch("http://localhost:8000/health", { method: "GET" });
+      const res = await fetch(this.healthUrl, { method: "GET" });
       if (!res.ok) return { online: false };
       const data = await res.json();
       return { online: true, version: data.version };
@@ -58,7 +93,7 @@ export class ApiClient {
    */
   public async devDemoLogin(): Promise<{ access_token: string; user: any } | null> {
     try {
-      const res = await fetch(`${API_BASE_URL}/dev/demo-login`, {
+      const res = await fetch(`${this.apiBaseUrl}/dev/demo-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: "auditor@cultura.gov.br", nome: "Auditor MinC/FSA" }),
@@ -75,6 +110,50 @@ export class ApiClient {
   }
 
   /**
+   * Lista somente os dados que o endpoint de projetos realmente fornece.
+   * Totais financeiros, documentos e lançamentos serão carregados em ondas próprias.
+   */
+  public async listProjects(): Promise<OnlineProjectList> {
+    const headers: Record<string, string> = {};
+    if (this.authToken) headers.Authorization = `Bearer ${this.authToken}`;
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.apiBaseUrl}/projetos`, { headers });
+    } catch {
+      throw new ApiClientError(0, "Não foi possível acessar a lista de projetos.");
+    }
+
+    if (!response.ok) {
+      throw new ApiClientError(response.status, `Não foi possível carregar projetos (${response.status}).`);
+    }
+
+    const payload = await response.json() as {
+      total: number;
+      page: number;
+      projetos: Array<{
+        id: string;
+        pronac: string;
+        nome: string;
+        transacoes_count: number;
+        criado_em: string;
+      }>;
+    };
+
+    return {
+      total: payload.total,
+      page: payload.page,
+      projetos: payload.projetos.map((project) => ({
+        id: project.id,
+        pronac: project.pronac,
+        nome: project.nome,
+        transacoesCount: project.transacoes_count,
+        criadoEm: project.criado_em,
+      })),
+    };
+  }
+
+  /**
    * Listar projetos do backend
    */
   public async getProjetos(): Promise<PronacProject[] | null> {
@@ -82,7 +161,7 @@ export class ApiClient {
       const headers: Record<string, string> = {};
       if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
 
-      const res = await fetch(`${API_BASE_URL}/projetos`, { headers });
+      const res = await fetch(`${this.apiBaseUrl}/projetos`, { headers });
       if (res.ok) {
         return await res.json();
       }
@@ -100,7 +179,7 @@ export class ApiClient {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
 
-      const res = await fetch(`${API_BASE_URL}/projetos`, {
+      const res = await fetch(`${this.apiBaseUrl}/projetos`, {
         method: "POST",
         headers,
         body: JSON.stringify(project),
@@ -122,7 +201,7 @@ export class ApiClient {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
 
-      const res = await fetch(`${API_BASE_URL}/conciliar`, {
+      const res = await fetch(`${this.apiBaseUrl}/conciliar`, {
         method: "POST",
         headers,
         body: JSON.stringify({ projeto_id: projetoId }),
