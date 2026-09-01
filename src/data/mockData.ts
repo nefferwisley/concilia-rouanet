@@ -6,6 +6,7 @@ import {
   AuditAlert,
   TripartiteEntry,
 } from "../types";
+import { applyProject1961PendingMapping } from "../utils/project1961PendingMapping";
 
 export const initialProjects: PronacProject[] = [
   {
@@ -22,6 +23,15 @@ export const initialProjects: PronacProject[] = [
   "valorAprovado": 835000,
   "valorCaptado": 835000,
   "valorExecutado": 897759.15,
+  "resumoFinanceiroValidado": {
+    "totalExecutado": 897759.15,
+    "totalConciliado": 655341.36,
+    "totalAConciliar": 242417.79,
+    "debitCount": 178,
+    "reconciledDebitCount": 96,
+    "pendingDebitCount": 82,
+    "fonte": "Revisão documental validada do Projeto 1961"
+  },
   "bancoInfo": {
     "banco": "Banco do Brasil (001)",
     "agencia": "0001",
@@ -5603,6 +5613,10 @@ export const initialTransactions: Record<string, BankTransaction[]> = {
 }
 ],
 };
+
+initialTransactions["proj-1961"] = applyProject1961PendingMapping(
+  initialTransactions["proj-1961"],
+);
 
 export const initialDocuments: Record<string, FiscalDocument[]> = {
   "proj-1961": [

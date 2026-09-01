@@ -105,8 +105,25 @@ export const ReconciliationCoreSkillsView: React.FC<ReconciliationCoreSkillsView
 
   // 4. Audit Trail Logs
   const auditLogs = useMemo(() => {
+    const debits = transactions.filter(
+      (t) => t && (t.tipo === "DEBITO" || t.tipo === "TARIFA" || !t.tipo || (t as any).tipoMovimento === "DEBIT")
+    );
+    const reconciledCount = debits.filter(
+      (t) =>
+        t.status === "CONCILIADO" ||
+        t.statusConciliacao === "CONCILIADO" ||
+        t.statusConciliacao === "Conciliado" ||
+        Boolean(t.matchedDocId || t.idDocumentoFiscalVinculado)
+    ).length;
+    auditTrailManager.syncProjectData({
+      pronac: project.pronac || "PRONAC-1961",
+      transactionsCount: transactions.length,
+      documentsCount: documents.length,
+      reconciledCount,
+      confidenceAvg: splinkReport.averageConfidence || 0.96,
+    });
     return auditTrailManager.getLogs(60);
-  }, [transactions, documents]);
+  }, [project, transactions, documents, splinkReport]);
 
   // Filtered Splink Matches
   const filteredSplinkMatches = useMemo(() => {

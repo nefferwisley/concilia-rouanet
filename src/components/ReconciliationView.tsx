@@ -49,6 +49,15 @@ import {
 import { runRealtimeTripartiteReconciliation } from "../utils/shadowLedger";
 import { LangChainRagSelfCorrectionModal } from "./LangChainRagSelfCorrectionModal";
 import { resolveProviderAndCompany } from "../utils/providerHelper";
+import { isTransactionReconciled } from "../utils/projectFinancialSummary";
+import { getTransactionRowKey } from "../utils/transactionRowKey";
+import {
+  EXPENSE_CATEGORY_LABELS,
+  EXPENSE_CATEGORY_ORDER,
+  ExpenseCategory,
+  getExpenseCategoryCounts,
+  resolveExpenseCategory,
+} from "../utils/expenseCategory";
 
 interface ReconciliationViewProps {
   transactions: BankTransaction[];
@@ -214,6 +223,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
   const safeRubrics = Array.isArray(rubrics) ? rubrics : [];
 
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<ExpenseCategory | "ALL">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [isAutoReconciling, setIsAutoReconciling] = useState(false);
   const [autoReconcileResult, setAutoReconcileResult] = useState<string | null>(null);
@@ -255,15 +265,18 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
     (t) => t && (t.tipo === "CREDITO" || t.tipo === "RENDIMENTO" || t.tipo === "RESGATE" || (t as any).tipoMovimento === "CREDIT")
   );
 
-  const isTxReconciled = (t: BankTransaction) =>
-    // Aceita conciliado por: status explícito OU statusConciliacao definido.
-    // matchedDocId é desejável mas não obrigatório (dados do mockData não têm link de doc).
-    (t.status === "CONCILIADO" || t.statusConciliacao === "Conciliado" || (t as any).status === "Conciliado") ||
-    Boolean(t.matchedDocId || t.idDocumentoFiscalVinculado);
+  const isTxReconciled = isTransactionReconciled;
 
-  const pendingDebitsCount = debitTransactions.filter(
+  const pendingDebitTransactions = debitTransactions.filter(
     (t) => !isTxReconciled(t) && t.status !== "ALERTA_GLOSA"
-  ).length;
+  );
+  const pendingDebitsCount = pendingDebitTransactions.length;
+  const pendingCategoryCounts = getExpenseCategoryCounts(pendingDebitTransactions, safeRubrics);
+
+  const selectStatusFilter = (status: string) => {
+    setStatusFilter(status);
+    if (status !== "PENDENTE") setExpenseCategoryFilter("ALL");
+  };
 
   const reconciledDebitsCount = debitTransactions.filter(isTxReconciled).length;
 
@@ -295,6 +308,10 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
       matchesStatus = isCredit;
     }
 
+    const matchesExpenseCategory =
+      expenseCategoryFilter === "ALL" ||
+      resolveExpenseCategory(t, safeRubrics) === expenseCategoryFilter;
+
     const q = (searchQuery || "").toLowerCase();
     const matchesSearch =
       !searchQuery ||
@@ -304,7 +321,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
       (t.favorecido || "").toLowerCase().includes(q) ||
       (t.valor || 0).toString().includes(searchQuery);
 
-    return matchesStatus && matchesSearch;
+    return matchesStatus && matchesExpenseCategory && matchesSearch;
   });
 
   // Auto reconcile using Tripartite Engine (OFX x FISCAL x SALIC) + Gemini
@@ -767,7 +784,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row gap-3 items-center justify-between">
         <div className="flex flex-wrap gap-1.5">
           <button
-            onClick={() => setStatusFilter("ALL")}
+            onClick={() => selectStatusFilter("ALL")}
             className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
               statusFilter === "ALL"
                 ? "bg-emerald-500 text-slate-950 font-bold"
@@ -777,7 +794,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
             Todos ({safeTransactions.length})
           </button>
           <button
-            onClick={() => setStatusFilter("CONCILIADO")}
+            onClick={() => selectStatusFilter("CONCILIADO")}
             className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
               statusFilter === "CONCILIADO"
                 ? "bg-emerald-500 text-slate-950 font-bold"
@@ -787,7 +804,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
             🟢 Conciliados ({reconciledDebitsCount})
           </button>
           <button
-            onClick={() => setStatusFilter("PENDENTE")}
+            onClick={() => selectStatusFilter("PENDENTE")}
             className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
               statusFilter === "PENDENTE"
                 ? "bg-amber-500 text-slate-950 font-bold"
@@ -797,7 +814,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
             🟡 Pendentes ({pendingDebitsCount})
           </button>
           <button
-            onClick={() => setStatusFilter("ALERTA_GLOSA")}
+            onClick={() => selectStatusFilter("ALERTA_GLOSA")}
             className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
               statusFilter === "ALERTA_GLOSA"
                 ? "bg-rose-500 text-white font-bold"
@@ -807,7 +824,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
             🔴 Alerta MinC ({glosaDebitsCount})
           </button>
           <button
-            onClick={() => setStatusFilter("CREDITO")}
+            onClick={() => selectStatusFilter("CREDITO")}
             className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
               statusFilter === "CREDITO"
                 ? "bg-sky-500 text-slate-950 font-bold"
@@ -818,15 +835,40 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
           </button>
         </div>
 
-        <div className="relative w-full md:w-64">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Buscar lançamento, favorecido ou FITID..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-700 text-white text-xs rounded-lg pl-8 pr-3 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          />
+        <div className="flex w-full md:w-auto flex-col sm:flex-row gap-2">
+          <div className="relative w-full sm:w-56">
+            <Filter className="w-3.5 h-3.5 absolute left-3 top-3 text-amber-400 pointer-events-none" />
+            <select
+              aria-label="Categoria da despesa"
+              value={expenseCategoryFilter}
+              onChange={(event) => {
+                const category = event.target.value as ExpenseCategory | "ALL";
+                setExpenseCategoryFilter(category);
+                if (category !== "ALL") setStatusFilter("PENDENTE");
+              }}
+              className="w-full appearance-none bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg pl-8 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            >
+              <option value="ALL">Categoria da despesa</option>
+              {EXPENSE_CATEGORY_ORDER.map((category) => {
+                const count = pendingCategoryCounts.get(category) || 0;
+                return count > 0 ? (
+                  <option key={category} value={category}>
+                    {EXPENSE_CATEGORY_LABELS[category]} ({count})
+                  </option>
+                ) : null;
+              })}
+            </select>
+          </div>
+          <div className="relative w-full md:w-64">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar lançamento, favorecido ou FITID..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 text-white text-xs rounded-lg pl-8 pr-3 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
         </div>
       </div>
 
@@ -852,14 +894,11 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
               {filteredTransactions.map((tx, idx) => {
                 const matchedDoc = documents.find((d) => d.id === tx.matchedDocId || d.id === tx.idDocumentoFiscalVinculado);
                 const matchedRubric = rubrics.find((r) => r.id === tx.matchedRubricId || r.id === tx.rubricaId || r.id === tx.idRubricaVinculada);
-                const isReconciled =
-                  tx.status === "CONCILIADO" ||
-                  tx.statusConciliacao === "Conciliado" ||
-                  (tx as any).status === "Conciliado" ||
-                  Boolean(matchedDoc);
+                const isReconciled = isTxReconciled(tx);
                 const hasRetentions = matchedDoc && ((matchedDoc.retencaoIrrf || 0) > 0 || (matchedDoc.retencaoIss || 0) > 0 || (matchedDoc.retencaoInss || 0) > 0);
                 const isDebit = tx.tipo === "DEBITO" || tx.tipo === "TARIFA" || !tx.tipo || (tx as any).tipoMovimento === "DEBIT";
                 const isCredit = tx.tipo === "CREDITO" || tx.tipo === "RENDIMENTO" || tx.tipo === "RESGATE" || (tx as any).tipoMovimento === "CREDIT";
+                const expenseCategory = resolveExpenseCategory(tx, safeRubrics);
 
                 const rawDate = tx.data || (tx as any).dataTransacao || (tx as any).dtposted;
                 const rawDesc = tx.descricaoExtrato || tx.descricao || (tx as any).descricaoOriginalExtrato || (tx.favorecido ? `PAGTO - ${tx.favorecido}` : "DÉBITO EM CONTA BB");
@@ -871,7 +910,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                 );
 
                 return (
-                  <tr key={tx.id || idx} className="hover:bg-slate-800/40 transition">
+                  <tr key={getTransactionRowKey(tx, idx)} className="hover:bg-slate-800/40 transition">
                     <td className="px-3 py-3 font-mono font-bold text-slate-400 text-center text-xs">
                       #{String(idx + 1).padStart(3, "0")}
                     </td>
@@ -977,6 +1016,13 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                         <span className="text-slate-400 text-[11px]">0.0 - Captação e Rendimentos</span>
                       ) : (
                         <span className="text-slate-500 italic text-[11px]">Não vinculada</span>
+                      )}
+                      {isDebit && (
+                        <div className="mt-1">
+                          <span className="inline-flex rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
+                            {EXPENSE_CATEGORY_LABELS[expenseCategory]}
+                          </span>
+                        </div>
                       )}
                     </td>
                     <td className="px-3 py-3 text-center whitespace-nowrap">

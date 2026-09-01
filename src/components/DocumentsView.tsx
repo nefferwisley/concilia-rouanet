@@ -27,6 +27,7 @@ import { formatCurrency, formatDate, formatCnpjCpf } from "../utils/formatters";
 import { resolveProviderAndCompany } from "../utils/providerHelper";
 import { analyzeDocumentWithAi } from "../services/geminiService";
 import { taxAuthorityIntegrationService } from "../services/taxAuthorityIntegrationService";
+import { linkFiscalDocumentForReview } from "../utils/autoLinkTransaction";
 
 interface DocumentsViewProps {
   documents: FiscalDocument[];
@@ -175,13 +176,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
     onUpdateTransactions((prev) =>
       prev.map((tx) =>
         tx.id === match.id
-          ? {
-              ...tx,
-              matchedDocId: newDoc.id,
-              idDocumentoFiscalVinculado: newDoc.id,
-              status: "CONCILIADO",
-              statusConciliacao: "Conciliado",
-            }
+          ? linkFiscalDocumentForReview(tx, newDoc.id)
           : tx
       )
     );
@@ -380,7 +375,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
       setQueuedFiles([]);
       setShowOcrDrawer(false);
       const linkMsg = linkedCount > 0
-        ? `\n🔗 ${linkedCount} lançamento(s) bancário(s) vinculado(s) e marcado(s) como ✅ CONCILIADO automaticamente!`
+        ? `\n🔗 ${linkedCount} lançamento(s) bancário(s) vinculado(s) e aguardando validação da conciliação.`
         : "\n⚠️ Nenhum lançamento bancário correspondente foi encontrado. Verifique o extrato para vincular manualmente.";
       alert(`✅ ${addedCount} documento(s) fiscal(is) cadastrado(s) com sucesso.${linkMsg}`);
     }
@@ -475,7 +470,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
       // ✅ Auto-Link: tentar vincular ao extrato bancário
       const linkResult = autoLinkDocToTransaction(newDoc);
       if (linkResult.linked) {
-        alert(`✅ Documento cadastrado e vinculado automaticamente ao lançamento bancário:\n"${linkResult.txDesc}"\n\nStatus atualizado para ✅ CONCILIADO.`);
+        alert(`✅ Documento cadastrado e vinculado ao lançamento bancário:\n"${linkResult.txDesc}"\n\nA conciliação aguarda validação.`);
       }
       setIsAddModalOpen(false);
     }

@@ -491,6 +491,10 @@ export function exportBBGestaoAgilExcel(
 
   const rows = debits.map(tx => {
     const doc = documents.find((d) => d.id === tx.matchedDocId || d.id === tx.idDocumentoFiscalVinculado);
+    const resolved = resolveProviderAndCompany(
+      tx.favorecido || doc?.fornecedorNome || tx.descricaoOriginalExtrato || tx.descricaoExtrato || "",
+      tx.cnpjCpfFavorecido || doc?.fornecedorCnpjCpf
+    );
     return [
       project.bancoInfo?.agencia || "0000",
       project.bancoInfo?.contaMovimento || "000000-0",
@@ -498,9 +502,9 @@ export function exportBBGestaoAgilExcel(
       Number(tx.valor) || 0,
       "D",
       "PAGAMENTO_FORNECEDOR",
-      tx.cnpjCpfFavorecido || doc?.fornecedorCnpjCpf || "",
-      tx.favorecido || doc?.fornecedorNome || "",
-      tx.documentoBancario || "",
+      resolved.cnpjCpf || tx.cnpjCpfFavorecido || "",
+      resolved.personName || tx.favorecido || doc?.fornecedorNome || "",
+      tx.documentoBancario || `BB-${tx.id}`,
       doc?.numeroDoc || "",
       doc?.chaveAcesso || "",
       doc ? "COMPROVADO" : "PENDENTE"

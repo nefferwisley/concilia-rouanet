@@ -39,17 +39,27 @@ import {
 import { auditComplianceWithAi } from "./services/geminiService";
 import { exportSalicExcel, exportSalicPdf } from "./utils/exportUtils";
 import { runRealtimeTripartiteReconciliation, selfHealDocumentsAndTransactions } from "./utils/shadowLedger";
-import { Plus, X, Building, CheckCircle2, LayoutDashboard, Split, ArrowLeftRight, ShieldCheck, Menu, Coins, Receipt, AlertTriangle } from "lucide-react";
+import {
+  applyProject1961PendingMapping,
+  PROJECT_1961_PENDING_MAPPING_VERSION,
+} from "./utils/project1961PendingMapping";
+import {
+  sanitizeTransactions,
+  sanitizeDocuments,
+  sanitizeTripartiteEntries,
+} from "./utils/sanitizeFinancialData";
+import { Plus, X, Building, CheckCircle2, LayoutDashboard, Split, ArrowLeftRight, ShieldCheck, Menu } from "lucide-react";
 
 const STORAGE_KEYS = {
-  PROJECTS: "concilia_rouanet_projects_v5",
-  ACTIVE_ID: "concilia_rouanet_active_id_v5",
-  RUBRICS: "concilia_rouanet_rubrics_v5",
-  TRANSACTIONS: "concilia_rouanet_transactions_v5",
-  DOCUMENTS: "concilia_rouanet_documents_v5",
-  ALERTS: "concilia_rouanet_alerts_v5",
-  TRIPARTITE: "concilia_rouanet_tripartite_v5",
-  RECEIPTS: "concilia_rouanet_receipts_v5",
+  PROJECTS: "concilia_rouanet_projects_v6",
+  ACTIVE_ID: "concilia_rouanet_active_id_v6",
+  RUBRICS: "concilia_rouanet_rubrics_v6",
+  TRANSACTIONS: "concilia_rouanet_transactions_v6",
+  DOCUMENTS: "concilia_rouanet_documents_v6",
+  ALERTS: "concilia_rouanet_alerts_v6",
+  TRIPARTITE: "concilia_rouanet_tripartite_v6",
+  RECEIPTS: "concilia_rouanet_receipts_v6",
+  PROJECT_1961_PENDING_MAPPING: "concilia_rouanet_project_1961_pending_mapping_v6",
 };
 
 const isSummaryItem = (item: any) => {
@@ -102,20 +112,47 @@ export default function App() {
   });
 
   const [allTransactions, setAllTransactions] = useState<Record<string, BankTransaction[]>>(() => {
+    let loadedTransactions = initialTransactions;
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
       if (saved) {
         const parsed: Record<string, BankTransaction[]> = JSON.parse(saved);
         const cleaned: Record<string, BankTransaction[]> = {};
         Object.keys(parsed).forEach((k) => {
-          cleaned[k] = (parsed[k] || []).filter((t) => !isSummaryItem(t));
+          cleaned[k] = sanitizeTransactions(
+            (parsed[k] || []).filter((t) => !isSummaryItem(t))
+          );
         });
-        return cleaned;
+        loadedTransactions = cleaned;
       }
     } catch (e) {
       console.warn("Could not load saved transactions:", e);
     }
-    return initialTransactions;
+
+    try {
+      const appliedVersion = localStorage.getItem(STORAGE_KEYS.PROJECT_1961_PENDING_MAPPING);
+      if (appliedVersion !== PROJECT_1961_PENDING_MAPPING_VERSION) {
+        const raw1961 = loadedTransactions["proj-1961"] || initialTransactions["proj-1961"];
+        loadedTransactions = {
+          ...loadedTransactions,
+          "proj-1961": sanitizeTransactions(applyProject1961PendingMapping(raw1961)),
+        };
+        localStorage.setItem(
+          STORAGE_KEYS.PROJECT_1961_PENDING_MAPPING,
+          PROJECT_1961_PENDING_MAPPING_VERSION,
+        );
+      }
+    } catch (e) {
+      console.warn("Could not apply the verified Project 1961 pending mapping:", e);
+    }
+
+    // Ensure all initial transactions are sanitized
+    const finalTransactions: Record<string, BankTransaction[]> = {};
+    Object.keys(loadedTransactions).forEach((k) => {
+      finalTransactions[k] = sanitizeTransactions(loadedTransactions[k] || []);
+    });
+
+    return finalTransactions;
   });
 
   const [allDocuments, setAllDocuments] = useState<Record<string, FiscalDocument[]>>(() => {
@@ -125,14 +162,18 @@ export default function App() {
         const parsed: Record<string, FiscalDocument[]> = JSON.parse(saved);
         const cleaned: Record<string, FiscalDocument[]> = {};
         Object.keys(parsed).forEach((k) => {
-          cleaned[k] = (parsed[k] || []).filter((d) => !isSummaryItem(d));
+          cleaned[k] = sanitizeDocuments((parsed[k] || []).filter((d) => !isSummaryItem(d)));
         });
         return cleaned;
       }
     } catch (e) {
       console.warn("Could not load saved documents:", e);
     }
-    return initialDocuments;
+    const finalDocs: Record<string, FiscalDocument[]> = {};
+    Object.keys(initialDocuments).forEach((k) => {
+      finalDocs[k] = sanitizeDocuments(initialDocuments[k] || []);
+    });
+    return finalDocs;
   });
 
   const [allAlerts, setAllAlerts] = useState<Record<string, AuditAlert[]>>(() => {
@@ -154,14 +195,18 @@ export default function App() {
         const parsed: Record<string, TripartiteEntry[]> = JSON.parse(saved);
         const cleaned: Record<string, TripartiteEntry[]> = {};
         Object.keys(parsed).forEach((k) => {
-          cleaned[k] = (parsed[k] || []).filter((trip) => !isSummaryItem(trip));
+          cleaned[k] = sanitizeTripartiteEntries((parsed[k] || []).filter((trip) => !isSummaryItem(trip)));
         });
         return cleaned;
       }
     } catch (e) {
       console.warn("Could not load saved tripartite entries:", e);
     }
-    return initialTripartiteEntries;
+    const finalTrips: Record<string, TripartiteEntry[]> = {};
+    Object.keys(initialTripartiteEntries).forEach((k) => {
+      finalTrips[k] = sanitizeTripartiteEntries(initialTripartiteEntries[k] || []);
+    });
+    return finalTrips;
   });
 
   const [allReceipts, setAllReceipts] = useState<Record<string, Record<string, ReceiptItem>>>(() => {
@@ -574,7 +619,7 @@ export default function App() {
           onCloseMobile={() => setIsMobileNavOpen(false)}
         />
 
-        <main className="flex-1 overflow-y-auto p-3 sm:p-5 lg:p-8 bg-slate-950/60 w-full min-w-0 pb-20 md:pb-8">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-5 lg:p-8 bg-slate-950/60 w-full min-w-0 pb-20">
           <div className="max-w-7xl mx-auto w-full">
             <ErrorBoundary fallbackTitle="Erro ao carregar a visualização">
               {activeTab === "dashboard" && (
@@ -734,8 +779,11 @@ export default function App() {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar (visible only on mobile) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 flex items-center justify-around py-1.5 px-2">
+      {/* Quick Navigation Bar */}
+      <nav
+        aria-label="Navegação rápida"
+        className="fixed bottom-0 left-0 right-0 md:left-64 z-30 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 flex items-center justify-around py-1.5 px-2"
+      >
         <button
           onClick={() => {
             setActiveTab("dashboard");
@@ -1001,71 +1049,6 @@ export default function App() {
         }}
       />
 
-      {/* Mobile Floating Bottom Navigation Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-1.5 flex items-center justify-around text-[10px] font-medium shadow-2xl">
-        <button
-          onClick={() => setActiveTab("dashboard")}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition ${
-            activeTab === "dashboard" ? "text-emerald-400 font-bold bg-emerald-500/10" : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <LayoutDashboard className="w-4 h-4" />
-          <span>Painel</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("reconciliation")}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition relative ${
-            activeTab === "reconciliation" ? "text-emerald-400 font-bold bg-emerald-500/10" : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <ArrowLeftRight className="w-4 h-4 text-sky-400" />
-          <span>Extrato ({currentTransactions.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("tripartite")}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition ${
-            activeTab === "tripartite" ? "text-emerald-400 font-bold bg-emerald-500/10" : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Split className="w-4 h-4 text-emerald-400" />
-          <span>Tripartite</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("budget")}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition ${
-            activeTab === "budget" ? "text-emerald-400 font-bold bg-emerald-500/10" : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Coins className="w-4 h-4 text-amber-400" />
-          <span>Rubricas ({currentRubrics.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("documents")}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition ${
-            activeTab === "documents" ? "text-emerald-400 font-bold bg-emerald-500/10" : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Receipt className="w-4 h-4 text-rose-400" />
-          <span>Notas ({currentDocuments.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("audit")}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition relative ${
-            activeTab === "audit" ? "text-emerald-400 font-bold bg-emerald-500/10" : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>Auditoria</span>
-          {currentAlerts.filter((a) => !a.resolvido).length > 0 && (
-            <span className="absolute top-0.5 right-1 w-2 h-2 rounded-full bg-rose-500" />
-          )}
-        </button>
-      </div>
     </div>
   );
 }

@@ -389,7 +389,43 @@ export const FinancialReviewWorkflowView: React.FC<FinancialReviewWorkflowViewPr
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80">
-              {filteredDebits.map((tx, idx) => {
+              {filteredDebits.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-6 py-12 text-center bg-slate-950/40">
+                    <div className="flex flex-col items-center justify-center max-w-md mx-auto space-y-3">
+                      <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                        <CheckCircle2 className="w-6 h-6" />
+                      </div>
+                      <div className="text-sm font-semibold text-white">
+                        {statusFilter === "SEM_DOC"
+                          ? "Nenhum débito sem documento fiscal!"
+                          : statusFilter === "SEM_COMP"
+                          ? "Nenhum débito sem comprovante bancário!"
+                          : statusFilter === "AGUARDANDO_ASSINATURA"
+                          ? "Nenhum recibo aguardando assinatura!"
+                          : "Nenhum lançamento encontrado para esta busca."}
+                      </div>
+                      <p className="text-xs text-slate-400 leading-relaxed">
+                        {statusFilter === "SEM_DOC"
+                          ? "Todos os 178 pagamentos do extrato possuem documento fiscal ou RPA correspondente cadastrado e auditado no sistema."
+                          : statusFilter === "SEM_COMP"
+                          ? "Todos os pagamentos possuem comprovantes vinculados na pasta digital."
+                          : "Tente ajustar o termo de pesquisa ou altere o filtro selecionado."}
+                      </p>
+                      <button
+                        onClick={() => {
+                          setStatusFilter("ALL");
+                          setSearchQuery("");
+                        }}
+                        className="text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 px-4 py-2 rounded-xl transition shadow"
+                      >
+                        Ver Todos os {totalDebitos} Lançamentos
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredDebits.map((tx, idx) => {
                 const resolved = resolveProviderAndCompany(
                   tx.favorecido || tx.descricaoExtrato || "",
                   tx.cnpjCpfFavorecido
@@ -519,7 +555,8 @@ export const FinancialReviewWorkflowView: React.FC<FinancialReviewWorkflowViewPr
                     </td>
                   </tr>
                 );
-              })}
+              })
+              )}
             </tbody>
           </table>
         </div>

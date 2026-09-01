@@ -53,6 +53,16 @@ export interface BankAccountInfo {
   rendimentoAplicacao: number;
 }
 
+export interface ValidatedFinancialSummary {
+  totalExecutado: number;
+  totalConciliado: number;
+  totalAConciliar: number;
+  debitCount: number;
+  reconciledDebitCount: number;
+  pendingDebitCount: number;
+  fonte: string;
+}
+
 export interface PronacProject {
   id: string;
   pronac: string; // Ex: "234891"
@@ -70,6 +80,7 @@ export interface PronacProject {
   bancoInfo: BankAccountInfo;
   status: ProjectStatus | string;
   resumoProjeto: string;
+  resumoFinanceiroValidado?: ValidatedFinancialSummary;
   [key: string]: any;
 }
 
@@ -605,6 +616,5 @@ export interface FinancialReviewStepInfo {
     pendentes: number;
   };
 }
-
 
 

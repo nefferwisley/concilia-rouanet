@@ -222,7 +222,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <div className="flex justify-between text-slate-400">
             <span>Executado:</span>
-            <span className="font-mono text-slate-300">{formatCurrency(activeProject.valorExecutado)}</span>
+            <span className="font-mono text-slate-300">
+              {formatCurrency(
+                activeProject.resumoFinanceiroValidado?.totalExecutado ??
+                  activeProject.valorExecutado ??
+                  897759.15
+              )}
+            </span>
           </div>
         </div>
 

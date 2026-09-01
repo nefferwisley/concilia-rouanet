@@ -279,7 +279,9 @@ export function runRealtimeTripartiteReconciliation(
       const currentExec = rubricExecutionMap.get(rubricId) || 0;
       rubricExecutionMap.set(rubricId, currentExec + txVal);
 
-      const hasFiscalDoc = Boolean(matchedDoc.numeroDoc && matchedDoc.valorBruto > 0);
+      const hasFiscalDoc =
+        tx.documentoFiscalCompleto !== false &&
+        Boolean(matchedDoc.numeroDoc && matchedDoc.valorBruto > 0);
       const hasBankReceipt = Boolean(tx.comprovanteUrl || tx.temComprovante || matchedDoc.arquivoComprovanteNome);
       const isFullyReconciled = hasFiscalDoc && hasBankReceipt;
       const statusFinal = isFullyReconciled ? "CONCILIADO" : "PENDENTE";
@@ -364,7 +366,7 @@ export function runRealtimeTripartiteReconciliation(
                   tipo: "NOTA_FISCAL" as const,
                   nomeArquivo: matchedDoc.arquivoNotaNome,
                   tamanhoFormatado: "1.2 MB",
-                  status: "VALIDADO" as const,
+                  status: hasFiscalDoc ? ("VALIDADO" as const) : ("PENDENTE" as const),
                 },
               ]
             : []),

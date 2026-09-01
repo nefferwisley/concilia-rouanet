@@ -26,15 +26,27 @@ class AuditTrailStore {
     this.initializeDefaultLogs();
   }
 
-  private initializeDefaultLogs() {
+  private initializeDefaultLogs(params?: {
+    pronac?: string;
+    transactionsCount?: number;
+    documentsCount?: number;
+    reconciledCount?: number;
+    confidenceAvg?: number;
+  }) {
+    const pronac = params?.pronac || "PRONAC-1961";
+    const txCount = params?.transactionsCount ?? 192;
+    const docCount = params?.documentsCount ?? 193;
+    const recCount = params?.reconciledCount ?? 96;
+    const conf = params?.confidenceAvg ?? 0.96;
+
     this.logActivity({
       actorId: "SYSTEM_INGESTION_SERVICE",
       actorRole: "SYSTEM_INGESTION",
       action: "SYSTEM_INIT",
       entityType: "TRANSACTION",
-      entityId: "PRONAC-1961",
-      description: "Inicialização do Ledger Tripartite e importação dos lançamentos bancários da conta BB vinculada.",
-      newState: { status: "ACTIVE", transactionsCount: 193, documentsCount: 178 },
+      entityId: pronac,
+      description: `Inicialização do Ledger Tripartite e importação dos lançamentos bancários da conta BB vinculada (${pronac}).`,
+      newState: { status: "ACTIVE", transactionsCount: txCount, documentsCount: docCount },
     });
 
     this.logActivity({
@@ -43,9 +55,20 @@ class AuditTrailStore {
       action: "MATCH_TRIPARTITE",
       entityId: "BATCH_INITIAL_CONCILIATION",
       entityType: "LEDGER_TRANSFER",
-      description: "Conciliação assistida executada via modelo probabilístico Fellegi-Sunter e OCR Gemini.",
-      newState: { matchConfidenceAvg: 0.94, totalReconciledDebits: 178 },
+      description: `Conciliação assistida executada via modelo probabilístico Fellegi-Sunter e OCR Gemini. Total de débitos comprovados: ${recCount}.`,
+      newState: { matchConfidenceAvg: conf, totalReconciledDebits: recCount },
     });
+  }
+
+  public syncProjectData(params: {
+    pronac: string;
+    transactionsCount: number;
+    documentsCount: number;
+    reconciledCount: number;
+    confidenceAvg?: number;
+  }) {
+    this.logs = [];
+    this.initializeDefaultLogs(params);
   }
 
   public logActivity(params: {

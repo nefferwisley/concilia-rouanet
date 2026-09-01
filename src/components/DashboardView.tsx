@@ -1,7 +1,6 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Coins,
-  TrendingUp,
   AlertTriangle,
   CheckCircle2,
   Receipt,
@@ -29,8 +28,20 @@ import {
   FileCheck2,
 } from "lucide-react";
 import { PronacProject, BudgetRubric, BankTransaction, FiscalDocument, AuditAlert } from "../types";
-import { formatCurrency, formatDate, calculatePercent } from "../utils/formatters";
+import { formatCurrency, formatDate } from "../utils/formatters";
+import {
+  calculateProjectFinancialSummary,
+  isTransactionReconciled,
+} from "../utils/projectFinancialSummary";
 import { resolveProviderAndCompany } from "../utils/providerHelper";
+import { getTransactionRowKey } from "../utils/transactionRowKey";
+import {
+  EXPENSE_CATEGORY_LABELS,
+  EXPENSE_CATEGORY_ORDER,
+  ExpenseCategory,
+  getExpenseCategoryCounts,
+  resolveExpenseCategory,
+} from "../utils/expenseCategory";
 
 interface DashboardViewProps {
   project: PronacProject;
@@ -58,8 +69,36 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
 
-  const percentCaptado = calculatePercent(project.valorCaptado, project.valorAprovado);
-  const percentExecutado = calculatePercent(project.valorExecutado, project.valorCaptado);
+  const liveFinancialSummary = calculateProjectFinancialSummary(safeTransactions);
+  const validatedSummary = project.resumoFinanceiroValidado;
+  const hasValidatedSummary = Boolean(
+    validatedSummary &&
+      [
+        validatedSummary.totalExecutado,
+        validatedSummary.totalConciliado,
+        validatedSummary.totalAConciliar,
+        validatedSummary.debitCount,
+        validatedSummary.reconciledDebitCount,
+        validatedSummary.pendingDebitCount,
+      ].every(Number.isFinite),
+  );
+  const financialSummary = hasValidatedSummary ? validatedSummary! : liveFinancialSummary;
+  const summaryDiverges =
+    hasValidatedSummary &&
+    (Math.round(liveFinancialSummary.totalExecutado * 100) !==
+      Math.round(financialSummary.totalExecutado * 100) ||
+      Math.round(liveFinancialSummary.totalConciliado * 100) !==
+        Math.round(financialSummary.totalConciliado * 100) ||
+      liveFinancialSummary.debitCount !== financialSummary.debitCount ||
+      liveFinancialSummary.reconciledDebitCount !== financialSummary.reconciledDebitCount);
+  const totalExecutado = financialSummary.debitCount > 0 ? financialSummary.totalExecutado : project.valorExecutado;
+  const totalConciliado = financialSummary.debitCount > 0 ? financialSummary.totalConciliado : 0;
+  const totalAConciliar = financialSummary.debitCount > 0 ? financialSummary.totalAConciliar : totalExecutado;
+  const percentConciliado =
+    financialSummary.debitCount > 0
+      ? Math.round((financialSummary.reconciledDebitCount / financialSummary.debitCount) * 100)
+      : 0;
+  const percentPendente = financialSummary.debitCount > 0 ? 100 - percentConciliado : 0;
 
   // Administrative Costs calculation (Max 15% by Lei Rouanet IN 01/2023)
   const adminRubrics = safeRubrics.filter((r) => r.etapa === "Custos Administrativos");
@@ -81,14 +120,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const debitTransactions = safeTransactions.filter(
     (t) => t.tipo === "DEBITO" || t.tipo === "TARIFA" || !t.tipo || (t as any).tipoMovimento === "DEBIT"
   );
-  const isTxReconciled = (t: BankTransaction) =>
-    // Status "Conciliado" é suficiente; matchedDocId é bônus mas não obrigatório
-    (t.status === "CONCILIADO" || t.statusConciliacao === "Conciliado" || (t as any).status === "Conciliado") ||
-    Boolean(t.matchedDocId || t.idDocumentoFiscalVinculado);
-  const reconciledTransactions = debitTransactions.filter(isTxReconciled);
-  const pendingTransactions = debitTransactions.filter(
-    (t) => !isTxReconciled(t) && t.status !== "ALERTA_GLOSA"
-  );
+  const reconciledTransactions = debitTransactions.filter(isTransactionReconciled);
+  const pendingTransactions = debitTransactions.filter((t) => !isTransactionReconciled(t));
   const glosaTransactions = debitTransactions.filter((t) => t.status === "ALERTA_GLOSA");
 
   // Stages breakdown
@@ -154,12 +187,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const [txSearch, setTxSearch] = useState("");
   const [txStatusFilter, setTxStatusFilter] = useState<"ALL" | "CONCILIADO" | "PENDENTE" | "DEBITO" | "CREDITO">("ALL");
+  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<ExpenseCategory | "ALL">("ALL");
+  const [showAllPreviewTransactions, setShowAllPreviewTransactions] = useState(false);
+  const transactionsSectionRef = useRef<HTMLDivElement>(null);
+  const pendingDetailMismatch =
+    hasValidatedSummary && pendingTransactions.length !== financialSummary.pendingDebitCount;
+  const pendingCategoryCounts = getExpenseCategoryCounts(pendingTransactions, safeRubrics);
+
+  const selectTransactionStatus = (status: "ALL" | "CONCILIADO" | "PENDENTE" | "DEBITO" | "CREDITO") => {
+    setTxStatusFilter(status);
+    if (status !== "PENDENTE") setExpenseCategoryFilter("ALL");
+    setShowAllPreviewTransactions(false);
+  };
+
+  const showPendingTransactions = () => {
+    setTxSearch("");
+    setTxStatusFilter("PENDENTE");
+    setExpenseCategoryFilter("ALL");
+    setShowAllPreviewTransactions(false);
+    window.requestAnimationFrame(() => {
+      transactionsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
 
   const filteredPreviewTransactions = safeTransactions.filter((tx) => {
-    if (txStatusFilter === "CONCILIADO" && tx.status !== "CONCILIADO") return false;
-    if (txStatusFilter === "PENDENTE" && tx.status !== "PENDENTE" && tx.status !== "PARCIAL") return false;
+    const isDebit =
+      tx.tipo === "DEBITO" || tx.tipo === "TARIFA" || !tx.tipo || (tx as any).tipoMovimento === "DEBIT";
+    if (txStatusFilter === "CONCILIADO" && !isTransactionReconciled(tx)) return false;
+    if (txStatusFilter === "PENDENTE" && (!isDebit || isTransactionReconciled(tx))) return false;
     if (txStatusFilter === "DEBITO" && tx.tipo !== "DEBITO" && tx.tipo !== "TARIFA") return false;
     if (txStatusFilter === "CREDITO" && tx.tipo !== "CREDITO" && tx.tipo !== "RENDIMENTO") return false;
+    if (
+      expenseCategoryFilter !== "ALL" &&
+      resolveExpenseCategory(tx, safeRubrics) !== expenseCategoryFilter
+    ) return false;
 
     if (txSearch.trim()) {
       const q = txSearch.toLowerCase();
@@ -171,6 +232,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
     return true;
   });
+  const visiblePreviewTransactions = showAllPreviewTransactions
+    ? filteredPreviewTransactions
+    : filteredPreviewTransactions.slice(0, 10);
 
   // Workflow checklist steps calculation
   const workflowSteps = [
@@ -198,8 +262,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     {
       id: "reconciliation-match",
       title: "4. Conciliação Tripartite",
-      description: `${reconciledTransactions.length}/${debitTransactions.length} débitos vinculados`,
-      completed: debitTransactions.length > 0 && pendingTransactions.length === 0,
+      description: `${financialSummary.reconciledDebitCount}/${financialSummary.debitCount} débitos vinculados`,
+      completed: financialSummary.debitCount > 0 && financialSummary.pendingDebitCount === 0,
       tab: "tripartite",
     },
     {
@@ -213,7 +277,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       id: "salic",
       title: "6. Dossiê SALIC",
       description: "Pronto para exportação oficial",
-      completed: pendingTransactions.length === 0 && unresolvedAlerts.length === 0,
+      completed: financialSummary.pendingDebitCount === 0 && unresolvedAlerts.length === 0,
       tab: "salic",
     },
   ];
@@ -336,6 +400,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* KPI Cards Grid */}
+      {hasValidatedSummary && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 font-semibold text-sky-300">
+            <ShieldCheck className="h-3.5 w-3.5" /> Resumo validado
+          </span>
+          <span className="text-slate-400">{validatedSummary?.fonte}</span>
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Valor Aprovado */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4.5 shadow">
@@ -355,61 +427,67 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Card 2: Valor Captado */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4.5 shadow">
+        {/* Card 2: Valor Conciliado */}
+        <div className="bg-slate-900/90 border border-sky-500/35 rounded-xl p-4.5 shadow">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
             <span className="font-medium flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4 text-emerald-400" /> Total Captado
+              <CheckCircle2 className="w-4 h-4 text-sky-400" /> Conciliado (par completo)
             </span>
-            <span className="text-[10px] bg-emerald-500/10 text-emerald-400 font-semibold px-2 py-0.5 rounded border border-emerald-500/20">
-              {percentCaptado}%
+            <span className="text-[10px] bg-sky-500/10 text-sky-300 font-semibold px-2 py-0.5 rounded border border-sky-500/20">
+              {financialSummary.reconciledDebitCount} de {financialSummary.debitCount}
             </span>
           </div>
-          <div className="text-xl font-bold text-emerald-400 font-mono">
-            {formatCurrency(project.valorCaptado)}
+          <div className="text-xl font-bold text-sky-400 font-mono">
+            {formatCurrency(totalConciliado)}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Disponível para execução</span>
-            <span className="text-emerald-400 font-semibold">Liberado p/ Movimento</span>
+            <span>Par completo: Comp. BB + NF OK</span>
+            <span className="text-sky-300 font-semibold">{percentConciliado}%</span>
           </div>
           <div className="w-full bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
             <div
-              className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-              style={{ width: `${percentCaptado}%` }}
+              className="bg-sky-500 h-full rounded-full transition-all duration-500"
+              style={{ width: `${percentConciliado}%` }}
             />
           </div>
         </div>
 
-        {/* Card 3: Valor Executado / Conciliado */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4.5 shadow">
+        {/* Card 3: Valor Pendente */}
+        <button
+          type="button"
+          aria-controls="project-transactions"
+          aria-label={`Ver ${financialSummary.pendingDebitCount} lançamentos pendentes`}
+          onClick={showPendingTransactions}
+          className="w-full bg-slate-900/90 border border-amber-500/35 rounded-xl p-4.5 shadow text-left transition hover:border-amber-400/60 hover:bg-amber-500/5 focus:outline-none focus:ring-2 focus:ring-amber-400/60"
+        >
           <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
             <span className="font-medium flex items-center gap-1.5">
-              <Receipt className="w-4 h-4 text-teal-400" /> Executado & Conciliado
+              <AlertTriangle className="w-4 h-4 text-amber-400" /> Pendente de comprovação
             </span>
-            <span className="text-[10px] bg-teal-500/10 text-teal-400 font-semibold px-2 py-0.5 rounded border border-teal-500/20">
-              {percentExecutado}%
+            <span className="text-[10px] bg-amber-500/10 text-amber-300 font-semibold px-2 py-0.5 rounded border border-amber-500/20">
+              {financialSummary.pendingDebitCount} itens
             </span>
           </div>
-          <div className="text-xl font-bold text-teal-300 font-mono">
-            {formatCurrency(project.valorExecutado)}
+          <div className="text-xl font-bold text-amber-400 font-mono">
+            {formatCurrency(totalAConciliar)}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Comprovado com NFs/RPAs</span>
-            <span className="text-slate-300">{safeDocuments.length} Docs Fiscais</span>
+            <span>Executado total: {formatCurrency(totalExecutado)}</span>
+            <span className="text-amber-300 font-semibold">{percentPendente}%</span>
           </div>
           <div className="w-full bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
             <div
-              className="bg-teal-400 h-full rounded-full transition-all duration-500"
-              style={{ width: `${percentExecutado}%` }}
+              className="bg-amber-400 h-full rounded-full transition-all duration-500"
+              style={{ width: `${percentPendente}%` }}
             />
           </div>
-        </div>
+        </button>
 
         {/* Card 4: Saldo Bancário & Rendimentos */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4.5 shadow">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
             <span className="font-medium flex items-center gap-1.5">
-              <Banknote className="w-4 h-4 text-cyan-400" /> Saldo Conta Movimento
+              <Banknote className="w-4 h-4 text-cyan-400" /> Saldo em Conta
             </span>
             <span className="text-[10px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/20">
               {project.bancoInfo.contaMovimento}
@@ -429,6 +507,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {summaryDiverges && (
+        <div
+          role="status"
+          className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <div>
+            <p className="font-semibold">O detalhamento local ainda diverge do resumo validado</p>
+            <p className="mt-0.5 text-xs text-amber-100/70">
+              Os cartões mostram a revisão validada. A lista mantém o estado local até a importação do
+              vínculo individual de cada lançamento.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Trava Legal Gauges & Compliance Rules */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -497,12 +591,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold text-slate-200">Conciliação do Extrato</span>
             <span className="text-xs font-bold px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-              {reconciledTransactions.length} de {debitTransactions.length} Débitos
+              {financialSummary.reconciledDebitCount} de {financialSummary.debitCount} Débitos
             </span>
           </div>
           <p className="text-[11px] text-slate-400 mb-3">
-            {pendingTransactions.length > 0
-              ? `${pendingTransactions.length} débito(s) pendente(s) de Nota Fiscal`
+            {financialSummary.pendingDebitCount > 0
+              ? `${financialSummary.pendingDebitCount} débito(s) pendente(s) de Nota Fiscal`
               : "100% dos débitos amarrados a documentos fiscais"}
           </p>
           <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative">
@@ -510,8 +604,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="bg-cyan-500 h-full rounded-full transition-all"
               style={{
                 width: `${
-                  debitTransactions.length > 0
-                    ? (reconciledTransactions.length / debitTransactions.length) * 100
+                  financialSummary.debitCount > 0
+                    ? (financialSummary.reconciledDebitCount / financialSummary.debitCount) * 100
                     : 100
                 }%`,
               }}
@@ -519,7 +613,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="flex justify-between text-[10px] text-slate-500 mt-1">
             <span>{glosaTransactions.length} Alerta de Glosa</span>
-            <span>{reconciledTransactions.length} Conciliados</span>
+            <span>{financialSummary.reconciledDebitCount} Conciliados</span>
           </div>
         </div>
       </div>
@@ -692,7 +786,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Lançamentos do Extrato Bancário e Conciliação Rápida */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-4">
+      <div
+        id="project-transactions"
+        ref={transactionsSectionRef}
+        className="scroll-mt-6 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-4"
+      >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400">
@@ -735,7 +833,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
             <button
-              onClick={() => setTxStatusFilter("ALL")}
+              onClick={() => selectTransactionStatus("ALL")}
               className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
                 txStatusFilter === "ALL"
                   ? "bg-slate-700 text-white font-bold"
@@ -745,7 +843,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Todos ({safeTransactions.length})
             </button>
             <button
-              onClick={() => setTxStatusFilter("CONCILIADO")}
+              onClick={() => selectTransactionStatus("CONCILIADO")}
               className={`px-3 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1 ${
                 txStatusFilter === "CONCILIADO"
                   ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold"
@@ -756,7 +854,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Conciliados ({reconciledTransactions.length})
             </button>
             <button
-              onClick={() => setTxStatusFilter("DEBITO")}
+              onClick={() => selectTransactionStatus("DEBITO")}
               className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
                 txStatusFilter === "DEBITO"
                   ? "bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold"
@@ -766,7 +864,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Débitos ({debitTransactions.length})
             </button>
             <button
-              onClick={() => setTxStatusFilter("PENDENTE")}
+              onClick={() => selectTransactionStatus("PENDENTE")}
               className={`px-3 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1 ${
                 txStatusFilter === "PENDENTE"
                   ? "bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold"
@@ -774,21 +872,61 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               }`}
             >
               <AlertTriangle className="w-3 h-3 text-amber-400" />
-              Pendentes ({pendingTransactions.length})
+              Pendentes ({financialSummary.pendingDebitCount})
             </button>
           </div>
 
-          <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Buscar por descrição, valor..."
-              value={txSearch}
-              onChange={(e) => setTxSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-950/80 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-            />
+          <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
+            <div className="relative w-full sm:w-56">
+              <Filter className="w-3.5 h-3.5 text-amber-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <select
+                aria-label="Categoria da despesa"
+                value={expenseCategoryFilter}
+                onChange={(event) => {
+                  const category = event.target.value as ExpenseCategory | "ALL";
+                  setExpenseCategoryFilter(category);
+                  if (category !== "ALL") setTxStatusFilter("PENDENTE");
+                  setShowAllPreviewTransactions(false);
+                }}
+                className="w-full appearance-none pl-8 pr-8 py-1.5 bg-slate-950/80 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+              >
+                <option value="ALL">Categoria da despesa</option>
+                {EXPENSE_CATEGORY_ORDER.map((category) => {
+                  const count = pendingCategoryCounts.get(category) || 0;
+                  return count > 0 ? (
+                    <option key={category} value={category}>
+                      {EXPENSE_CATEGORY_LABELS[category]} ({count})
+                    </option>
+                  ) : null;
+                })}
+              </select>
+            </div>
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar por descrição, valor..."
+                value={txSearch}
+                onChange={(e) => setTxSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 bg-slate-950/80 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
           </div>
         </div>
+
+        {txStatusFilter === "PENDENTE" && pendingDetailMismatch && (
+          <div
+            role="status"
+            className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-100"
+          >
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+            <p>
+              O resumo validado registra <strong>{financialSummary.pendingDebitCount} pendências</strong>, mas
+              apenas <strong>{pendingTransactions.length}</strong> estão identificadas individualmente nesta
+              base. A lista abaixo mostra somente lançamentos confirmados, sem estimativas.
+            </p>
+          </div>
+        )}
 
         {/* Transactions Table Preview */}
         <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60">
@@ -809,22 +947,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {filteredPreviewTransactions.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-slate-400">
-                    Nenhum lançamento bancário encontrado para os filtros selecionados.
+                    {txStatusFilter === "PENDENTE" && pendingDetailMismatch
+                      ? "Os lançamentos pendentes ainda não foram identificados individualmente nesta base."
+                      : "Nenhum lançamento bancário encontrado para os filtros selecionados."}
                   </td>
                 </tr>
               ) : (
-                filteredPreviewTransactions.slice(0, 10).map((tx, idx) => {
+                visiblePreviewTransactions.map((tx, idx) => {
                   const rubric = safeRubrics.find(
                     (r) => r.id === tx.rubricaId || r.id === tx.matchedRubricId || r.id === tx.idRubricaVinculada
                   );
                   const isDebit = tx.tipo === "DEBITO" || tx.tipo === "TARIFA" || !tx.tipo || (tx as any).tipoMovimento === "DEBIT";
                   const isCredit = tx.tipo === "CREDITO" || tx.tipo === "RENDIMENTO" || tx.tipo === "RESGATE" || (tx as any).tipoMovimento === "CREDIT";
                   const matchedDoc = safeDocuments.find((d) => d.id === tx.matchedDocId || d.id === tx.idDocumentoFiscalVinculado);
-                  const isReconciled =
-                    tx.status === "CONCILIADO" ||
-                    tx.statusConciliacao === "Conciliado" ||
-                    (tx as any).status === "Conciliado" ||
-                    Boolean(matchedDoc);
+                  const isReconciled = isTransactionReconciled(tx);
+                  const expenseCategory = resolveExpenseCategory(tx, safeRubrics);
 
                   const providerInfo = resolveProviderAndCompany(
                     matchedDoc?.fornecedorNome || tx.favorecido || tx.descricao || "",
@@ -832,7 +969,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   );
 
                   return (
-                    <tr key={tx.id || idx} className="hover:bg-slate-800/40 transition">
+                    <tr key={getTransactionRowKey(tx, idx)} className="hover:bg-slate-800/40 transition">
                       <td className="py-2.5 px-3 font-mono font-bold text-slate-400 text-center text-xs">
                         #{String(idx + 1).padStart(3, "0")}
                       </td>
@@ -874,7 +1011,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {isDebit ? "- " : "+ "}
                         {formatCurrency(tx.valor)}
                       </td>
-                      <td className="py-2.5 px-3 max-w-xs truncate">
+                      <td className="py-2.5 px-3 max-w-xs">
                         {rubric ? (
                           <div>
                             <div className="text-slate-200 text-[11px] font-medium truncate" title={rubric.nome || rubric.nomeRubrica}>
@@ -886,6 +1023,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           </div>
                         ) : (
                           <span className="text-slate-500 italic text-[11px]">Não vinculada</span>
+                        )}
+                        {isDebit && (
+                          <div className="mt-1">
+                            <span className="inline-flex rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
+                              {EXPENSE_CATEGORY_LABELS[expenseCategory]}
+                            </span>
+                          </div>
                         )}
                       </td>
                       <td className="py-2.5 px-3 whitespace-nowrap text-center">
@@ -923,17 +1067,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 text-xs text-slate-400">
           <span>
-            Exibindo <strong>{Math.min(10, filteredPreviewTransactions.length)}</strong> de{" "}
+            Exibindo <strong>{visiblePreviewTransactions.length}</strong> de{" "}
             <strong>{filteredPreviewTransactions.length}</strong> lançamentos filtrados (Total no projeto:{" "}
             <strong className="text-white">{safeTransactions.length}</strong>)
           </span>
 
-          <button
-            onClick={() => onNavigateTab("reconciliation")}
-            className="text-xs text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1"
-          >
-            Ver todos os {safeTransactions.length} lançamentos na tela de Extrato e Conciliação Bancária &rarr;
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {filteredPreviewTransactions.length > 10 && (
+              <button
+                type="button"
+                onClick={() => setShowAllPreviewTransactions((current) => !current)}
+                className="text-xs text-amber-300 hover:text-amber-200 font-bold flex items-center gap-1"
+              >
+                {showAllPreviewTransactions
+                  ? "Mostrar somente 10"
+                  : `Mostrar todos os ${filteredPreviewTransactions.length}`}
+              </button>
+            )}
+            <button
+              onClick={() => onNavigateTab("reconciliation")}
+              className="text-xs text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1"
+            >
+              Abrir tela completa de Extrato e Conciliação Bancária &rarr;
+            </button>
+          </div>
         </div>
       </div>
     </div>
