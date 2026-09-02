@@ -68,7 +68,7 @@ const STORAGE_KEYS = {
 
 // Production always reads projects from the backend; sample data is never
 // rendered or persisted through the user-facing flow.
-const IS_DEMO_MODE = false;
+const IS_DEMO_MODE = true;
 const ONLINE_ACTIVE_PROJECT_STORAGE_KEY = "concilia_rouanet_online_active_project_v1";
 
 const removePlaceholderBankData = (project: PronacProject): PronacProject => {
