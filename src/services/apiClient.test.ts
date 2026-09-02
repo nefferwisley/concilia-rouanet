@@ -26,6 +26,15 @@ describe("API URLs", () => {
     });
   });
 
+  it("never defaults to localhost when no browser origin is available", () => {
+    return import("./apiClient").then(({ resolveApiUrls }) => {
+      expect(resolveApiUrls()).toEqual({
+        apiBaseUrl: "/api/v1",
+        healthUrl: "/health",
+      });
+    });
+  });
+
   it("maps the FastAPI project envelope without inventing dashboard fields", async () => {
     vi.stubGlobal(
       "fetch",
