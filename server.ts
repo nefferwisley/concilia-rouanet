@@ -709,8 +709,7 @@ function extractProjectDeterministically(files: any[]): any {
   const hasExternalBankStatement = files.some((file) => {
     const name = String(file?.name || "").toLowerCase();
     const text = String(file?.textContent || "").toUpperCase();
-    return name.endsWith(".ofx") || name.endsWith(".qfx") ||
-      (name.endsWith(".csv") && /(?:EXTRATO|BANCO|OFX)/.test(name)) ||
+    return name.endsWith(".ofx") || name.endsWith(".qfx") || name.endsWith(".csv") ||
       text.includes("<OFX>");
   });
 

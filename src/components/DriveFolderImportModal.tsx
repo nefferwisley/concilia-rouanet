@@ -412,10 +412,10 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
             const candidateName = String(candidateProject.nome || "").trim();
             const candidatePronac = String(candidateProject.pronac || "").trim();
             const candidateAccount = String(candidateProject.bancoInfo?.contaMovimento || "").trim();
-            if (candidateName && !/projeto importado|pronac n[aã]o identificado/i.test(candidateName)) {
+            if (!extractedProject.nome && candidateName && !/projeto importado|pronac n[aã]o identificado/i.test(candidateName)) {
               extractedProject.nome = candidateName;
             }
-            if (candidatePronac && !/n[aã]o identificado/i.test(candidatePronac)) {
+            if (!extractedProject.pronac && candidatePronac && !/n[aã]o identificado/i.test(candidatePronac)) {
               extractedProject.pronac = candidatePronac;
             }
             if (candidateAccount) {
@@ -425,12 +425,22 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
                 contaMovimento: candidateAccount,
               };
             }
-            if (candidateProject.status) extractedProject.status = candidateProject.status;
-            if (candidateProject.resumoProjeto) extractedProject.resumoProjeto = candidateProject.resumoProjeto;
-            if (Number.isFinite(candidateProject.valorCaptado) && candidateProject.valorCaptado > 0) {
+            if (!extractedProject.proponente && candidateProject.proponente) extractedProject.proponente = candidateProject.proponente;
+            if (!extractedProject.cnpjCpf && candidateProject.cnpjCpf) extractedProject.cnpjCpf = candidateProject.cnpjCpf;
+            if (!extractedProject.segmento && candidateProject.segmento) extractedProject.segmento = candidateProject.segmento;
+            if (!extractedProject.artigoEnquadramento && candidateProject.artigoEnquadramento) extractedProject.artigoEnquadramento = candidateProject.artigoEnquadramento;
+            if (!extractedProject.dataInicioVigencia && candidateProject.dataInicioVigencia) extractedProject.dataInicioVigencia = candidateProject.dataInicioVigencia;
+            if (!extractedProject.dataFimVigencia && candidateProject.dataFimVigencia) extractedProject.dataFimVigencia = candidateProject.dataFimVigencia;
+            if (!extractedProject.prazoLimitePrestacao && candidateProject.prazoLimitePrestacao) extractedProject.prazoLimitePrestacao = candidateProject.prazoLimitePrestacao;
+            if (!extractedProject.status && candidateProject.status) extractedProject.status = candidateProject.status;
+            if (!extractedProject.resumoProjeto && candidateProject.resumoProjeto) extractedProject.resumoProjeto = candidateProject.resumoProjeto;
+            if (!extractedProject.valorAprovado && Number.isFinite(candidateProject.valorAprovado) && candidateProject.valorAprovado > 0) {
+              extractedProject.valorAprovado = candidateProject.valorAprovado;
+            }
+            if (!extractedProject.valorCaptado && Number.isFinite(candidateProject.valorCaptado) && candidateProject.valorCaptado > 0) {
               extractedProject.valorCaptado = candidateProject.valorCaptado;
             }
-            if (Number.isFinite(candidateProject.valorExecutado) && candidateProject.valorExecutado > 0) {
+            if (!extractedProject.valorExecutado && Number.isFinite(candidateProject.valorExecutado) && candidateProject.valorExecutado > 0) {
               extractedProject.valorExecutado = candidateProject.valorExecutado;
             }
             processedFiles += batch.length;
@@ -705,16 +715,25 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
       setStatus("done");
       setStatusMessage(`Extração e sincronização Shadow Ledger concluídas com sucesso! ${result.data.importedFilesCount || files.length} arquivos processados.`);
 
+      const importedProject: PronacProject = {
+        ...activeProject,
+        ...result.data.project,
+        id: activeProject.id,
+        bancoInfo: {
+          ...activeProject.bancoInfo,
+          ...(result.data.project.bancoInfo || {}),
+        },
+      };
       const synced = runRealtimeTripartiteReconciliation(
         result.data.transactions || [],
         result.data.documents || [],
         result.data.rubrics || [],
-        activeProject
+        importedProject
       );
 
       setTimeout(() => {
         onImportComplete({
-          project: activeProject,
+          project: importedProject,
           rubrics: synced.rubrics,
           transactions: synced.transactions,
           documents: synced.documents,
