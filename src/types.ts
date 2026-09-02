@@ -48,9 +48,9 @@ export interface BankAccountInfo {
   agencia: string;
   contaCaptacao: string; // Conta Bloqueada
   contaMovimento: string; // Conta Livre Movimento
-  saldoBloqueado: number;
-  saldoMovimento: number;
-  rendimentoAplicacao: number;
+  saldoBloqueado?: number;
+  saldoMovimento?: number;
+  rendimentoAplicacao?: number;
   /** True only when an OFX/CSV (or equivalent bank statement) was imported. */
   extratoBancarioImportado?: boolean;
   /** Prevents planilha-derived movements from being labelled as a bank statement. */
@@ -184,7 +184,7 @@ export interface FiscalDocument {
     inss?: number;
     outras?: number;
   };
-  valorLiquido: number;
+  valorLiquido?: number;
   rubricaId?: string;
   idRubrica?: string;
   idTransacao?: string;

@@ -102,7 +102,7 @@ export class TigerBeetleReconciliationLedger {
     this.idempotencyCollisionsPrevented = 0;
 
     // 1. Initial Resource Grants (Aporte FSA / Captação)
-    const valorAprovadoOuCaptado = project.valorCaptado || project.valorAprovado || 835000.0;
+    const valorAprovadoOuCaptado = project.valorCaptado || project.valorAprovado || 0;
     this.postTransfer(
       "RECURSOS_CAPTADOS_FSA",
       "CONTA_VINCULADA_BB",

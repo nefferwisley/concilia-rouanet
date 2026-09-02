@@ -76,6 +76,7 @@ export const ReconciliationCoreSkillsView: React.FC<ReconciliationCoreSkillsView
     )
   );
   const [schemaExtractionResult, setSchemaExtractionResult] = useState<any>(null);
+  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado === true;
 
   // 1. Build TigerBeetle Ledger
   const ledgerReport = useMemo(() => {
@@ -254,6 +255,12 @@ export const ReconciliationCoreSkillsView: React.FC<ReconciliationCoreSkillsView
           </div>
         </div>
 
+        {!hasImportedBankStatement && (
+          <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+            Base atual: planilha de controle. O extrato OFX/CSV não foi anexado; este motor pode analisar vínculos documentais, mas não certifica partidas bancárias nem saldo bancário.
+          </div>
+        )}
+
         {/* Global Metric Badges */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-800/80">
           <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3">
@@ -261,9 +268,9 @@ export const ReconciliationCoreSkillsView: React.FC<ReconciliationCoreSkillsView
               <Scale className="w-3 h-3 text-emerald-400" /> Partidas Dobradas
             </span>
             <div className="text-base font-bold font-mono text-emerald-400 mt-0.5">
-              {ledgerReport.report.isBalanced ? "100% Equilibrado" : "Divergência"}
+              {!hasImportedBankStatement ? "Aguardando OFX/CSV" : ledgerReport.report.isBalanced ? "100% Equilibrado" : "Divergência"}
             </div>
-            <span className="text-[10px] text-slate-500">Zero-Sum Ledger Engine</span>
+            <span className="text-[10px] text-slate-500">{hasImportedBankStatement ? "Zero-Sum Ledger Engine" : "Movimentos derivados da planilha"}</span>
           </div>
 
           <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3">
@@ -435,8 +442,9 @@ export const ReconciliationCoreSkillsView: React.FC<ReconciliationCoreSkillsView
                   Total Créditos: <strong className="text-emerald-400">{formatCurrency(ledgerReport.report.totalCredits)}</strong>
                 </span>
               </div>
-              <span className="text-emerald-400 font-bold flex items-center gap-1">
-                <CheckCircle2 className="w-4 h-4" /> Diferença: {formatCurrency(ledgerReport.report.difference)} (Partidas Dobradas 100% OK)
+              <span className={`${hasImportedBankStatement ? "text-emerald-400" : "text-amber-400"} font-bold flex items-center gap-1`}>
+                {hasImportedBankStatement ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                Diferença: {formatCurrency(ledgerReport.report.difference)} ({hasImportedBankStatement ? "Partidas Dobradas 100% OK" : "aguardando validação pelo extrato"})
               </span>
             </div>
 
