@@ -25,17 +25,7 @@ import {
 import JSZip from "jszip";
 import { PronacProject, BudgetRubric, BankTransaction, FiscalDocument, AuditAlert, TripartiteEntry } from "../types";
 import { requestGoogleDriveToken } from "../services/googleDriveService";
-import { buildManifest } from "../features/import/buildManifest";
-import { ApiClient } from "../services/apiClient";
 import { runRealtimeTripartiteReconciliation } from "../utils/shadowLedger";
-import {
-  initialProjects,
-  initialRubrics,
-  initialTransactions,
-  initialDocuments,
-  initialAlerts,
-  initialTripartiteEntries,
-} from "../data/mockData";
 
 export interface UploadedFileItem {
   id: string;
@@ -51,6 +41,12 @@ export interface UploadedFileItem {
 
 interface DriveFolderImportModalProps {
   isOpen: boolean;
+  activeProject: PronacProject;
+  currentRubrics: BudgetRubric[];
+  currentTransactions: BankTransaction[];
+  currentDocuments: FiscalDocument[];
+  currentAlerts: AuditAlert[];
+  currentTripartiteEntries: TripartiteEntry[];
   onClose: () => void;
   onImportComplete: (data: {
     project: PronacProject;
@@ -64,6 +60,12 @@ interface DriveFolderImportModalProps {
 
 export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
   isOpen,
+  activeProject,
+  currentRubrics,
+  currentTransactions,
+  currentDocuments,
+  currentAlerts,
+  currentTripartiteEntries,
   onClose,
   onImportComplete,
 }) => {
@@ -80,24 +82,6 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
-
-  const handleActivateProject1961 = () => {
-    const proj = initialProjects[0];
-    setStatus("done");
-    setProgressPercent(100);
-    setStatusMessage("Ativando Projeto 1961 com todos os 195 lançamentos e 109 rubricas...");
-    setTimeout(() => {
-      onImportComplete({
-        project: proj,
-        rubrics: initialRubrics[proj.id] || [],
-        transactions: initialTransactions[proj.id] || [],
-        documents: initialDocuments[proj.id] || [],
-        alerts: initialAlerts[proj.id] || [],
-        tripartiteEntries: initialTripartiteEntries[proj.id] || [],
-      });
-      onClose();
-    }, 300);
-  };
 
   if (!isOpen) return null;
 
@@ -377,161 +361,139 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
         ? uploadedItems
         : uploadedItems.filter((item) => item.subfolder === selectedSubfolderFilter);
         
-    // Fast & Ultra-Optimized Extraction
     const handleStartExtraction = async () => {
     setStatus("processing");
     setProgressPercent(5);
-    setStatusMessage("Calculando hashes SHA-256 localmente...");
+    setStatusMessage(`Preparando os arquivos de ${activeProject.nome}...`);
 
     try {
       if (activeTab === "folder_files" && uploadedItems.length > 0) {
-        // Obter arquivos reais
-        const filesToImport = uploadedItems.map(item => item.file).filter(Boolean) as File[];
-        
-        // 1. Calcular Manifesto
-        const manifest = await buildManifest(filesToImport);
-        setProgressPercent(20);
-        setStatusMessage(`Manifesto gerado. Inicializando importação no backend...`);
+        const token = localStorage.getItem("rouanet_auth_token");
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+        const baseUrl = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:8000/api/v1" : `${window.location.origin}/api/v1`);
+        const normalizeId = (value: string) => value.replace(/\D/g, "");
+        const activePronac = normalizeId(activeProject.pronac || "");
+        if (!activePronac) throw new Error("O projeto selecionado precisa ter um PRONAC válido antes da importação.");
 
-        // 2. Criar Importacao
-        const apiClient = ApiClient.getInstance();
-        const manifestPayload = {
-          files: manifest.map(m => ({
-            relativePath: m.relativePath,
-            originalName: m.originalName,
-            browserMime: m.browserMime,
-            sizeBytes: m.sizeBytes,
-            sha256: m.sha256
-          }))
-        };
-        
-        // Use default project ID
-        const projectId = initialProjects[0].id;
-        
-        let importResult;
-        try {
-           const token = localStorage.getItem("rouanet_auth_token");
-           const headers: any = { "Content-Type": "application/json" };
-           if (token) headers["Authorization"] = `Bearer ${token}`;
-           const baseUrl = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:8000/api/v1" : `${window.location.origin}/api/v1`);
-           const res = await fetch(`${baseUrl}/projetos/${projectId}/imports`, {
-               method: "POST",
-               headers,
-               body: JSON.stringify(manifestPayload)
-           });
-           if (!res.ok) throw new Error("HTTP " + res.status);
-           importResult = await res.json();
-        } catch (e: any) {
-           console.warn("Backend indisponível, ativando simulação de importação local.", e);
-           // Fallback for demo mode when Python backend is not running
-           importResult = {
-             importacao_id: `demo-import-${Date.now()}`,
-             files: manifestPayload.files.map((f, i) => ({ file_id: `fake-${i}`, sha256: f.sha256 }))
-           };
+        const projectsResponse = await fetch(`${baseUrl}/projetos?pronac=${encodeURIComponent(activeProject.pronac)}&limit=100`, { headers });
+        if (!projectsResponse.ok) throw new Error(`Não foi possível localizar o projeto (${projectsResponse.status}).`);
+        const projectsPayload = await projectsResponse.json();
+        const onlineProjects = projectsPayload.projetos || [];
+        let onlineProject = onlineProjects.find(
+          (project: any) => normalizeId(project.pronac || "") === activePronac
+        );
+
+        if (!onlineProject) {
+          const createResponse = await fetch(`${baseUrl}/projetos`, {
+            method: "POST",
+            headers: { ...headers, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              pronac: activeProject.pronac,
+              nome: activeProject.nome,
+              proponente: activeProject.proponente,
+              banco_nome: activeProject.bancoInfo?.banco,
+              agencia: activeProject.bancoInfo?.agencia,
+              conta: activeProject.bancoInfo?.contaMovimento,
+            }),
+          });
+          if (!createResponse.ok) throw new Error(`Não foi possível cadastrar o projeto de destino (${createResponse.status}).`);
+          onlineProject = await createResponse.json();
+        }
+        if (normalizeId(onlineProject.pronac || "") !== activePronac) {
+          throw new Error("O projeto online não corresponde ao PRONAC selecionado. A importação foi cancelada.");
         }
 
-        const importId = importResult.importacao_id;
-        const serverFiles = importResult.files || [];
+        setProgressPercent(15);
+        setStatusMessage(`Enviando ${uploadedItems.length} arquivos para ${activeProject.nome}...`);
+        const zip = new JSZip();
+        uploadedItems.forEach((item) => {
+          const path = item.relativePath || item.name;
+          if (item.file) zip.file(path, item.file);
+          else if (item.base64) zip.file(path, item.base64, { base64: true });
+          else if (item.textContent !== undefined) zip.file(path, item.textContent);
+        });
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const formData = new FormData();
+        formData.append("comprovantes", new File([zipBlob], `${activeProject.pronac}-documentos.zip`, { type: "application/zip" }));
+        const importResponse = await fetch(`${baseUrl}/projetos/${onlineProject.id}/importar-pasta`, {
+          method: "POST",
+          headers,
+          body: formData,
+        });
+        if (!importResponse.ok) throw new Error(`Falha ao iniciar a extração (${importResponse.status}).`);
+        const { conciliacao_id: conciliacaoId } = await importResponse.json();
 
-        // 3. Enviar conteúdo arquivo a arquivo
-        let uploaded = 0;
-        const total = manifest.length;
-        
-        for (const item of manifest) {
-           const serverFile = serverFiles.find((f: any) => f.sha256 === item.sha256);
-           if (!serverFile) continue;
-           
-           setStatusMessage(`Enviando ${item.originalName} (${uploaded + 1}/${total})...`);
-           
-           try {
-             const formData = new FormData();
-             formData.append("arquivo", item.file);
-             
-             // PUT /api/v1/importacoes/{importacao_id}/arquivos/{file_id}/conteudo
-             const token = localStorage.getItem("rouanet_auth_token");
-             const headers: any = {};
-             if (token) headers["Authorization"] = `Bearer ${token}`;
-             
-             const url = `/importacoes/${importId}/arquivos/${serverFile.file_id}/conteudo`;
-             
-             // Usar fetch diretamente para usar FormData
-             const baseUrl = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:8000/api/v1" : `${window.location.origin}/api/v1`);
-             const res = await fetch(`${baseUrl}${url}`, {
-                method: "PUT",
-                headers,
-                body: formData
-             });
-             
-             if (!res.ok) {
-                 if (res.status === 422 || res.status === 404) {
-                     console.error(`Falha ao enviar ${item.originalName}: HTTP ${res.status}`);
-                     // Elegantly allow retry? 
-                 } else {
-                     throw new Error(`HTTP ${res.status}`);
-                 }
-             }
-           } catch (e) {
-             console.error(`Erro de rede enviando ${item.originalName}:`, e);
-           }
-           
-           uploaded++;
-           setProgressPercent(20 + Math.round((uploaded / total) * 70));
+        let extractionStatus: any;
+        for (let attempt = 0; attempt < 300; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1200));
+          const statusResponse = await fetch(`${baseUrl}/conciliacao/${conciliacaoId}`, { headers });
+          if (!statusResponse.ok) throw new Error(`Falha ao acompanhar a extração (${statusResponse.status}).`);
+          extractionStatus = await statusResponse.json();
+          setProgressPercent(extractionStatus.progresso || 20);
+          setStatusMessage(extractionStatus.etapa || "Processando arquivos...");
+          if (extractionStatus.status === "erro") throw new Error(extractionStatus.erro_fatal || "Falha na extração.");
+          if (extractionStatus.status === "sucesso") break;
         }
+        if (extractionStatus?.status !== "sucesso") throw new Error("A extração excedeu o tempo máximo de espera.");
+
+        const [bankResponse, rubricsResponse] = await Promise.all([
+          fetch(`${baseUrl}/projetos/${onlineProject.id}/extrato/pendentes`, { headers }),
+          fetch(`${baseUrl}/projetos/${onlineProject.id}/rubricas`, { headers }),
+        ]);
+        if (!bankResponse.ok) throw new Error(`Os arquivos foram processados, mas os lançamentos não puderam ser carregados (${bankResponse.status}).`);
+        const bankPayload = await bankResponse.json();
+        const rubricsPayload = rubricsResponse.ok ? await rubricsResponse.json() : { rubricas: [] };
+        const bankMovements: BankTransaction[] = (bankPayload.movimentos || []).map((movement: any) => ({
+          id: movement.id,
+          data: movement.data,
+          tipo: movement.tipo,
+          valor: Math.abs(Number(movement.valor || 0)),
+          descricaoExtrato: movement.historico,
+          descricaoOriginalExtrato: movement.historico,
+          documentoBancario: movement.documento,
+          status: movement.status_conciliacao === "CONCILIADO" ? "CONCILIADO" : "PENDENTE",
+          statusConciliacao: movement.status_conciliacao,
+        }));
+        const documentTransactions: BankTransaction[] = (bankPayload.transacoes || []).map((transaction: any) => ({
+          id: transaction.id,
+          data: transaction.data_pagamento,
+          tipo: "DEBITO",
+          valor: Math.abs(Number(transaction.valor_bruto || 0)),
+          descricaoExtrato: transaction.fornecedor || transaction.razao_social || transaction.prestador || "Pagamento importado",
+          descricaoOriginalExtrato: transaction.fornecedor || transaction.razao_social || transaction.prestador,
+          documentoBancario: transaction.documento,
+          favorecido: transaction.fornecedor || transaction.razao_social || transaction.prestador,
+          matchedRubricId: transaction.rubrica_codigo,
+          status: transaction.status === "CONCILIADO" ? "CONCILIADO" : "PENDENTE",
+          statusConciliacao: transaction.status,
+        }));
+        const importedTransactions = bankMovements.length > 0 ? bankMovements : documentTransactions;
+        const importedRubrics: BudgetRubric[] = (rubricsPayload.rubricas || []).map((rubric: any) => ({
+          id: rubric.id,
+          itemNumero: rubric.codigo,
+          nome: rubric.descricao,
+          nomeRubrica: rubric.descricao,
+          descricaoDetalhada: rubric.descricao_completa,
+          valorAprovado: Number(rubric.valor_orcado || 0),
+          valorTotalAprovado: Number(rubric.valor_orcado || 0),
+          valorExecutado: 0,
+          etapa: "Orçamento do projeto",
+        }));
+        const transactions = importedTransactions.length > 0 ? importedTransactions : currentTransactions;
+        const rubrics = importedRubrics.length > 0 ? importedRubrics : currentRubrics;
 
         setProgressPercent(100);
         setStatus("done");
-        setStatusMessage("Upload concluído! Os arquivos estão sendo processados em background.");
-
-        // Atualizar lista chamando API de conciliação ou via atualização de estado local
-        setTimeout(() => {
-           try {
-              // Mapear os arquivos recém-enviados para as transações para satisfazer o check do "Comp. BB"
-              const projId = initialProjects[0].id;
-              const baseTxs = initialTransactions[projId] || [];
-              const baseDocs = initialDocuments[projId] || [];
-              const baseRubs = initialRubrics[projId] || [];
-              
-              const updatedTxs = baseTxs.map(tx => {
-                 // Extrair o número do id da transação (ex: 'tx-1961-36' -> '36')
-                 const txNumMatch = tx.id.match(/-(\d+)$/);
-                 const txNum = txNumMatch ? txNumMatch[1] : null;
-                 
-                 let hasReceipt = tx.temComprovante;
-                 if (txNum) {
-                    const fileMatch = manifest.find(f => f.originalName.startsWith(`${txNum}.`));
-                    if (fileMatch) {
-                       hasReceipt = true;
-                       // Hack para forçar a UI a ler que tem comprovante e passar no "Falta BB"
-                       (tx as any).comprovanteUrl = fileMatch.sha256; 
-                    }
-                 }
-                 // Como o usuário afirmou que "os comprovantes estao na pasta do projeto sempre",
-                 // também podemos assumir true para todos os que tiveram importação.
-                 return { ...tx, temComprovante: hasReceipt || true };
-              });
-
-              // Atualizar documentos se houver mock para eles (para manter consistência)
-              const synced = runRealtimeTripartiteReconciliation(
-                 updatedTxs,
-                 baseDocs,
-                 baseRubs,
-                 initialProjects[0]
-              );
-              
-              onImportComplete({
-                 project: initialProjects[0],
-                 rubrics: synced.rubrics,
-                 transactions: synced.transactions,
-                 documents: synced.documents,
-                 alerts: synced.alerts,
-                 tripartiteEntries: synced.tripartiteEntries
-              });
-              onClose();
-           } catch(e) {
-              console.error(e);
-              onClose();
-           }
-        }, 1500);
+        setStatusMessage(`${transactions.length} movimentações carregadas em ${activeProject.nome}.`);
+        onImportComplete({
+          project: activeProject,
+          rubrics,
+          transactions,
+          documents: currentDocuments,
+          alerts: currentAlerts,
+          tripartiteEntries: currentTripartiteEntries,
+        });
+        onClose();
         return;
       }
 
@@ -584,12 +546,12 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
         result.data.transactions || [],
         result.data.documents || [],
         result.data.rubrics || [],
-        result.data.project
+        activeProject
       );
 
       setTimeout(() => {
         onImportComplete({
-          project: result.data.project,
+          project: activeProject,
           rubrics: synced.rubrics,
           transactions: synced.transactions,
           documents: synced.documents,
@@ -604,7 +566,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
       const rawMsg = err.message || "";
       if (rawMsg.includes("503") || rawMsg.includes("high demand") || rawMsg.includes("UNAVAILABLE")) {
         setStatusMessage(
-          "Servidores com alta demanda. Clique no botão 'Ativar Projeto Instantaneamente' abaixo para carregar todos os 195 lançamentos imediatamente sem espera."
+          "Servidores com alta demanda. Aguarde alguns instantes e tente processar a pasta novamente."
         );
       } else {
         setStatusMessage(rawMsg || "Ocorreu um erro ao extrair os arquivos da pasta.");
@@ -667,33 +629,6 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
 
         {activeTab === "folder_files" ? (
           <div className="space-y-4">
-            {/* Quick 1-Click Load for Project 1961 (Extracted from Drive) */}
-            <div className="bg-gradient-to-r from-emerald-950/60 via-slate-900 to-indigo-950/60 border border-emerald-500/40 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg shadow-emerald-950/30">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
-                  <Zap className="w-5 h-5 text-emerald-400" />
-                </div>
-                <div>
-                  <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2 flex-wrap">
-                    Projeto 1961 (FSA/ANCINE)
-                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono border border-emerald-500/30 font-bold">
-                      Instantâneo • 195 Lançamentos • 109 Rubricas
-                    </span>
-                  </h4>
-                  <p className="text-[11px] text-slate-300 mt-0.5">
-                    Carregamento imediato em 1 segundo com todas as subpastas e extratos BB 8768-8
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleActivateProject1961}
-                className="w-full sm:w-auto px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-lg transition shadow-md shadow-emerald-500/20 shrink-0 text-center flex items-center justify-center gap-1.5"
-              >
-                <Sparkles className="w-3.5 h-3.5" /> Ativar Projeto Agora
-              </button>
-            </div>
-
             {/* Dropzone with multi-mode selection: Folder with subfolders, ZIP, Files */}
             <div
               onDragOver={(e) => {
@@ -971,7 +906,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
           </p>
         </div>
 
-        {/* Status, Live Progress Bar & Fast Action Button */}
+        {/* Status and live progress */}
         {status !== "idle" && (
           <div
             className={`p-3.5 sm:p-4 rounded-xl border text-xs space-y-3 ${
@@ -996,16 +931,6 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
                 </div>
               </div>
 
-              {/* Fast Instant Load Button */}
-              <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-                <button
-                  type="button"
-                  onClick={handleActivateProject1961}
-                  className="w-full sm:w-auto px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg transition shadow text-xs flex items-center justify-center gap-1.5"
-                >
-                  <Zap className="w-3.5 h-3.5" /> Ativar Instantaneamente
-                </button>
-              </div>
             </div>
 
             {/* Visual Animated Progress Bar */}

@@ -122,7 +122,7 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState<string>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.ACTIVE_ID);
-      if (saved && initialProjects.some((p) => p.id === saved)) return saved;
+      if (saved && projects.some((p) => p.id === saved)) return saved;
     } catch (e) {
       console.warn("Could not load saved active id:", e);
     }
@@ -334,29 +334,29 @@ export default function App() {
   const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0] || initialProjects[0];
 
   const currentRubrics: BudgetRubric[] =
-    Array.isArray(allRubrics[activeProjectId]) && allRubrics[activeProjectId].length > 0
+    Array.isArray(allRubrics[activeProjectId])
       ? allRubrics[activeProjectId]
-      : initialRubrics[activeProjectId] || [];
+      : [];
 
   const currentTransactions: BankTransaction[] =
-    Array.isArray(allTransactions[activeProjectId]) && allTransactions[activeProjectId].length > 0
+    Array.isArray(allTransactions[activeProjectId])
       ? allTransactions[activeProjectId]
-      : initialTransactions[activeProjectId] || [];
+      : [];
 
   const currentDocuments: FiscalDocument[] =
-    Array.isArray(allDocuments[activeProjectId]) && allDocuments[activeProjectId].length > 0
+    Array.isArray(allDocuments[activeProjectId])
       ? allDocuments[activeProjectId]
-      : initialDocuments[activeProjectId] || [];
+      : [];
 
   const currentAlerts: AuditAlert[] =
-    Array.isArray(allAlerts[activeProjectId]) && allAlerts[activeProjectId].length > 0
+    Array.isArray(allAlerts[activeProjectId])
       ? allAlerts[activeProjectId]
-      : initialAlerts[activeProjectId] || [];
+      : [];
 
   const currentTripartiteEntries: TripartiteEntry[] =
-    Array.isArray(allTripartiteEntries[activeProjectId]) && allTripartiteEntries[activeProjectId].length > 0
+    Array.isArray(allTripartiteEntries[activeProjectId])
       ? allTripartiteEntries[activeProjectId]
-      : initialTripartiteEntries[activeProjectId] || [];
+      : [];
 
   // Dynamic recalculation of executed total based on documents & transactions
   const totalExecutadoCalc = currentTransactions
@@ -567,8 +567,13 @@ export default function App() {
   // Handle New Project Creation
   const handleCreateProject = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProjectForm.pronac || !newProjectForm.nome) {
+    const normalizedPronac = newProjectForm.pronac.replace(/\D/g, "");
+    if (!normalizedPronac || !newProjectForm.nome) {
       alert("Por favor, preencha o número do PRONAC e o Nome do Projeto.");
+      return;
+    }
+    if (projects.some((project) => project.pronac.replace(/\D/g, "") === normalizedPronac)) {
+      alert("Já existe um projeto cadastrado com este PRONAC.");
       return;
     }
 
@@ -605,6 +610,7 @@ export default function App() {
     setAllTransactions((prev) => ({ ...prev, [newId]: [] }));
     setAllDocuments((prev) => ({ ...prev, [newId]: [] }));
     setAllAlerts((prev) => ({ ...prev, [newId]: [] }));
+    setAllTripartiteEntries((prev) => ({ ...prev, [newId]: [] }));
     setActiveProjectId(newId);
     setIsNewProjectModalOpen(false);
   };
@@ -1085,6 +1091,12 @@ export default function App() {
       {/* Google Drive Folder Extraction Modal */}
       <DriveFolderImportModal
         isOpen={isDriveModalOpen}
+        activeProject={currentProjectWithLiveStats}
+        currentRubrics={currentRubrics}
+        currentTransactions={currentTransactions}
+        currentDocuments={currentDocuments}
+        currentAlerts={currentAlerts}
+        currentTripartiteEntries={currentTripartiteEntries}
         onClose={() => setIsDriveModalOpen(false)}
         onImportComplete={({ project, rubrics, transactions, documents, alerts, tripartiteEntries }) => {
           // Add project and set as active
