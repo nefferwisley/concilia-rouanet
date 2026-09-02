@@ -68,6 +68,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
+  const hasImportedBankStatement = safeTransactions.length > 0;
 
   const liveFinancialSummary = calculateProjectFinancialSummary(safeTransactions);
   const validatedSummary = project.resumoFinanceiroValidado;
@@ -490,20 +491,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <Banknote className="w-4 h-4 text-cyan-400" /> Saldo em Conta
             </span>
             <span className="text-[10px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/20">
-              {project.bancoInfo.contaMovimento}
+              {hasImportedBankStatement && project.bancoInfo.contaMovimento
+                ? project.bancoInfo.contaMovimento
+                : "Conta não informada"}
             </span>
           </div>
           <div className="text-xl font-bold text-white font-mono">
-            {formatCurrency(project.bancoInfo.saldoMovimento)}
+            {hasImportedBankStatement
+              ? formatCurrency(project.bancoInfo.saldoMovimento)
+              : "Saldo não informado"}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Rendimento Aplicação:</span>
+            <span>{hasImportedBankStatement ? "Rendimento Aplicação:" : "Importe o extrato bancário"}</span>
             <span className="text-amber-400 font-mono font-medium">
-              +{formatCurrency(project.bancoInfo.rendimentoAplicacao)}
+              {hasImportedBankStatement
+                ? `+${formatCurrency(project.bancoInfo.rendimentoAplicacao)}`
+                : "Aguardando dados"}
             </span>
           </div>
           <div className="w-full bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
-            <div className="bg-cyan-400 h-full w-2/3" />
+            <div className={`bg-cyan-400 h-full ${hasImportedBankStatement ? "w-full" : "w-0"}`} />
           </div>
         </div>
       </div>

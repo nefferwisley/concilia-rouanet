@@ -71,6 +71,30 @@ const STORAGE_KEYS = {
 const IS_DEMO_MODE = false;
 const ONLINE_ACTIVE_PROJECT_STORAGE_KEY = "concilia_rouanet_online_active_project_v1";
 
+const removePlaceholderBankData = (project: PronacProject): PronacProject => {
+  const bank = project.bancoInfo;
+  const hasPlaceholderBankData =
+    bank?.agencia === "1821-X" &&
+    bank?.contaCaptacao === "12345-6" &&
+    bank?.contaMovimento === "12345-7" &&
+    bank?.saldoMovimento === 300000;
+
+  if (!hasPlaceholderBankData) return project;
+
+  return {
+    ...project,
+    bancoInfo: {
+      banco: "",
+      agencia: "",
+      contaCaptacao: "",
+      contaMovimento: "",
+      saldoBloqueado: 0,
+      saldoMovimento: 0,
+      rendimentoAplicacao: 0,
+    },
+  };
+};
+
 const isSummaryItem = (item: any) => {
   if (!item) return false;
   const text = `${item.descricaoOriginalExtrato || ""} ${item.favorecido || ""} ${item.numeroDoc || ""} ${item.documentoNumero || ""} ${item.descricaoServico || ""}`.toLowerCase();
@@ -88,7 +112,7 @@ export default function App() {
   const [projects, setProjects] = useState<PronacProject[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
-      if (saved) return JSON.parse(saved);
+      if (saved) return (JSON.parse(saved) as PronacProject[]).map(removePlaceholderBankData);
     } catch (e) {
       console.warn("Could not load saved projects:", e);
     }
@@ -263,16 +287,16 @@ export default function App() {
     dataInicioVigencia: new Date().toISOString().slice(0, 10),
     dataFimVigencia: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
     prazoLimitePrestacao: new Date(Date.now() + (365 + 60) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-    valorAprovado: 300000,
-    valorCaptado: 300000,
+    valorAprovado: 0,
+    valorCaptado: 0,
     valorExecutado: 0,
     bancoInfo: {
-      banco: "Banco do Brasil (001)",
-      agencia: "1821-X",
-      contaCaptacao: "12345-6",
-      contaMovimento: "12345-7",
+      banco: "",
+      agencia: "",
+      contaCaptacao: "",
+      contaMovimento: "",
       saldoBloqueado: 0,
-      saldoMovimento: 300000,
+      saldoMovimento: 0,
       rendimentoAplicacao: 0,
     },
     status: "Em Execução",
@@ -560,16 +584,16 @@ export default function App() {
       dataInicioVigencia: newProjectForm.dataInicioVigencia || "2024-01-01",
       dataFimVigencia: newProjectForm.dataFimVigencia || "2024-12-31",
       prazoLimitePrestacao: newProjectForm.prazoLimitePrestacao || "2025-02-28",
-      valorAprovado: Number(newProjectForm.valorAprovado) || 100000,
-      valorCaptado: Number(newProjectForm.valorCaptado) || 100000,
+      valorAprovado: Number(newProjectForm.valorAprovado) || 0,
+      valorCaptado: Number(newProjectForm.valorCaptado) || 0,
       valorExecutado: 0,
       bancoInfo: {
-        banco: "Banco do Brasil (001)",
-        agencia: newProjectForm.bancoInfo?.agencia || "0001-9",
-        contaCaptacao: newProjectForm.bancoInfo?.contaCaptacao || "10001-1",
-        contaMovimento: newProjectForm.bancoInfo?.contaMovimento || "10001-2",
+        banco: newProjectForm.bancoInfo?.banco || "",
+        agencia: newProjectForm.bancoInfo?.agencia || "",
+        contaCaptacao: newProjectForm.bancoInfo?.contaCaptacao || "",
+        contaMovimento: newProjectForm.bancoInfo?.contaMovimento || "",
         saldoBloqueado: 0,
-        saldoMovimento: Number(newProjectForm.valorCaptado) || 100000,
+        saldoMovimento: 0,
         rendimentoAplicacao: 0,
       },
       status: "Em Execução",

@@ -82,6 +82,26 @@ describe("DashboardView reconciliation summary", () => {
     expect(markup).toContain("Saldo em Conta");
   });
 
+  it("does not present a project balance as real before a bank statement is imported", () => {
+    const markup = renderToStaticMarkup(
+      <DashboardView
+        project={project}
+        rubrics={[]}
+        transactions={[]}
+        documents={[]}
+        alerts={[]}
+        onNavigateTab={() => undefined}
+        onRunAiAudit={() => undefined}
+        isAuditing={false}
+      />,
+    );
+
+    expect(markup).toContain("Saldo não informado");
+    expect(markup).toContain("Conta não informada");
+    expect(markup).toContain("Importe o extrato bancário");
+    expect(markup).not.toContain("R$ 5.344,83");
+  });
+
   it("shows the validated snapshot and warns when local detail disagrees", () => {
     const localTransactions = [...reconciled, ...pending].map((transaction, index) => ({
       ...transaction,
