@@ -1680,6 +1680,7 @@ app.post("/api/gemini/extract-drive-folder", async (req, res) => {
 Analise o conteúdo real dos arquivos da pasta original anexados a este prompt.
 Extraia os dados precisos do projeto (PRONAC, Nome, Proponente, CNPJ, Vigência, Metas, Rubricas, Lançamentos Bancários e Documentos Fiscais).
 Se algum dado não existir nos arquivos, NÃO INVENTE. Deixe nulo ou vazio.
+IMPORTANTE: Para preencher "valorAprovado", se o arquivo não tiver a palavra explícita, procure no topo da tabela de controle por valores de "ENTRADA", "Captação" ou nomes de empresas com grandes aportes (ex: ITAÚ) e some-os. NÃO invente o valor 300000.
 Retorne um JSON válido com a estrutura: { "project": {}, "rubrics": [], "transactions": [], "documents": [], "alerts": [], "tripartiteEntries": [] }`
       });
 
@@ -1789,7 +1790,8 @@ Sua missão é ler o CONTEÚDO REAL de cada arquivo (Plano de Trabalho/Orçament
 
 REGRAS RÍGIDAS DE AUDITORIA:
 1. NÃO invente números de PRONAC, proponentes, rubricas ou valores. Extraia estritamente o que estiver escrito.
-2. Identifique:
+2. IMPORTANTE sobre Orçamento Aprovado: Se não houver uma célula ou aba chamando "Orçamento Aprovado" ou "Valor Aprovado", procure por valores de "Entrada", "Captação", "Patrocínio" (ex: "ITAÚ", "CANDIDO E TERESA") no topo da planilha de controle e use a soma dessas ENTRADAS PRINCIPAIS como o \`valorAprovado\` (não use fallbacks fictícios como 300.000).
+3. Identifique:
    - "project": {
        "id": string,
        "pronac": string,

@@ -375,7 +375,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-2.5">
           {workflowSteps.map((step) => (
             <button
               key={step.id}
@@ -409,7 +409,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <span className="text-slate-400">{validatedSummary?.fonte}</span>
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
         {/* Card 1: Valor Aprovado */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4.5 shadow">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
@@ -532,66 +532,72 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       )}
 
       {/* Trava Legal Gauges & Compliance Rules */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${(adminRubrics.length > 0 || totalAdminExecutado > 0) && (divRubrics.length > 0 || totalDivExecutado > 0) ? "lg:grid-cols-3" : ""} gap-4`}>
         {/* Gauge 1: Custos Administrativos (Máx 15%) */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-200">Custos Administrativos (Teto 15%)</span>
-            <span
-              className={`text-xs font-bold px-2 py-0.5 rounded ${
-                percentAdminOfTotal <= 15
-                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                  : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
-              }`}
-            >
-              {percentAdminOfTotal}% / 15%
-            </span>
+        {(adminRubrics.length > 0 || totalAdminExecutado > 0) && (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-slate-200">Custos Administrativos (Teto 15%)</span>
+              <span
+                className={`text-xs font-bold px-2 py-0.5 rounded ${
+                  percentAdminOfTotal <= 15
+                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                    : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
+                }`}
+              >
+                {percentAdminOfTotal}% / 15%
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mb-3">
+              Total executado: {formatCurrency(totalAdminExecutado)} de {formatCurrency(project.valorExecutado)}
+            </p>
+            <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  percentAdminOfTotal <= 15 ? "bg-emerald-500" : "bg-rose-500"
+                }`}
+                style={{ width: `${Math.min(100, (percentAdminOfTotal / 15) * 100)}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+              <span>0%</span>
+              <span>Limite Legal 15% (IN 01/2023)</span>
+            </div>
           </div>
-          <p className="text-[11px] text-slate-400 mb-3">
-            Total executado: {formatCurrency(totalAdminExecutado)} de {formatCurrency(project.valorExecutado)}
-          </p>
-          <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative">
-            <div
-              className={`h-full rounded-full transition-all ${
-                percentAdminOfTotal <= 15 ? "bg-emerald-500" : "bg-rose-500"
-              }`}
-              style={{ width: `${Math.min(100, (percentAdminOfTotal / 15) * 100)}%` }}
-            />
-          </div>
-          <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-            <span>0%</span>
-            <span>Limite Legal 15% (IN 01/2023)</span>
-          </div>
-        </div>
+        )}
 
         {/* Gauge 2: Divulgação e Comercialização */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-200">Divulgação & Mídia (Teto 30%)</span>
-            <span
-              className={`text-xs font-bold px-2 py-0.5 rounded ${
-                percentDivOfTotal <= 30
-                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                  : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
-              }`}
-            >
-              {percentDivOfTotal}% / 30%
-            </span>
+        {(divRubrics.length > 0 || totalDivExecutado > 0) && (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-slate-200">Divulgação & Mídia (Teto 30%)</span>
+              <span
+                className={`text-xs font-bold px-2 py-0.5 rounded ${
+                  percentDivOfTotal <= 30
+                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                    : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
+                }`}
+              >
+                {percentDivOfTotal}% / 30%
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mb-3">
+              Total executado: {formatCurrency(totalDivExecutado)} de {formatCurrency(project.valorExecutado)}
+            </p>
+            <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  percentDivOfTotal <= 30 ? "bg-emerald-500" : "bg-rose-500"
+                }`}
+                style={{ width: `${Math.min(100, (percentDivOfTotal / 30) * 100)}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+              <span>0%</span>
+              <span>Teto Recomendado 30%</span>
+            </div>
           </div>
-          <p className="text-[11px] text-slate-400 mb-3">
-            Total executado: {formatCurrency(totalDivExecutado)} de {formatCurrency(project.valorExecutado)}
-          </p>
-          <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative">
-            <div
-              className="bg-indigo-500 h-full rounded-full transition-all"
-              style={{ width: `${Math.min(100, (percentDivOfTotal / 30) * 100)}%` }}
-            />
-          </div>
-          <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-            <span>0%</span>
-            <span>Teto Recomendado 30%</span>
-          </div>
-        </div>
+        )}
 
         {/* Gauge 3: Conciliação Bancária 1-to-1 */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow">
