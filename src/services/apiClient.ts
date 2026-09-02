@@ -95,27 +95,6 @@ export class ApiClient {
   }
 
   /**
-   * Login de demonstração para desenvolvedores (sem precisar de Supabase)
-   */
-  public async devDemoLogin(): Promise<{ access_token: string; user: any } | null> {
-    try {
-      const res = await fetch(`${this.apiBaseUrl}/dev/demo-login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "auditor@cultura.gov.br", nome: "Auditor MinC/FSA" }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        this.setToken(data.access_token);
-        return data;
-      }
-    } catch (e) {
-      console.warn("Dev demo login indisponível:", e);
-    }
-    return null;
-  }
-
-  /**
    * Lista somente os dados que o endpoint de projetos realmente fornece.
    * Totais financeiros, documentos e lançamentos serão carregados em ondas próprias.
    */
