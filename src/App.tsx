@@ -16,6 +16,7 @@ import { LangChainRagSelfCorrectionModal } from "./components/LangChainRagSelfCo
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AccessibilityToolbar } from "./components/AccessibilityToolbar";
 import { OnlineSessionBoundary } from "./components/online/OnlineSessionBoundary";
+import { OnlineLoginView } from "./components/OnlineLoginView";
 import { FinancialReviewWorkflowView } from "./components/FinancialReviewWorkflowView";
 import { SponsorshipManagerView } from "./components/SponsorshipManagerView";
 import { ContinuousRiskDashboardView } from "./components/ContinuousRiskDashboardView";
@@ -32,6 +33,7 @@ import {
 import { auditComplianceWithAi } from "./services/geminiService";
 import { apiClient } from "./services/apiClient";
 import { loadOnlineSession } from "./services/onlineSession";
+import { getSupabaseAuthConfiguration } from "./services/supabaseAuth";
 import type { OnlineSessionState } from "./contracts/online";
 import { exportSalicExcel, exportSalicPdf } from "./utils/exportUtils";
 import { runRealtimeTripartiteReconciliation, selfHealDocumentsAndTransactions } from "./utils/shadowLedger";
@@ -57,7 +59,11 @@ const STORAGE_KEYS = {
 
 // Production always reads projects from the backend; sample data is never
 // rendered or persisted through the user-facing flow.
-const IS_DEMO_MODE = true;
+// A interface só ativa a sessão online quando a URL da API foi configurada
+// explicitamente no ambiente. Isso evita colocar uma versão parcial de login
+// no ar antes de o serviço público estar conectado ao frontend.
+const IS_DEMO_MODE =
+  import.meta.env.VITE_DEMO_MODE === "true" || !import.meta.env.VITE_API_URL?.trim();
 const ONLINE_ACTIVE_PROJECT_STORAGE_KEY = "concilia_rouanet_online_active_project_v1";
 
 const EMPTY_PROJECT: PronacProject = {
@@ -145,6 +151,8 @@ const isSummaryItem = (item: any) => {
 };
 
 export default function App() {
+  const [hasAuthenticatedSession, setHasAuthenticatedSession] = useState(() => Boolean(apiClient.getToken()));
+  const supabaseAuthConfiguration = getSupabaseAuthConfiguration();
   // Load the local workspace; a new browser starts empty, never with sample projects.
   const [projects, setProjects] = useState<PronacProject[]>(() => {
     try {
@@ -178,16 +186,20 @@ export default function App() {
   });
 
   const refreshOnlineSession = useCallback(async () => {
+    if (!apiClient.getToken()) {
+      setOnlineSession({ status: "error", projects: [], activeProjectId: null, message: "Entre para carregar os projetos online." });
+      return;
+    }
     const preferredProjectId = localStorage.getItem(ONLINE_ACTIVE_PROJECT_STORAGE_KEY);
     setOnlineSession({ status: "loading", projects: [], activeProjectId: null, message: null });
     setOnlineSession(await loadOnlineSession(apiClient, preferredProjectId));
   }, []);
 
   useEffect(() => {
-    if (!IS_DEMO_MODE) {
+    if (!IS_DEMO_MODE && hasAuthenticatedSession) {
       void refreshOnlineSession();
     }
-  }, [refreshOnlineSession]);
+  }, [hasAuthenticatedSession, refreshOnlineSession]);
 
   // Domain state stored per project
   const [allRubrics, setAllRubrics] = useState<Record<string, BudgetRubric[]>>(() => {
@@ -694,6 +706,18 @@ export default function App() {
   };
 
   if (!IS_DEMO_MODE) {
+    if (!hasAuthenticatedSession) {
+      return (
+        <OnlineLoginView
+          configuration={supabaseAuthConfiguration}
+          onAuthenticated={(accessToken) => {
+            apiClient.setToken(accessToken);
+            setHasAuthenticatedSession(true);
+          }}
+        />
+      );
+    }
+
     return (
       <OnlineSessionBoundary
         session={onlineSession}
