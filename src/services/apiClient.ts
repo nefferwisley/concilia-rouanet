@@ -8,7 +8,7 @@
 import type { OnlineProjectList } from "../contracts/online";
 import { PronacProject } from "../types";
 
-const DEFAULT_API_BASE_URL = "http://localhost:8000/api/v1";
+const DEFAULT_API_BASE_URL = "/api/v1";
 
 export function resolveApiUrls(
   apiBaseUrl?: string,
@@ -21,7 +21,9 @@ export function resolveApiUrls(
 
   return {
     apiBaseUrl: normalized,
-    healthUrl: `${new URL(normalized).origin}/health`,
+    healthUrl: normalized.startsWith("http")
+      ? `${new URL(normalized).origin}/health`
+      : "/health",
   };
 }
 
@@ -221,3 +223,4 @@ export class ApiClient {
 }
 
 export const apiClient = ApiClient.getInstance();
+
