@@ -66,9 +66,9 @@ const STORAGE_KEYS = {
   PROJECT_1961_PENDING_MAPPING: "concilia_rouanet_project_1961_pending_mapping_v6",
 };
 
-// In production the Vite bundle cannot read runtime env vars — always load
-// the full dashboard. The Supabase/FastAPI wiring runs server-side independently.
-const IS_DEMO_MODE = true;
+// Production always reads projects from the backend; sample data is never
+// rendered or persisted through the user-facing flow.
+const IS_DEMO_MODE = false;
 const ONLINE_ACTIVE_PROJECT_STORAGE_KEY = "concilia_rouanet_online_active_project_v1";
 
 const isSummaryItem = (item: any) => {
