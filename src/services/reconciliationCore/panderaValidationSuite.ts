@@ -30,25 +30,26 @@ export function runPanderaValidationSuite(
 
   const totalDebitos = debits.reduce((acc, t) => acc + (Number(t.valor) || 0), 0);
   const totalRendimentos = credits.reduce((acc, t) => acc + (Number(t.valor) || 0), 0);
-  const valorAprovado = project.valorCaptado || project.valorAprovado || 835000;
+  const valorAprovado = project.valorCaptado || project.valorAprovado || 0;
   const totalRecursos = valorAprovado + totalRendimentos;
 
   // -------------------------------------------------------------
   // TEST 1: Resource Availability Assertion (Aporte + Rendimentos)
   // -------------------------------------------------------------
-  const expectedTotalRecursos = 892414.32;
-  const diffRecursos = Math.abs(totalRecursos - expectedTotalRecursos);
-  const test1Passed = diffRecursos < 5.0; // Tolerância leve para centavos
+  const hasFundingSource = valorAprovado > 0 || totalRendimentos > 0;
+  const test1Passed = hasFundingSource && totalRecursos + 0.01 >= totalDebitos;
 
   expectations.push({
     id: "EXP_001_TOTAL_RESOURCES",
     name: "expect_total_funding_and_earnings_to_balance",
-    description: "Verifica se a soma de Captação/Repasse FSA (835k) + Rendimentos de Poupança BB confere com o total de recursos disponíveis.",
+    description: "Verifica se os recursos identificados no projeto e nos créditos importados cobrem os débitos registrados.",
     category: "FINANCIAL_BALANCE",
     severity: "CRITICAL",
     passed: test1Passed,
     actualValue: `R$ ${totalRecursos.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
-    expectedValue: `R$ ${expectedTotalRecursos.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+    expectedValue: hasFundingSource
+      ? `Maior ou igual a R$ ${totalDebitos.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+      : "Fonte de recurso não informada",
     anomalyCount: test1Passed ? 0 : 1,
   });
 

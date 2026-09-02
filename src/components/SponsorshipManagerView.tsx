@@ -8,14 +8,9 @@ interface SponsorshipManagerViewProps {
 }
 
 export const SponsorshipManagerView: React.FC<SponsorshipManagerViewProps> = ({ project }) => {
-  const [sponsors, setSponsors] = useState<Sponsor[]>([
-    { id: "s1", nome: "Empresa Vale Cultura S.A.", cnpjCpf: "12.345.678/0001-90", tipo: "PESSOA_JURIDICA" },
-    { id: "s2", nome: "João Silva", cnpjCpf: "123.456.789-00", tipo: "PESSOA_FISICA" },
-  ]);
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
 
-  const [contributions, setContributions] = useState<SponsorshipContribution[]>([
-    { id: "c1", sponsorId: "s1", projetoId: project.id, dataAporte: "2024-05-02T12:00:00Z", valor: 250000, tipoIncentivo: "Artigo 18" },
-  ]);
+  const [contributions, setContributions] = useState<SponsorshipContribution[]>([]);
 
   const [receipts, setReceipts] = useState<PatronageReceipt[]>([]);
 
@@ -56,7 +51,9 @@ export const SponsorshipManagerView: React.FC<SponsorshipManagerViewProps> = ({ 
             </h2>
           </div>
           <div className="space-y-3">
-            {sponsors.map(sponsor => (
+            {sponsors.length === 0 ? (
+              <p className="text-xs text-slate-400">Nenhum patrocinador informado para este projeto.</p>
+            ) : sponsors.map(sponsor => (
               <div key={sponsor.id} className="bg-slate-950 p-4 rounded-xl border border-slate-800">
                 <p className="font-semibold text-slate-300">{sponsor.nome}</p>
                 <p className="text-xs text-slate-500">{sponsor.cnpjCpf}</p>
@@ -72,7 +69,9 @@ export const SponsorshipManagerView: React.FC<SponsorshipManagerViewProps> = ({ 
             </h2>
           </div>
           <div className="space-y-3">
-            {contributions.map(contrib => {
+            {contributions.length === 0 ? (
+              <p className="text-xs text-slate-400">Nenhum aporte informado ou importado.</p>
+            ) : contributions.map(contrib => {
               const sponsor = sponsors.find(s => s.id === contrib.sponsorId);
               const receipt = receipts.find(r => r.contributionId === contrib.id);
 
