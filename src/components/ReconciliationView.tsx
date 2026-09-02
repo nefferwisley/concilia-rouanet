@@ -283,14 +283,15 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
     (t) => t && (t.tipo === "CREDITO" || t.tipo === "RENDIMENTO" || t.tipo === "RESGATE" || (t as any).tipoMovimento === "CREDIT")
   );
 
-  const isTxReconciled = isTransactionReconciled;
+  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado === true;
+
+  const isTxReconciled = (t: BankTransaction) => isTransactionReconciled(t, hasImportedBankStatement);
 
   const pendingDebitTransactions = debitTransactions.filter(
     (t) => !isTxReconciled(t) && t.status !== "ALERTA_GLOSA"
   );
   const pendingDebitsCount = pendingDebitTransactions.length;
   const pendingCategoryCounts = getExpenseCategoryCounts(pendingDebitTransactions, safeRubrics);
-  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado === true;
   const pendingEvidenceTitle = hasImportedBankStatement
     ? "Pendentes de Documento"
     : "Movimentos sem extrato bancário";
@@ -926,7 +927,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                       ) : (
                         <span className="text-amber-400 italic text-[11px] flex items-center gap-1">
                           <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
-                          Pendente de NF / Anexo
+                          {hasImportedBankStatement ? "Pendente de NF / Anexo" : "Aguardando extrato OFX/CSV"}
                         </span>
                       )}
                     </td>

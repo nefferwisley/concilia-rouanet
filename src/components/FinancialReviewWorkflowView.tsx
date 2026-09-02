@@ -433,8 +433,9 @@ export const FinancialReviewWorkflowView: React.FC<FinancialReviewWorkflowViewPr
                 );
                 const txVal = Number(tx.valor) || 0;
                 const rec = receipts[tx.id];
+                const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado === true;
                 const temDoc = Boolean(tx.matchedDocId || tx.idDocumentoFiscalVinculado || rec?.status === "ASSINADO_ANEXADO");
-                const temComp = Boolean(tx.comprovanteUrl || tx.temComprovante || (tx as any).arquivoComprovanteNome);
+                const temComp = hasImportedBankStatement && Boolean(tx.comprovanteUrl || tx.temComprovante || (tx as any).arquivoComprovanteNome);
                 const isFullyReconciled = temDoc && temComp;
 
                 return (

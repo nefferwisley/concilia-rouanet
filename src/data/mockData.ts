@@ -63,7 +63,8 @@ export const initialProjects: PronacProject[] = [
     "contaMovimento": "8768-8",
     "saldoBloqueado": 0,
     "saldoMovimento": -5344.83,
-    "rendimentoAplicacao": 57414.32
+    "rendimentoAplicacao": 57414.32,
+    "extratoBancarioImportado": true
   },
   "status": "Em Execução / Conciliação",
   "resumoProjeto": "Projeto Documental 1961 financiado pelo FSA/BRDE com direção de Amir Labaki e produção de Mônica Guimarães. Dados extraídos com precisão de 100% da pasta oficial do Google Drive."

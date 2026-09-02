@@ -18,7 +18,8 @@ function isDebit(transaction: BankTransaction): boolean {
   );
 }
 
-export function isTransactionReconciled(transaction: BankTransaction): boolean {
+export function isTransactionReconciled(transaction: BankTransaction, hasImportedBankStatement: boolean = true): boolean {
+  if (!hasImportedBankStatement) return false;
   if (transaction.documentoFiscalCompleto === false) return false;
 
   const hasReconciledStatus =
@@ -38,9 +39,10 @@ function roundCurrency(value: number): number {
 
 export function calculateProjectFinancialSummary(
   transactions: BankTransaction[],
+  hasImportedBankStatement: boolean = true
 ): ProjectFinancialSummary {
   const debits = transactions.filter(isDebit);
-  const reconciledDebits = debits.filter(isTransactionReconciled);
+  const reconciledDebits = debits.filter((t) => isTransactionReconciled(t, hasImportedBankStatement));
   const totalExecutado = roundCurrency(
     debits.reduce((sum, transaction) => sum + (Number(transaction.valor) || 0), 0),
   );

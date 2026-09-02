@@ -249,6 +249,8 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
     return list;
   }, [safeDocuments, safeTripartiteEntries]);
 
+  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado === true;
+
   // Filtered Tripartite Entries
   const filteredEntries = useMemo(() => {
     const q = (searchQuery || "").toLowerCase();
@@ -263,7 +265,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
         (entry.cnpjCpf || "").includes(searchQuery);
 
       const hasFiscalDoc = Boolean(entry.checkTripe?.fiscalDocAnexo);
-      const hasBankProof = Boolean(entry.checkTripe?.comprovanteBancarioAnexo);
+      const hasBankProof = hasImportedBankStatement && Boolean(entry.checkTripe?.comprovanteBancarioAnexo);
       const isComplete =
         (entry.statusTripartite === "CONCILIADO LÍQUIDO/BRUTO" ||
           entry.statusTripartite === "CONCILIADO COM RETENÇÃO") &&
@@ -283,7 +285,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
 
       return matchesPeriod && matchesSearch && matchesStatus;
     });
-  }, [safeTripartiteEntries, selectedPeriod, searchQuery, filterStatus]);
+  }, [safeTripartiteEntries, selectedPeriod, searchQuery, filterStatus, hasImportedBankStatement]);
 
   // Total statistics for the selected scope
   const stats = useMemo(() => {
@@ -293,7 +295,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
         (e?.statusTripartite === "CONCILIADO LÍQUIDO/BRUTO" ||
           e?.statusTripartite === "CONCILIADO COM RETENÇÃO") &&
         Boolean(e?.checkTripe?.fiscalDocAnexo) &&
-        Boolean(e?.checkTripe?.comprovanteBancarioAnexo)
+        hasImportedBankStatement && Boolean(e?.checkTripe?.comprovanteBancarioAnexo)
     ).length;
 
     const totalDebitoBB = filteredEntries.reduce((sum, e) => sum + (Number(e?.valorDebitoBB) || 0), 0);
@@ -310,7 +312,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
 
     const pendingDocsCount = filteredEntries.filter((e) => !e?.checkTripe?.fiscalDocAnexo).length;
     const pendingBankProofCount = filteredEntries.filter(
-      (e) => !e?.checkTripe?.comprovanteBancarioAnexo
+      (e) => !(hasImportedBankStatement && e?.checkTripe?.comprovanteBancarioAnexo)
     ).length;
 
     return {
@@ -323,7 +325,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
       pendingDocsCount,
       pendingBankProofCount,
     };
-  }, [filteredEntries]);
+  }, [filteredEntries, hasImportedBankStatement]);
 
   // Handle Quick Create and Link Document for an Entry
   const handleQuickCreateDocForEntry = (entry: TripartiteEntry) => {
@@ -643,7 +645,9 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                 {stats.pendingDocsCount + stats.pendingBankProofCount}
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                {stats.pendingDocsCount} sem NF | {stats.pendingBankProofCount} sem comp. bancário
+                {hasImportedBankStatement
+                  ? `${stats.pendingDocsCount} sem NF | ${stats.pendingBankProofCount} sem comp. bancário`
+                  : `Aguardando extrato OFX/CSV. A conciliação bancária permanece indisponível.`}
               </p>
             </div>
           </div>
@@ -731,7 +735,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                 <tbody className="divide-y divide-slate-800/60">
                   {filteredEntries.map((entry) => {
                     const hasFiscal = Boolean(entry?.checkTripe?.fiscalDocAnexo);
-                    const hasBank = Boolean(entry?.checkTripe?.comprovanteBancarioAnexo);
+                    const hasBank = hasImportedBankStatement && Boolean(entry?.checkTripe?.comprovanteBancarioAnexo);
                     const isTripodComplete = hasFiscal && hasBank;
 
                     return (
@@ -825,7 +829,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 text-[10px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded border border-red-500/20 font-bold">
-                                  <FileX className="w-3 h-3" /> Falta NF
+                                  <FileX className="w-3 h-3" /> {hasImportedBankStatement ? "Falta NF" : "Aguardando OFX"}
                                 </span>
                               )}
 

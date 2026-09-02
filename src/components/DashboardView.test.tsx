@@ -27,6 +27,7 @@ const project: PronacProject = {
     saldoBloqueado: 0,
     saldoMovimento: 5_344.83,
     rendimentoAplicacao: 57_414.32,
+    extratoBancarioImportado: true,
   },
   status: "Em execução",
   resumoProjeto: "Projeto 1961",
@@ -85,9 +86,16 @@ describe("DashboardView reconciliation summary", () => {
   });
 
   it("does not present a project balance as real before a bank statement is imported", () => {
+    const projectWithoutStatement = {
+      ...project,
+      bancoInfo: {
+        ...project.bancoInfo!,
+        extratoBancarioImportado: false,
+      }
+    };
     const markup = renderToStaticMarkup(
       <DashboardView
-        project={project}
+        project={projectWithoutStatement}
         rubrics={[]}
         transactions={[]}
         documents={[]}

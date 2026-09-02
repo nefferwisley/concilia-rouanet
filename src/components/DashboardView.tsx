@@ -71,7 +71,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado === true;
   const usesControlSpreadsheet = project.bancoInfo?.fonteMovimentacao === "PLANILHA_CONTROLE";
 
-  const liveFinancialSummary = calculateProjectFinancialSummary(safeTransactions);
+  const liveFinancialSummary = calculateProjectFinancialSummary(safeTransactions, hasImportedBankStatement);
   const validatedSummary = project.resumoFinanceiroValidado;
   const hasValidatedSummary = Boolean(
     validatedSummary &&
@@ -127,8 +127,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const debitTransactions = safeTransactions.filter(
     (t) => t.tipo === "DEBITO" || t.tipo === "TARIFA" || !t.tipo || (t as any).tipoMovimento === "DEBIT"
   );
-  const reconciledTransactions = debitTransactions.filter(isTransactionReconciled);
-  const pendingTransactions = debitTransactions.filter((t) => !isTransactionReconciled(t));
+  const reconciledTransactions = debitTransactions.filter((t) => isTransactionReconciled(t, hasImportedBankStatement));
+  const pendingTransactions = debitTransactions.filter((t) => !isTransactionReconciled(t, hasImportedBankStatement));
   const glosaTransactions = debitTransactions.filter((t) => t.status === "ALERTA_GLOSA");
 
   // Stages breakdown
@@ -220,8 +220,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const filteredPreviewTransactions = safeTransactions.filter((tx) => {
     const isDebit =
       tx.tipo === "DEBITO" || tx.tipo === "TARIFA" || !tx.tipo || (tx as any).tipoMovimento === "DEBIT";
-    if (txStatusFilter === "CONCILIADO" && !isTransactionReconciled(tx)) return false;
-    if (txStatusFilter === "PENDENTE" && (!isDebit || isTransactionReconciled(tx))) return false;
+    if (txStatusFilter === "CONCILIADO" && !isTransactionReconciled(tx, hasImportedBankStatement)) return false;
+    if (txStatusFilter === "PENDENTE" && (!isDebit || isTransactionReconciled(tx, hasImportedBankStatement))) return false;
     if (txStatusFilter === "DEBITO" && tx.tipo !== "DEBITO" && tx.tipo !== "TARIFA") return false;
     if (txStatusFilter === "CREDITO" && tx.tipo !== "CREDITO" && tx.tipo !== "RENDIMENTO") return false;
     if (
@@ -1023,7 +1023,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   const isDebit = tx.tipo === "DEBITO" || tx.tipo === "TARIFA" || !tx.tipo || (tx as any).tipoMovimento === "DEBIT";
                   const isCredit = tx.tipo === "CREDITO" || tx.tipo === "RENDIMENTO" || tx.tipo === "RESGATE" || (tx as any).tipoMovimento === "CREDIT";
                   const matchedDoc = safeDocuments.find((d) => d.id === tx.matchedDocId || d.id === tx.idDocumentoFiscalVinculado);
-                  const isReconciled = isTransactionReconciled(tx);
+                  const isReconciled = isTransactionReconciled(tx, hasImportedBankStatement);
                   const expenseCategory = resolveExpenseCategory(tx, safeRubrics);
 
                   const providerInfo = resolveProviderAndCompany(
