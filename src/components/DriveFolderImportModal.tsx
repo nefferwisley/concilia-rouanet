@@ -375,6 +375,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
           const extractedTransactions: BankTransaction[] = [];
           const extractedDocuments: FiscalDocument[] = [];
           const extractedRubrics: BudgetRubric[] = [];
+          const extractedAlerts: AuditAlert[] = [];
           let extractedProject: Partial<PronacProject> = {};
           const maxBatchBytes = 5 * 1024 * 1024;
           let batch: any[] = [];
@@ -402,10 +403,36 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
             extractedTransactions.push(...(result.data.transactions || []));
             extractedDocuments.push(...(result.data.documents || []));
             extractedRubrics.push(...(result.data.rubrics || []));
-            if (
-              result.data.project?.nome &&
-              !String(result.data.project.nome).includes("PRONAC não identificado")
-            ) extractedProject = result.data.project;
+            extractedAlerts.push(...(result.data.alerts || []));
+
+            // A importação é feita em lotes: a planilha pode conter somente o
+            // título/conta e os PDFs posteriores somente o PRONAC. Preserve o
+            // projeto que o usuário abriu e agregue apenas campos comprovados.
+            const candidateProject = result.data.project || {};
+            const candidateName = String(candidateProject.nome || "").trim();
+            const candidatePronac = String(candidateProject.pronac || "").trim();
+            const candidateAccount = String(candidateProject.bancoInfo?.contaMovimento || "").trim();
+            if (candidateName && !/projeto importado|pronac n[aã]o identificado/i.test(candidateName)) {
+              extractedProject.nome = candidateName;
+            }
+            if (candidatePronac && !/n[aã]o identificado/i.test(candidatePronac)) {
+              extractedProject.pronac = candidatePronac;
+            }
+            if (candidateAccount) {
+              extractedProject.bancoInfo = {
+                ...(extractedProject.bancoInfo || {}),
+                ...candidateProject.bancoInfo,
+                contaMovimento: candidateAccount,
+              };
+            }
+            if (candidateProject.status) extractedProject.status = candidateProject.status;
+            if (candidateProject.resumoProjeto) extractedProject.resumoProjeto = candidateProject.resumoProjeto;
+            if (Number.isFinite(candidateProject.valorCaptado) && candidateProject.valorCaptado > 0) {
+              extractedProject.valorCaptado = candidateProject.valorCaptado;
+            }
+            if (Number.isFinite(candidateProject.valorExecutado) && candidateProject.valorExecutado > 0) {
+              extractedProject.valorExecutado = candidateProject.valorExecutado;
+            }
             processedFiles += batch.length;
             batch = [];
             batchBytes = 0;
@@ -443,6 +470,9 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
           const importedProject: PronacProject = {
             ...activeProject,
             ...extractedProject,
+            // Nunca crie um projeto paralelo por causa de uma identificação
+            // incompleta que veio em um lote isolado.
+            id: activeProject.id,
             bancoInfo: {
               ...activeProject.bancoInfo,
               ...(extractedProject.bancoInfo || {}),
@@ -462,7 +492,11 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
             rubrics: synced.rubrics,
             transactions: synced.transactions,
             documents: synced.documents,
-            alerts: synced.alerts,
+            alerts: Array.from(
+              new Map(
+                [...synced.alerts, ...extractedAlerts].map((alert) => [alert.id, alert]),
+              ).values(),
+            ),
             tripartiteEntries: synced.tripartiteEntries,
           });
           onClose();

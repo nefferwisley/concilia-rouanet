@@ -98,20 +98,20 @@ function extractFiscalDocumentHeuristics(rawText: string): any {
     const inss = vINSSMatch ? parseFloat(vINSSMatch[1]) : 0;
     const liquido = Math.max(0, bruto - (iss + irrf + inss));
 
-    let dataEmissao = new Date().toISOString().slice(0, 10);
+    let dataEmissao = "";
     if (dEmiMatch) {
       dataEmissao = dEmiMatch[1].slice(0, 10);
     }
 
     return {
       tipoDocumento: text.includes("Nfse") || text.includes("PrestadorServico") ? "NFS-e" : "NF-e",
-      numeroDocumento: numDocMatch ? numDocMatch[1] : "001",
+      numeroDocumento: numDocMatch ? numDocMatch[1] : "",
       serie: serieMatch ? serieMatch[1] : "1",
       dataEmissao,
-      razaoSocialEmitente: emitNomeMatch ? emitNomeMatch[1].trim() : "Fornecedor Identificado (XML)",
+      razaoSocialEmitente: emitNomeMatch ? emitNomeMatch[1].trim() : "",
       cnpjCpfEmitente: emitCnpjMatch ? emitCnpjMatch[1].replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : "",
       razaoSocialTomador: tomadorNomeMatch ? tomadorNomeMatch[1].trim() : "",
-      descricaoServico: xProdMatch ? xProdMatch[1].trim() : "Prestação de serviços / Fornecimento aprovado no plano Rouanet",
+      descricaoServico: xProdMatch ? xProdMatch[1].trim() : "",
       valorBruto: bruto,
       retencoes: { iss, irrf, inss, outras: 0 },
       valorLiquido: liquido > 0 ? liquido : bruto,
@@ -125,11 +125,13 @@ function extractFiscalDocumentHeuristics(rawText: string): any {
   // Regex patterns for text/OCR documents
   const cnpjMatch = text.match(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/) || text.match(/\b\d{14}\b/);
   const cpfMatch = text.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/);
-  const numDocMatch = text.match(/(?:NFS-e|NF-e|NF|Nota\s*Fiscal|Nº|Número|Numero|Doc(?:umento)?|Recibo)[\s\.:ºNn°]*([0-9\.\-\/]{2,15})/i);
+  const numDocMatch =
+    text.match(/notaprint\.aspx\?nf=(\d+)/i) ||
+    text.match(/(?:N[uú]mero\s+da\s+Nota|NFS-e|NF-e|Nota\s*Fiscal|Nº|Número|Numero|Recibo)[\s\.:ºNn°]*([0-9\.\-\/]{1,15})/i);
   
   // Date patterns
   const dateMatch = text.match(/\b(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{4})\b/) || text.match(/\b(\d{4})[\/\-](\d{2})[\/\-](\d{2})\b/);
-  let parsedDate = new Date().toISOString().slice(0, 10);
+  let parsedDate = "";
   if (dateMatch) {
     if (dateMatch[1].length === 2) {
       parsedDate = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
@@ -169,7 +171,7 @@ function extractFiscalDocumentHeuristics(rawText: string): any {
   }
 
   // Determine doc type and rubric suggestion
-  let tipoDoc = "NFS-e";
+  let tipoDoc = "Documento importado";
   let sugestaoRubrica = "Serviços Técnicos e Produção";
   let sugestaoEtapa = "Produção / Execução";
 
@@ -188,8 +190,10 @@ function extractFiscalDocumentHeuristics(rawText: string): any {
   } else if (/RPA|Recibo\s*de\s*Pagamento\s*Aut[ôo]nomo/i.test(text)) {
     tipoDoc = "RPA";
     sugestaoRubrica = "Cachê - Artistas Principais e Orquestra";
+  } else if (/NFS-e|Nota\s*Fiscal\s*Eletr[ôo]nica\s*de\s*Servi[çc]os/i.test(text)) {
+    tipoDoc = "NFS-e (Serviço)";
   } else if (/NF-e|DANFE|Nota\s*Fiscal\s*Eletr[ôo]nica\s*de\s*Produto/i.test(text)) {
-    tipoDoc = "NF-e";
+    tipoDoc = "NF-e (Produto)";
     sugestaoRubrica = "Locação de Sistema de Som & Luz (P.A. e Riders)";
   } else if (/DARF|GPS|DAM|Guia\s*de\s*Recolhimento|ECAD/i.test(text)) {
     tipoDoc = "Guia de Recolhimento (DARF/GPS/DAM)";
@@ -203,10 +207,12 @@ function extractFiscalDocumentHeuristics(rawText: string): any {
 
   // Provider name heuristic
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-  let fornecedor = "Prestador / Fornecedor Identificado";
+  const favoredNameMatch = text.match(/Nome\s+favorecido\s+([^\r\n]+)/i);
+  let fornecedor = favoredNameMatch?.[1]?.trim() || "";
   for (const line of lines) {
-    if (/(?:Raz[ãa]o\s*Social|Prestador|Emitente|Fornecedor|Companhia|Ag[êe]ncia|Benefici[áa]rio|Nome)[\s:]*([A-Za-z0-9\s\.\-&]{4,})/i.test(line)) {
-      const m = line.match(/(?:Raz[ãa]o\s*Social|Prestador|Emitente|Fornecedor|Companhia|Ag[êe]ncia|Benefici[áa]rio|Nome)[\s:]*([A-Za-z0-9\s\.\-&]{4,})/i);
+    if (fornecedor) break;
+    if (/(?:Raz[ãa]o\s*Social|Prestador|Emitente|Fornecedor|Companhia|Benefici[áa]rio|Nome\s+favorecido|Nome)[\s:]*([A-Za-zÀ-ÿ0-9\s\.\-&]{4,})/i.test(line)) {
+      const m = line.match(/(?:Raz[ãa]o\s*Social|Prestador|Emitente|Fornecedor|Companhia|Benefici[áa]rio|Nome\s+favorecido|Nome)[\s:]*([A-Za-zÀ-ÿ0-9\s\.\-&]{4,})/i);
       if (m && m[1].length > 3) {
         fornecedor = m[1].trim();
         break;
@@ -217,24 +223,44 @@ function extractFiscalDocumentHeuristics(rawText: string): any {
     }
   }
 
+  const hasBankReceiptEvidence = /Autentica[çc][ãa]o\s+SISBB|Transa[çc][ãa]o\s+efetuada\s+com\s+sucesso|Comprovante\s+(?:de\s+)?(?:PIX|TED|pagamento)|\bDebitado\b/i.test(text);
+  const hasFiscalEvidence = Boolean(numDocMatch && bruto > 0 && /NFS-e|NF-e|Nota\s*Fiscal|DANFE|RPA|Recibo/i.test(text));
+
   return {
     tipoDocumento: tipoDoc,
-    numeroDocumento: numDocMatch ? numDocMatch[1] : `DOC-${Math.floor(1000 + Math.random() * 9000)}`,
+    numeroDocumento: numDocMatch ? numDocMatch[1] : "",
     serie: "1",
     dataEmissao: parsedDate,
     razaoSocialEmitente: fornecedor,
     cnpjCpfEmitente: cnpjMatch ? cnpjMatch[0] : (cpfMatch ? cpfMatch[0] : ""),
     razaoSocialTomador: "",
     cnpjCpfTomador: "",
-    descricaoServico: lines.slice(1, 4).join(" ") || "Despesa executada conforme plano de trabalho da Lei Rouanet",
-    valorBruto: bruto || 1500,
+    descricaoServico: fornecedor ? `Pagamento a ${fornecedor}` : "",
+    valorBruto: bruto,
     retencoes: { iss, irrf, inss, outras: 0 },
-    valorLiquido: liquido || bruto || 1500,
+    valorLiquido: liquido || bruto,
     sugestaoRubrica,
     sugestaoEtapa,
     alertasConformidadeMinC: [],
-    confiabilidade: 88,
+    confiabilidade: hasFiscalEvidence ? 88 : 0,
+    hasFiscalEvidence,
+    hasBankReceiptEvidence,
   };
+}
+
+async function extractPdfText(base64Data: string): Promise<string> {
+  const cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, "");
+  const pdfParseModule = (await import("pdf-parse")) as any;
+  const PDFParse = pdfParseModule.PDFParse || pdfParseModule.default?.PDFParse;
+  if (!PDFParse) throw new Error("Leitor PDF indisponível.");
+
+  const parser = new PDFParse({ data: Buffer.from(cleanBase64, "base64") });
+  try {
+    const result = await parser.getText();
+    return String(result?.text || "").trim();
+  } finally {
+    await parser.destroy();
+  }
 }
 
 // ==========================================
@@ -671,19 +697,69 @@ function extractProjectDeterministically(files: any[]): any {
   let pronac = "NÃO IDENTIFICADO";
   let proponente = "Não identificado nos arquivos importados";
   let totalAprovado = 0;
+  let totalCaptado = 0;
   let totalExecutado = 0;
+  let detectedAccount = "";
   const rubrics: any[] = [];
   const transactions: any[] = [];
   const documents: any[] = [];
   const alerts: any[] = [];
+  // A planilha de controle é uma evidência operacional. Ela nunca deve ser
+  // apresentada como se fosse um extrato OFX/CSV emitido pelo banco.
+  const hasExternalBankStatement = files.some((file) => {
+    const name = String(file?.name || "").toLowerCase();
+    const text = String(file?.textContent || "").toUpperCase();
+    return name.endsWith(".ofx") || name.endsWith(".qfx") ||
+      (name.endsWith(".csv") && /(?:EXTRATO|BANCO|OFX)/.test(name)) ||
+      text.includes("<OFX>");
+  });
 
   // Helper to convert Excel serial date to YYYY-MM-DD
   const excelDateToISO = (serial: any): string => {
-    if (!serial || typeof serial !== "number") return new Date().toISOString().slice(0, 10);
+    if (!serial || typeof serial !== "number") return "";
     const utc_days = Math.floor(serial - 25569);
     const date = new Date(utc_days * 86400 * 1000);
     return date.toISOString().split("T")[0];
   };
+
+  const normalizeText = (value: unknown): string => String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .toLowerCase();
+
+  const ensureControlRubric = (name: string): any | undefined => {
+    const cleanName = name.trim();
+    if (!cleanName) return undefined;
+    const key = normalizeText(cleanName);
+    let rubric = rubrics.find((item) => normalizeText(item.nomeRubrica || item.nome) === key);
+    if (!rubric) {
+      const hash = crypto.createHash("sha256").update(key).digest("hex").slice(0, 12);
+      rubric = {
+        id: `rub-control-${hash}`,
+        etapa: "Não identificada nos arquivos",
+        nome: cleanName,
+        nomeRubrica: cleanName,
+        descricaoDetalhada: "Item/rubrica informado na planilha de controle importada.",
+        valorAprovado: 0,
+        valorTotalAprovado: 0,
+        valorExecutado: 0,
+        statusExecucao: "Valor aprovado não identificado",
+      };
+      rubrics.push(rubric);
+    }
+    return rubric;
+  };
+
+  for (const file of files) {
+    const content = String(file?.textContent || "");
+    const pronacMatch = content.match(/MINC\s+PRONAC\s*[:\-]?\s*(\d{5,8})/i);
+    if (pronacMatch) {
+      const digits = pronacMatch[1];
+      pronac = digits.length === 6 ? `${digits.slice(0, 2)}.${digits.slice(2)}` : digits;
+    }
+  }
 
   const extractAmountFromText = (text: string): number => {
     if (!text) return 0;
@@ -709,6 +785,8 @@ function extractProjectDeterministically(files: any[]): any {
           const projectTitle = rows.flat().map((cell) => String(cell || "").trim()).find((cell) => /^pronac\s*-/i.test(cell));
           if (projectTitle) {
             projectName = projectTitle.replace(/^pronac\s*-\s*/i, "").replace(/\s*\(conta.*$/i, "").trim();
+            const accountMatch = projectTitle.match(/\bconta\s+([\d.\-]+)/i);
+            if (accountMatch) detectedAccount = accountMatch[1];
           }
 
           if (lowerSheet.includes("rubrica") || lowerSheet.includes("orçamento") || lowerSheet.includes("plano")) {
@@ -760,7 +838,11 @@ function extractProjectDeterministically(files: any[]): any {
               const valorEntrada = Number(row[2] || 0);
               const fornecedor = row[3] ? String(row[3]).trim() : "";
               const dataSerial = row[4];
-              const dataIso = typeof dataSerial === "number" ? excelDateToISO(dataSerial) : String(dataSerial || "2023-01-15");
+              const dataIso = typeof dataSerial === "number"
+                ? excelDateToISO(dataSerial)
+                : dataSerial instanceof Date
+                  ? dataSerial.toISOString().slice(0, 10)
+                  : String(dataSerial || "");
               const valor = Number(row[5] || 0);
               const saldo = Number(row[6] || 0);
               const rubricaNome = row[7] ? String(row[7]).trim() : "";
@@ -778,40 +860,44 @@ function extractProjectDeterministically(files: any[]): any {
 
               if (isSummaryRow) return;
 
-              if (entrada && valorEntrada > 0 && !entrada.toLowerCase().includes("total") && !entrada.toLowerCase().includes("soma")) {
+              if (valorEntrada > 0 && !entrada.toLowerCase().includes("total") && !entrada.toLowerCase().includes("soma")) {
+                totalCaptado += valorEntrada;
                 transactions.push({
                   id: `tx-ent-${idx}`,
                   contaTipo: "Conta Captação",
                   dataTransacao: dataIso,
                   tipo: "CREDITO",
-                  documentoNumero: `TED-${entrada}`,
-                  descricaoOriginalExtrato: `CREDITO REPASSE ${entrada}`,
+                  documentoNumero: "",
+                  descricaoOriginalExtrato: entrada ? `CRÉDITO / ENTRADA - ${entrada}` : "CRÉDITO / ENTRADA",
                   valor: valorEntrada,
                   saldoAposTransacao: saldo || valorEntrada,
-                  favorecido: "Fonte Pagadora / Fundo",
-                  cnpjCpfFavorecido: "00.000.000/0001-91",
+                  favorecido: entrada,
+                  cnpjCpfFavorecido: "",
                   statusConciliacao: "PENDENTE",
+                  fonteLancamento: "PLANILHA_CONTROLE",
                 });
               } else if (fornecedor && valor > 0) {
                 totalExecutado += valor;
-                const txId = `tx-det-${controle || idx}`;
-                const docId = `doc-det-${controle || idx}`;
-                const matchedRub = rubrics.find(r => r.nomeRubrica.includes(rubricaCodigo) || r.nomeRubrica.toLowerCase().includes(rubricaNome.toLowerCase()));
-                const rubId = matchedRub ? matchedRub.id : (rubrics[0] ? rubrics[0].id : "rub-geral");
+                const txId = `tx-det-${controle || "sem-controle"}-${idx}`;
+                const matchedRub = ensureControlRubric(rubricaNome || rubricaCodigo);
+                const rubId = matchedRub?.id || "";
 
                 transactions.push({
                   id: txId,
                   contaTipo: "Conta Movimento",
                   dataTransacao: dataIso,
                   tipo: "DEBITO",
-                  documentoNumero: `DOC-${controle || idx}`,
+                  documentoNumero: controle,
+                  controleNumero: controle,
                   descricaoOriginalExtrato: `TRANSF / PIX - ${fornecedor.toUpperCase()}`,
                   valor,
                   saldoAposTransacao: saldo,
                   favorecido: fornecedor,
-                  cnpjCpfFavorecido: "00.000.000/0000-00",
+                  cnpjCpfFavorecido: "",
                   statusConciliacao: "PENDENTE",
                   idRubricaVinculada: rubId,
+                  rubricaNome: matchedRub?.nomeRubrica || matchedRub?.nome || "",
+                  fonteLancamento: "PLANILHA_CONTROLE",
                 });
 
               }
@@ -842,6 +928,7 @@ function extractProjectDeterministically(files: any[]): any {
                 favorecido: tx.favorecido,
                 cnpjCpfFavorecido: tx.cnpjCpfFavorecido,
                 statusConciliacao: "PENDENTE",
+                fonteLancamento: "EXTRATO_OFX",
               });
             });
           }
@@ -889,46 +976,73 @@ function extractProjectDeterministically(files: any[]): any {
       const sourcePath = String(file.relativePath || `${file.subfolder || "Raiz"}/${file.name}`);
       const sourceHash = crypto.createHash("sha256").update(sourcePath).digest("hex").slice(0, 16);
       const docId = `doc-file-${seqNum || "sem-num"}-${sourceHash}`;
+      const fiscalDoc = file.textContent ? extractFiscalDocumentHeuristics(file.textContent) : null;
+      const hasFiscalEvidence = Boolean(fiscalDoc?.hasFiscalEvidence);
+      const hasBankReceiptEvidence = Boolean(fiscalDoc?.hasBankReceiptEvidence);
+      const extractedProvider = String(fiscalDoc?.razaoSocialEmitente || "").trim();
+      const hasUsefulExtractedProvider = Boolean(
+        extractedProvider &&
+        !/^(?:--|page\b|p[aá]gina\b|compet[êe]ncia\b)/i.test(extractedProvider) &&
+        !/[\u0000-\u001f]/.test(extractedProvider)
+      );
+      const inferredType = file.name.toLowerCase().includes("passagem") || file.name.toLowerCase().includes("hospedag") || file.name.toLowerCase().includes("aereo")
+        ? "Bilhete de Passagem Aérea (BP-e / E-Ticket)"
+        : file.name.toLowerCase().includes("recibo") || file.name.toLowerCase().includes("rpa") || file.name.toLowerCase().includes("autonomo")
+          ? "Recibo de Pagamento a Autônomo (RPA)"
+          : file.name.toLowerCase().includes("diaria") || file.name.toLowerCase().includes("alimentacao")
+            ? "Recibo de Diária / Verba de Alimentação"
+            : "Documento importado";
       
       documents.push({
         id: docId,
-        tipo: file.name.toLowerCase().includes("passagem") || file.name.toLowerCase().includes("hospedag") || file.name.toLowerCase().includes("aereo")
-          ? "Bilhete de Passagem Aérea (BP-e / E-Ticket)" 
-          : file.name.toLowerCase().includes("recibo") || file.name.toLowerCase().includes("rpa") || file.name.toLowerCase().includes("autonomo")
-          ? "Recibo de Pagamento a Autônomo (RPA)" 
-          : file.name.toLowerCase().includes("diaria") || file.name.toLowerCase().includes("alimentacao")
-          ? "Recibo de Diária / Verba de Alimentação"
-          : "NFS-e (Serviço)",
-        numeroDoc: seqNum ? `DOC-${seqNum.padStart(3, '0')}` : `NF-${(documents.length + 1).toString().padStart(4, '0')}`,
-        dataEmissao: "",
-        fornecedorNome: fornecedorName || "Fornecedor / Prestador",
-        fornecedorCnpjCpf: "",
-        descricaoServico: descricao ? `${descricao} (${file.subfolder || 'Subpasta'})` : `Comprovante: ${file.name}`,
-        valorBruto: 0,
-        retencoes: { iss: 0, irrf: 0, inss: 0, outras: 0 },
-        valorLiquido: 0,
+        tipo: fiscalDoc?.tipoDocumento || inferredType,
+        numeroDoc: fiscalDoc?.numeroDocumento || "",
+        controleNumero: seqNum,
+        dataEmissao: fiscalDoc?.dataEmissao || "",
+        fornecedorNome: hasUsefulExtractedProvider ? extractedProvider : fornecedorName,
+        fornecedorCnpjCpf: fiscalDoc?.cnpjCpfEmitente || "",
+        descricaoServico: fiscalDoc?.descricaoServico || descricao,
+        valorBruto: fiscalDoc?.valorBruto || 0,
+        retencoes: fiscalDoc?.retencoes || { iss: 0, irrf: 0, inss: 0, outras: 0 },
+        valorLiquido: fiscalDoc?.valorLiquido || fiscalDoc?.valorBruto || 0,
         idRubrica: "",
         idTransacao: "",
-        status: "Recebido — pendente de conciliação",
+        status: hasFiscalEvidence ? "Documento extraído — vínculo pendente" : "Recebido — evidência fiscal não identificada",
+        statusComprovacao: "Pendente",
+        confiabilidadeIa: fiscalDoc?.confiabilidade || 0,
+        evidenciaFiscalExtraida: hasFiscalEvidence,
+        evidenciaBancariaExtraida: hasBankReceiptEvidence,
         arquivoNotaNome: file.name,
+        arquivoComprovanteNome: hasBankReceiptEvidence ? file.name : "",
         arquivoOrigemCaminho: sourcePath,
+        erroExtracaoPdf: file.pdfExtractionError || "",
       });
     }
   }
 
   // Adjust defaults if nothing parsed
   if (totalExecutado === 0) totalExecutado = transactions.reduce((sum, t) => sum + (t.tipo === "DEBITO" ? t.valor : 0), 0);
+  if (!hasExternalBankStatement && transactions.some((item) => item.tipo === "DEBITO")) {
+    alerts.push({
+      id: "alerta-extrato-bancario-ausente",
+      tipo: "DOCUMENTACAO",
+      severidade: "INFO",
+      titulo: "Extrato bancário OFX/CSV não anexado",
+      descricao: "Os lançamentos foram lidos da planilha de controle. Os comprovantes presentes nos PDFs apoiam a conciliação documental, mas não substituem o extrato bancário consolidado.",
+      resolvido: false,
+    });
+  }
 
   // Build tripartite matches
   const tripartiteEntries: any[] = [];
   transactions.filter((t) => t.tipo === "DEBITO").forEach((tx, idx) => {
     const doc = documents.find((d) => d.idTransacao === tx.id);
     if (!doc) return;
-    const rub = rubrics.find((r) => r.id === tx.idRubricaVinculada) || rubrics[idx % Math.max(rubrics.length, 1)] || rubrics[0];
+    const rub = rubrics.find((r) => r.id === tx.idRubricaVinculada);
     tripartiteEntries.push({
       id: `trip-det-${idx + 1}`,
-      idRubrica: rub ? rub.id : "rub-geral",
-      nomeRubrica: rub ? rub.nomeRubrica : "Despesa Geral",
+      idRubrica: rub ? rub.id : "",
+      nomeRubrica: rub ? rub.nomeRubrica : "Rubrica não identificada",
       idTransacao: tx.id,
       dataTransacao: tx.dataTransacao,
       descricaoExtrato: tx.descricaoOriginalExtrato,
@@ -941,32 +1055,19 @@ function extractProjectDeterministically(files: any[]): any {
       valorDocFiscal: doc.valorBruto,
       diferencaValor: 0,
       diferencaDias: 0,
-      statusTripartite: "CONCILIADO_PERFEITO",
+      statusTripartite: "PENDENTE DE VÍNCULO",
       checkTripe: {
-        fiscalDocAnexo: true,
-        comprovanteBancarioAnexo: true,
-        rubricaAprovada: true,
+        fiscalDocAnexo: Boolean(doc.evidenciaFiscalExtraida),
+        comprovanteBancarioAnexo: Boolean(doc.evidenciaBancariaExtraida),
+        rubricaAprovada: Boolean(rub),
       },
       retencoes: {
         iss: 0,
         irrf: 0,
         inss: 0,
       },
-      observacoesAuditoria: "Despesa conciliada com sucesso (Extrato x Comprovante Fiscal x Rubrica).",
+      observacoesAuditoria: "Vínculo importado; validação tripartite ainda pendente.",
     });
-  });
-
-  alerts.push({
-    id: "alt-det-1",
-    gravidade: "INFO",
-    categoria: "Remanejamento Orçamentário",
-    titulo: "Remanejamentos Orçamentários Validados",
-    descricao: "Remanejamentos de rubricas orçamentárias analisados conforme a legislação vigente (IN MinC / ANCINE).",
-    itemAfetado: "Planilha de Trabalho",
-    baseLegal: "Art. 48 da IN 01/2023 / IN ANCINE: Remanejamentos até 20% dispensam anuência prévia.",
-    acaoRecomendada: "Manter notas e comprovantes arquivados digitalmente.",
-    justificativaSugeridaSalic: "Remanejamentos efetuados estritamente para cumprimento do plano de trabalho.",
-    resolvido: true,
   });
 
   return {
@@ -982,19 +1083,23 @@ function extractProjectDeterministically(files: any[]): any {
       dataFimVigencia: "",
       prazoLimitePrestacao: "",
       valorAprovado: totalAprovado,
-      valorCaptado: totalAprovado,
+      valorCaptado: totalCaptado,
       valorExecutado: totalExecutado,
       bancoInfo: {
         banco: "",
         agencia: "",
         contaCaptacao: "",
-        contaMovimento: "",
+        contaMovimento: detectedAccount,
         saldoBloqueado: 0,
         saldoMovimento: 0,
         rendimentoAplicacao: 0,
+        extratoBancarioImportado: hasExternalBankStatement,
+        fonteMovimentacao: hasExternalBankStatement ? "EXTRATO_OFX" : "PLANILHA_CONTROLE",
       },
-      status: "Importado — validação pendente",
-      resumoProjeto: `Projeto com ${transactions.length} lançamentos bancários e ${rubrics.length} rubricas extraídas dos arquivos originais.`,
+      status: hasExternalBankStatement ? "Importado — validação pendente" : "Importado — extrato bancário pendente",
+      resumoProjeto: hasExternalBankStatement
+        ? `Projeto com ${transactions.length} lançamentos de extrato e ${rubrics.length} rubricas extraídas dos arquivos originais.`
+        : `Projeto com ${transactions.length} lançamentos da planilha de controle e ${rubrics.length} rubricas extraídas dos arquivos originais. Extrato OFX/CSV não anexado.`,
     },
     rubrics,
     transactions,
@@ -1742,6 +1847,16 @@ app.post("/api/gemini/extract-project-files", async (req, res) => {
       return res.status(400).json({ error: "Nenhum arquivo enviado para extração." });
     }
 
+    const enrichedFiles = await Promise.all(files.map(async (file: any) => {
+      if (!file?.base64 || !String(file.name || "").toLowerCase().endsWith(".pdf")) return file;
+      try {
+        return { ...file, textContent: await extractPdfText(file.base64) };
+      } catch (pdfErr: any) {
+        console.warn(`Não foi possível ler o texto real de ${file.name}:`, pdfErr?.message);
+        return { ...file, textContent: "", pdfExtractionError: pdfErr?.message || "Falha na leitura do PDF" };
+      }
+    }));
+
     const parts: any[] = [];
     parts.push({
       text: `Você é um auditor sênior e especialista em prestação de contas da Lei Rouanet (SALIC/Ministério da Cultura - IN MinC 01/2023).
@@ -1838,7 +1953,7 @@ REGRAS RÍGIDAS DE AUDITORIA:
 Retorne EXCLUSIVAMENTE um objeto JSON válido.`
     });
 
-    for (const f of files.slice(0, 20)) {
+    for (const f of enrichedFiles.slice(0, 20)) {
       const folderContext = f.subfolder && f.subfolder !== "Raiz" ? `[Subpasta: ${f.subfolder}]` : f.relativePath ? `[Caminho: ${f.relativePath}]` : "";
       if (f.textContent) {
         parts.push({ text: `\n=== ARQUIVO DE TEXTO/OFX/PLANILHA ${folderContext}: ${f.name} ===\n${f.textContent.substring(0, 35000)}` });
@@ -1853,10 +1968,10 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido.`
       }
     }
 
-    let parsed: any = extractProjectDeterministically(files);
+    let parsed: any = extractProjectDeterministically(enrichedFiles);
 
     if (!parsed.transactions.length && !parsed.documents.length && !parsed.rubrics.length && ai) {
-      console.log(`Enviando ${files.length} arquivos reais para processamento...`);
+      console.log(`Enviando ${enrichedFiles.length} arquivos reais para processamento...`);
       try {
         const response = await generateGeminiContentWithFallback(ai, {
           contents: parts,
@@ -1873,7 +1988,7 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido.`
 
     if (!parsed || !parsed.project) {
       // Direct local extraction fallback
-      parsed = extractProjectDeterministically(files);
+      parsed = extractProjectDeterministically(enrichedFiles);
     }
 
     // Assign consistent IDs
@@ -1883,8 +1998,8 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido.`
       success: true,
       data: {
         ...parsed,
-        importedFilesCount: files.length,
-        importedFiles: files.map((f: any) => f.name),
+        importedFilesCount: enrichedFiles.length,
+        importedFiles: enrichedFiles.map((f: any) => f.name),
       },
     });
   } catch (error: any) {
@@ -1911,19 +2026,7 @@ app.post("/api/reconciliation-engine/pdf-extract", async (req, res) => {
       return res.status(400).json({ error: "base64Data é obrigatório" });
     }
 
-    const cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, "");
-    const buffer = Buffer.from(cleanBase64, "base64");
-
-    let extractedText = "";
-    try {
-      const pdfParseModule = (await import("pdf-parse")) as any;
-      const pdfParse = typeof pdfParseModule === "function" ? pdfParseModule : (pdfParseModule.default || pdfParseModule);
-      const pdfData = await pdfParse(buffer);
-      extractedText = pdfData?.text || "";
-    } catch (pdfErr: any) {
-      console.warn("pdf-parse falhou, tentando extração de strings:", pdfErr.message);
-      extractedText = buffer.toString("utf-8");
-    }
+    const extractedText = await extractPdfText(base64Data);
 
     const fiscalHeuristic = extractFiscalDocumentHeuristics(extractedText);
 

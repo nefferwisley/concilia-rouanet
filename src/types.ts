@@ -51,6 +51,10 @@ export interface BankAccountInfo {
   saldoBloqueado: number;
   saldoMovimento: number;
   rendimentoAplicacao: number;
+  /** True only when an OFX/CSV (or equivalent bank statement) was imported. */
+  extratoBancarioImportado?: boolean;
+  /** Prevents planilha-derived movements from being labelled as a bank statement. */
+  fonteMovimentacao?: "EXTRATO_OFX" | "PLANILHA_CONTROLE" | string;
 }
 
 export interface ValidatedFinancialSummary {

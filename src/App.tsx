@@ -72,6 +72,35 @@ const STORAGE_KEYS = {
 const IS_DEMO_MODE = true;
 const ONLINE_ACTIVE_PROJECT_STORAGE_KEY = "concilia_rouanet_online_active_project_v1";
 
+type PersistedWorkspace = {
+  projects: PronacProject[];
+  activeProjectId: string;
+  rubrics: Record<string, BudgetRubric[]>;
+  transactions: Record<string, BankTransaction[]>;
+  documents: Record<string, FiscalDocument[]>;
+  alerts: Record<string, AuditAlert[]>;
+  tripartiteEntries: Record<string, TripartiteEntry[]>;
+  receipts: Record<string, Record<string, ReceiptItem>>;
+};
+
+function persistWorkspaceSnapshot(snapshot: PersistedWorkspace): boolean {
+  if (!IS_DEMO_MODE) return true;
+  try {
+    localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(snapshot.projects));
+    localStorage.setItem(STORAGE_KEYS.ACTIVE_ID, snapshot.activeProjectId);
+    localStorage.setItem(STORAGE_KEYS.RUBRICS, JSON.stringify(snapshot.rubrics));
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(snapshot.transactions));
+    localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(snapshot.documents));
+    localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(snapshot.alerts));
+    localStorage.setItem(STORAGE_KEYS.TRIPARTITE, JSON.stringify(snapshot.tripartiteEntries));
+    localStorage.setItem(STORAGE_KEYS.RECEIPTS, JSON.stringify(snapshot.receipts));
+    return true;
+  } catch (error) {
+    console.error("Não foi possível salvar o projeto neste navegador:", error);
+    return false;
+  }
+}
+
 const removePlaceholderBankData = (project: PronacProject): PronacProject => {
   const bank = project.bancoInfo;
   const hasPlaceholderBankData =
@@ -284,11 +313,11 @@ export default function App() {
     nome: "",
     proponente: "",
     cnpjCpf: "",
-    segmento: "Música",
-    artigoEnquadramento: "Artigo 18 (100% Renúncia)",
-    dataInicioVigencia: new Date().toISOString().slice(0, 10),
-    dataFimVigencia: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-    prazoLimitePrestacao: new Date(Date.now() + (365 + 60) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    segmento: "Não identificado",
+    artigoEnquadramento: "Não identificado",
+    dataInicioVigencia: "",
+    dataFimVigencia: "",
+    prazoLimitePrestacao: "",
     valorAprovado: 0,
     valorCaptado: 0,
     valorExecutado: 0,
@@ -301,26 +330,22 @@ export default function App() {
       saldoMovimento: 0,
       rendimentoAplicacao: 0,
     },
-    status: "Em Execução",
+    status: "Cadastrado — aguardando importação",
     resumoProjeto: "",
   });
 
   // Persist to LocalStorage on change
   useEffect(() => {
-    if (!IS_DEMO_MODE) return;
-
-    try {
-      localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
-      localStorage.setItem(STORAGE_KEYS.ACTIVE_ID, activeProjectId);
-      localStorage.setItem(STORAGE_KEYS.RUBRICS, JSON.stringify(allRubrics));
-      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(allTransactions));
-      localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(allDocuments));
-      localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(allAlerts));
-      localStorage.setItem(STORAGE_KEYS.TRIPARTITE, JSON.stringify(allTripartiteEntries));
-      localStorage.setItem(STORAGE_KEYS.RECEIPTS, JSON.stringify(allReceipts));
-    } catch (e) {
-      console.warn("Error saving to localStorage:", e);
-    }
+    persistWorkspaceSnapshot({
+      projects,
+      activeProjectId,
+      rubrics: allRubrics,
+      transactions: allTransactions,
+      documents: allDocuments,
+      alerts: allAlerts,
+      tripartiteEntries: allTripartiteEntries,
+      receipts: allReceipts,
+    });
   }, [
     projects,
     activeProjectId,
@@ -585,15 +610,15 @@ export default function App() {
     const newId = `proj-${Date.now()}`;
     const fullNewProject: PronacProject = {
       id: newId,
-      pronac: newProjectForm.pronac || "000000",
-      nome: newProjectForm.nome || "Novo Projeto Cultural",
-      proponente: newProjectForm.proponente || "Proponente Cultural",
-      cnpjCpf: newProjectForm.cnpjCpf || "00.000.000/0001-00",
-      segmento: newProjectForm.segmento || "Música",
-      artigoEnquadramento: (newProjectForm.artigoEnquadramento as any) || "Artigo 18 (100% Renúncia)",
-      dataInicioVigencia: newProjectForm.dataInicioVigencia || "2024-01-01",
-      dataFimVigencia: newProjectForm.dataFimVigencia || "2024-12-31",
-      prazoLimitePrestacao: newProjectForm.prazoLimitePrestacao || "2025-02-28",
+      pronac: newProjectForm.pronac.trim(),
+      nome: newProjectForm.nome.trim(),
+      proponente: newProjectForm.proponente?.trim() || "",
+      cnpjCpf: newProjectForm.cnpjCpf?.trim() || "",
+      segmento: newProjectForm.segmento || "Não identificado",
+      artigoEnquadramento: (newProjectForm.artigoEnquadramento as any) || "Não identificado",
+      dataInicioVigencia: newProjectForm.dataInicioVigencia || "",
+      dataFimVigencia: newProjectForm.dataFimVigencia || "",
+      prazoLimitePrestacao: newProjectForm.prazoLimitePrestacao || "",
       valorAprovado: Number(newProjectForm.valorAprovado) || 0,
       valorCaptado: Number(newProjectForm.valorCaptado) || 0,
       valorExecutado: 0,
@@ -606,16 +631,36 @@ export default function App() {
         saldoMovimento: 0,
         rendimentoAplicacao: 0,
       },
-      status: "Em Execução",
+      status: "Cadastrado — aguardando importação",
       resumoProjeto: newProjectForm.resumoProjeto || "",
     };
 
-    setProjects((prev) => [...prev, fullNewProject]);
-    setAllRubrics((prev) => ({ ...prev, [newId]: [] }));
-    setAllTransactions((prev) => ({ ...prev, [newId]: [] }));
-    setAllDocuments((prev) => ({ ...prev, [newId]: [] }));
-    setAllAlerts((prev) => ({ ...prev, [newId]: [] }));
-    setAllTripartiteEntries((prev) => ({ ...prev, [newId]: [] }));
+    const nextProjects = [...projects, fullNewProject];
+    const nextRubrics = { ...allRubrics, [newId]: [] };
+    const nextTransactions = { ...allTransactions, [newId]: [] };
+    const nextDocuments = { ...allDocuments, [newId]: [] };
+    const nextAlerts = { ...allAlerts, [newId]: [] };
+    const nextTripartiteEntries = { ...allTripartiteEntries, [newId]: [] };
+    const saved = persistWorkspaceSnapshot({
+      projects: nextProjects,
+      activeProjectId: newId,
+      rubrics: nextRubrics,
+      transactions: nextTransactions,
+      documents: nextDocuments,
+      alerts: nextAlerts,
+      tripartiteEntries: nextTripartiteEntries,
+      receipts: allReceipts,
+    });
+    if (!saved) {
+      alert("O projeto foi criado, mas este navegador não conseguiu salvá-lo. Libere espaço de armazenamento e tente novamente.");
+    }
+
+    setProjects(nextProjects);
+    setAllRubrics(nextRubrics);
+    setAllTransactions(nextTransactions);
+    setAllDocuments(nextDocuments);
+    setAllAlerts(nextAlerts);
+    setAllTripartiteEntries(nextTripartiteEntries);
     setActiveProjectId(newId);
     setIsNewProjectModalOpen(false);
   };
@@ -1012,6 +1057,7 @@ export default function App() {
                     }
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   >
+                    <option value="Não identificado">Não identificado nos dados informados</option>
                     <option value="Artigo 18 (100% Renúncia)">Artigo 18 (100% Dedução IRPJ/IRPF)</option>
                     <option value="Artigo 26 (30% / 40% Dedução)">Artigo 26 (Dedução Parcial)</option>
                   </select>
@@ -1118,22 +1164,33 @@ export default function App() {
         currentTripartiteEntries={currentTripartiteEntries}
         onClose={() => setIsDriveModalOpen(false)}
         onImportComplete={({ project, rubrics, transactions, documents, alerts, tripartiteEntries }) => {
-          // Add project and set as active
-          setProjects((prev) => {
-            const filtered = prev.filter((p) => p.id !== project.id);
-            return [project, ...filtered];
+          const nextProjects = [project, ...projects.filter((item) => item.id !== project.id)];
+          const nextRubrics = { ...allRubrics, [project.id]: rubrics };
+          const nextTransactions = { ...allTransactions, [project.id]: transactions };
+          const nextDocuments = { ...allDocuments, [project.id]: documents };
+          const nextAlerts = { ...allAlerts, [project.id]: alerts };
+          const nextTripartiteEntries = { ...allTripartiteEntries, [project.id]: tripartiteEntries };
+          const saved = persistWorkspaceSnapshot({
+            projects: nextProjects,
+            activeProjectId: project.id,
+            rubrics: nextRubrics,
+            transactions: nextTransactions,
+            documents: nextDocuments,
+            alerts: nextAlerts,
+            tripartiteEntries: nextTripartiteEntries,
+            receipts: allReceipts,
           });
-          setActiveProjectId(project.id);
-          try {
-            localStorage.setItem(STORAGE_KEYS.ACTIVE_ID, project.id);
-          } catch (e) {}
+          if (!saved) {
+            alert("A importação foi concluída, mas não coube no armazenamento deste navegador. Os dados não serão mantidos após atualizar a página.");
+          }
 
-          // Update domain states
-          setAllRubrics((prev) => ({ ...prev, [project.id]: rubrics }));
-          setAllTransactions((prev) => ({ ...prev, [project.id]: transactions }));
-          setAllDocuments((prev) => ({ ...prev, [project.id]: documents }));
-          setAllAlerts((prev) => ({ ...prev, [project.id]: alerts }));
-          setAllTripartiteEntries((prev) => ({ ...prev, [project.id]: tripartiteEntries }));
+          setProjects(nextProjects);
+          setActiveProjectId(project.id);
+          setAllRubrics(nextRubrics);
+          setAllTransactions(nextTransactions);
+          setAllDocuments(nextDocuments);
+          setAllAlerts(nextAlerts);
+          setAllTripartiteEntries(nextTripartiteEntries);
 
           // Automatically navigate to "reconciliation" so the user can verify all transactions
           setActiveTab("reconciliation");

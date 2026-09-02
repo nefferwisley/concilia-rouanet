@@ -68,7 +68,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
-  const hasImportedBankStatement = safeTransactions.length > 0;
+  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado === true;
+  const usesControlSpreadsheet = project.bancoInfo?.fonteMovimentacao === "PLANILHA_CONTROLE";
 
   const liveFinancialSummary = calculateProjectFinancialSummary(safeTransactions);
   const validatedSummary = project.resumoFinanceiroValidado;
@@ -225,7 +226,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
     if (txSearch.trim()) {
       const q = txSearch.toLowerCase();
-      const matchDesc = tx.descricao.toLowerCase().includes(q);
+      const matchDesc = (tx.descricao || tx.descricaoExtrato || tx.descricaoOriginalExtrato || "").toLowerCase().includes(q);
       const matchDoc = tx.documentoNumero?.toLowerCase().includes(q);
       const matchObs = tx.observacoes?.toLowerCase().includes(q);
       const matchVal = tx.valor.toString().includes(q);
@@ -249,8 +250,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     {
       id: "reconciliation",
       title: "2. Extrato Bancário",
-      description: `${safeTransactions.length} lançamentos importados`,
-      completed: safeTransactions.length > 0,
+      description: hasImportedBankStatement
+        ? `${safeTransactions.length} lançamentos de extrato importados`
+        : usesControlSpreadsheet
+          ? "OFX/CSV ainda não anexado"
+          : "Nenhum extrato importado",
+      completed: hasImportedBankStatement,
       tab: "reconciliation",
     },
     {
@@ -348,6 +353,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {usesControlSpreadsheet && !hasImportedBankStatement && (
+        <div
+          role="status"
+          data-testid="bank-statement-pending"
+          className="flex items-start gap-3 rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <div>
+            <p className="font-semibold">Extrato bancário OFX/CSV pendente</p>
+            <p className="mt-0.5 text-xs text-amber-100/75">
+              Os {safeTransactions.length} lançamentos exibidos vieram da planilha de controle. Os documentos fiscais e comprovantes podem ser conciliados, mas o saldo e a validação contra o extrato consolidado só serão confirmados quando ele for anexado.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Guided Workflow Tracker */}
       <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-4.5 shadow-md">
@@ -486,7 +507,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-[10px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/20">
               {hasImportedBankStatement && project.bancoInfo.contaMovimento
                 ? project.bancoInfo.contaMovimento
-                : "Conta não informada"}
+                : usesControlSpreadsheet && project.bancoInfo.contaMovimento
+                  ? `${project.bancoInfo.contaMovimento} (planilha)`
+                  : "Conta não informada"}
             </span>
           </div>
           <div className="text-xl font-bold text-white font-mono">

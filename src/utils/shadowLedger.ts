@@ -71,22 +71,15 @@ export function selfHealDocumentsAndTransactions(
 
   const safeTxs = (Array.isArray(transactions) ? transactions : []).filter((t) => !isSummaryItem(t));
   const safeDocs = (Array.isArray(documents) ? documents : []).filter((d) => !isSummaryItem(d));
-  const safeRubrics = Array.isArray(rubrics) ? [...rubrics] : [];
+  void rubrics;
 
   let healedCount = 0;
 
-  // Get debit transactions
-  const debitTxs = safeTxs.filter((t) => t && (t.tipo === "DEBITO" || t.tipoMovimento === "DEBIT" || !t.tipo));
-
-  const healedDocs = safeDocs.map((doc, idx) => {
+  const healedDocs = safeDocs.map((doc) => {
     if (!doc) return doc;
     const docCopy = { ...doc };
-    let wasHealed = false;
-
-    // 1. Check if document has 0 value or missing provider
     const currentVal = Number(docCopy.valorBruto) || 0;
     if (currentVal <= 0) {
-      // Try extracting from file name or description
       const nameVal =
         extractAmountFromText(docCopy.arquivoNotaNome || "") ||
         extractAmountFromText(docCopy.numeroDoc || "") ||
@@ -95,78 +88,92 @@ export function selfHealDocumentsAndTransactions(
       if (nameVal && nameVal > 0) {
         docCopy.valorBruto = nameVal;
         docCopy.valorLiquido = nameVal;
-        wasHealed = true;
-      } else if (docCopy.idTransacao) {
-        // Link from transaction
-        const linkedTx = debitTxs.find((t) => t.id === docCopy.idTransacao);
-        if (linkedTx && linkedTx.valor > 0) {
-          docCopy.valorBruto = linkedTx.valor;
-          docCopy.valorLiquido = linkedTx.valor;
-          if (!docCopy.fornecedorNome || docCopy.fornecedorNome === "Fornecedor / Prestador" || docCopy.fornecedorNome === "Prestador / Fornecedor Identificado") {
-            docCopy.fornecedorNome = linkedTx.favorecido || linkedTx.descricaoExtrato || "Prestador de Serviços";
-          }
-          if (linkedTx.cnpjCpfFavorecido) {
-            docCopy.fornecedorCnpjCpf = linkedTx.cnpjCpfFavorecido;
-          }
-          wasHealed = true;
-        }
-      } else if (debitTxs.length > 0) {
-        // Pair by order or modulo if list sizes match closely
-        const matchingTx = debitTxs[idx % debitTxs.length];
-        if (matchingTx && matchingTx.valor > 0) {
-          docCopy.valorBruto = matchingTx.valor;
-          docCopy.valorLiquido = matchingTx.valor;
-          docCopy.idTransacao = matchingTx.id;
-          if (!docCopy.fornecedorNome || docCopy.fornecedorNome === "Fornecedor / Prestador" || docCopy.fornecedorNome === "Prestador / Fornecedor Identificado") {
-            docCopy.fornecedorNome = matchingTx.favorecido || matchingTx.descricaoExtrato || `Fornecedor Item #${idx + 1}`;
-          }
-          if (matchingTx.cnpjCpfFavorecido) {
-            docCopy.fornecedorCnpjCpf = matchingTx.cnpjCpfFavorecido;
-          }
-          wasHealed = true;
-        }
+        healedCount++;
       }
     }
-
-    // 2. Ensure rubric is assigned
-    if ((!docCopy.rubricaId || !docCopy.idRubrica) && safeRubrics.length > 0) {
-      // Try matching by service desc
-      const desc = (docCopy.descricaoServico || docCopy.fornecedorNome || "").toLowerCase();
-      const matchedRub =
-        safeRubrics.find((r) => r.nome && desc.includes(r.nome.toLowerCase())) ||
-        safeRubrics.find((r) => r.nomeRubrica && desc.includes(r.nomeRubrica.toLowerCase())) ||
-        safeRubrics[idx % safeRubrics.length] ||
-        safeRubrics[0];
-
-      if (matchedRub) {
-        docCopy.rubricaId = matchedRub.id;
-        docCopy.idRubrica = matchedRub.id;
-        docCopy.rubricaNome = matchedRub.nome || matchedRub.nomeRubrica;
-        docCopy.etapa = matchedRub.etapa;
-        wasHealed = true;
-      }
-    }
-
-    // Ensure status and files are valid
-    if (!docCopy.arquivoNotaNome) {
-      docCopy.arquivoNotaNome = `Doc_Fiscal_${docCopy.numeroDoc || idx + 1}.pdf`;
-      wasHealed = true;
-    }
-    if (!docCopy.statusComprovacao || docCopy.statusComprovacao === "Pendente") {
-      docCopy.statusComprovacao = "Completo";
-      wasHealed = true;
-    }
-
-    if (wasHealed) {
-      healedCount++;
-      docCopy.confiabilidadeIa = Math.max(docCopy.confiabilidadeIa || 0, 95);
-      docCopy.statusComprovacao = "Completo";
-    }
-
     return docCopy;
   });
 
   return { healedDocs, healedTxs: safeTxs, healedCount };
+}
+
+function normalizeReconciliationText(value: unknown): string {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function meaningfulTokens(value: unknown): Set<string> {
+  const ignored = new Set(["de", "da", "do", "das", "dos", "e", "ltda", "me", "eireli", "sa", "pdf", "nota", "fiscal", "recibo"]);
+  return new Set(normalizeReconciliationText(value).split(" ").filter((token) => token.length >= 3 && !ignored.has(token)));
+}
+
+function providerSimilarity(transaction: BankTransaction, document: FiscalDocument): number {
+  const txTokens = meaningfulTokens(`${transaction.favorecido || ""} ${transaction.descricaoExtrato || ""} ${transaction.descricaoOriginalExtrato || ""}`);
+  if (txTokens.size === 0) return 0;
+  const similarity = (documentText: unknown) => {
+    const docTokens = meaningfulTokens(documentText);
+    if (docTokens.size === 0) return 0;
+    const intersection = [...docTokens].filter((token) =>
+      [...txTokens].some((transactionToken) =>
+        transactionToken === token ||
+        (transactionToken.length >= 4 && token.length >= 4 && transactionToken.slice(0, 3) === token.slice(0, 3))
+      )
+    ).length;
+    return intersection / Math.min(txTokens.size, docTokens.size);
+  };
+  return Math.max(similarity(document.fornecedorNome), similarity(document.arquivoNotaNome));
+}
+
+function rubricFilenameSimilarity(transaction: BankTransaction, document: FiscalDocument): number {
+  const rubricTokens = meaningfulTokens(transaction.rubricaNome || transaction.rubrica || "");
+  const filenameTokens = meaningfulTokens(document.arquivoNotaNome);
+  if (rubricTokens.size === 0 || filenameTokens.size === 0) return 0;
+  const intersection = [...rubricTokens].filter((token) => filenameTokens.has(token)).length;
+  return intersection / Math.min(rubricTokens.size, filenameTokens.size);
+}
+
+function documentMatchScore(transaction: BankTransaction, document: FiscalDocument): number {
+  if (transaction.matchedDocId === document.id || (transaction.id && document.idTransacao === transaction.id)) return 1000;
+
+  const txValue = Number(transaction.valor) || 0;
+  const gross = Number(document.valorBruto) || 0;
+  const net = Number(document.valorLiquido) || gross;
+  const valueMatches = txValue > 0 && (Math.abs(gross - txValue) < 0.05 || Math.abs(net - txValue) < 0.05);
+  const txControl = normalizeReconciliationText(transaction.controleNumero || transaction.documentoNumero);
+  const docControl = normalizeReconciliationText(document.controleNumero);
+  const controlMatches = Boolean(txControl && docControl && txControl === docControl);
+  const supplierScore = providerSimilarity(transaction, document);
+  const rubricScore = rubricFilenameSimilarity(transaction, document);
+
+  let score = 0;
+  if (valueMatches) score += 55;
+  if (controlMatches) score += 35;
+  if (supplierScore >= 0.5) score += 35;
+  else if (supplierScore > 0) score += 15;
+  if (rubricScore >= 0.5) score += 35;
+  else if (rubricScore > 0) score += 15;
+  if (document.evidenciaBancariaExtraida) score += 5;
+  if (document.evidenciaFiscalExtraida) score += 5;
+  return score;
+}
+
+function semanticDocumentMatchScore(transaction: BankTransaction, document: FiscalDocument): number {
+  const txValue = Number(transaction.valor) || 0;
+  const gross = Number(document.valorBruto) || 0;
+  const net = Number(document.valorLiquido) || gross;
+  const valueMatches = txValue > 0 && (Math.abs(gross - txValue) < 0.05 || Math.abs(net - txValue) < 0.05);
+  const supplierScore = providerSimilarity(transaction, document);
+  const rubricScore = rubricFilenameSimilarity(transaction, document);
+  let score = valueMatches ? 55 : 0;
+  if (supplierScore >= 0.5) score += 35;
+  else if (supplierScore > 0) score += 15;
+  if (rubricScore >= 0.5) score += 35;
+  else if (rubricScore > 0) score += 15;
+  return score;
 }
 
 /**
@@ -188,10 +195,40 @@ export function runRealtimeTripartiteReconciliation(
   const safeRubrics = Array.isArray(rubrics) ? [...rubrics] : [];
   const debitTxs = healedTxs.filter((t) => t && (t.tipo === "DEBITO" || t.tipoMovimento === "DEBIT" || !t.tipo));
 
-  const usedDocIds = new Set<string>();
   const updatedTransactions: BankTransaction[] = [];
   const updatedDocuments: FiscalDocument[] = [...healedDocs];
   const tripartiteEntries: TripartiteEntry[] = [];
+  const usedDocIds = new Set<string>();
+  const controlLinkedDocs = new Map<string, FiscalDocument>();
+  const transactionsByControl = new Map<string, BankTransaction[]>();
+  const documentsByControl = new Map<string, FiscalDocument[]>();
+
+  debitTxs.forEach((transaction) => {
+    const control = normalizeReconciliationText(transaction.controleNumero || transaction.documentoNumero);
+    if (!control) return;
+    transactionsByControl.set(control, [...(transactionsByControl.get(control) || []), transaction]);
+  });
+  updatedDocuments.forEach((document) => {
+    const control = normalizeReconciliationText(document.controleNumero);
+    if (!control) return;
+    documentsByControl.set(control, [...(documentsByControl.get(control) || []), document]);
+  });
+  transactionsByControl.forEach((controlTransactions, control) => {
+    const controlDocuments = documentsByControl.get(control) || [];
+    if (controlTransactions.length === 1 && controlDocuments.length === 1) {
+      const transaction = controlTransactions[0];
+      const bestAlternateSemanticScore = updatedDocuments
+        .filter((document) => document.id !== controlDocuments[0].id)
+        .reduce((bestScore, document) => Math.max(bestScore, semanticDocumentMatchScore(transaction, document)), 0);
+
+      // A number printed in both the spreadsheet and filename is useful evidence,
+      // but it must not override a stronger supplier/rubric match when a duplicated
+      // control shifts later filename numbers.
+      if (bestAlternateSemanticScore < 35) {
+        controlLinkedDocs.set(transaction.id, controlDocuments[0]);
+      }
+    }
+  });
   let matchedCount = 0;
   let totalReconciledValue = 0;
 
@@ -203,18 +240,12 @@ export function runRealtimeTripartiteReconciliation(
     if (!tx) return;
 
     if (tx.tipo === "CREDITO" || tx.tipoMovimento === "CREDIT" || tx.tipo === "RESGATE") {
-      updatedTransactions.push({
-        ...tx,
-        status: "CONCILIADO",
-        statusConciliacao: "CONCILIADO",
-      });
+      updatedTransactions.push({ ...tx });
       return;
     }
 
     const txVal = Number(tx.valor) || 0;
-    const txDate = tx.data || tx.dataTransacao || "2024-01-15";
-    const txDesc = (tx.descricaoExtrato || tx.descricaoOriginalExtrato || tx.descricao || "").toLowerCase();
-    const txFav = (tx.favorecido || "").toLowerCase();
+    const txDate = tx.data || tx.dataTransacao || "";
 
     // 1. Find best document candidate
     let matchedDoc: FiscalDocument | undefined = undefined;
@@ -226,40 +257,17 @@ export function runRealtimeTripartiteReconciliation(
     if (!matchedDoc && tx.id) {
       matchedDoc = updatedDocuments.find((d) => d.idTransacao === tx.id && !usedDocIds.has(d.id));
     }
-
-    // Strategy B: Match by exact gross or net value
-    if (!matchedDoc) {
-      matchedDoc = updatedDocuments.find((d) => {
-        if (usedDocIds.has(d.id)) return false;
-        const dBruto = Number(d.valorBruto) || 0;
-        const dLiq = Number(d.valorLiquido) || dBruto;
-        return Math.abs(dBruto - txVal) < 0.05 || Math.abs(dLiq - txVal) < 0.05;
-      });
+    if (!matchedDoc && tx.id) {
+      const controlLinked = controlLinkedDocs.get(tx.id);
+      if (controlLinked && !usedDocIds.has(controlLinked.id)) matchedDoc = controlLinked;
     }
 
-    // Strategy C: Match by supplier name or memo
-    if (!matchedDoc && (txFav || txDesc)) {
-      matchedDoc = updatedDocuments.find((d) => {
-        if (usedDocIds.has(d.id)) return false;
-        const forName = (d.fornecedorNome || "").toLowerCase();
-        if (forName && forName !== "fornecedor / prestador") {
-          return txDesc.includes(forName) || txFav.includes(forName);
-        }
-        return false;
-      });
-    }
-
-    // Strategy D: Fallback to document at index if available and unassigned
     if (!matchedDoc) {
-      const candidate = updatedDocuments[txIndex];
-      if (candidate && !usedDocIds.has(candidate.id)) {
-        matchedDoc = candidate;
-        // Auto-heal value if needed
-        if (Number(matchedDoc.valorBruto) <= 0) {
-          matchedDoc.valorBruto = txVal;
-          matchedDoc.valorLiquido = txVal;
-        }
-      }
+      const candidates = updatedDocuments
+        .filter((document) => !usedDocIds.has(document.id))
+        .map((document) => ({ document, score: documentMatchScore(tx, document) }))
+        .sort((left, right) => right.score - left.score);
+      if (candidates[0]?.score >= 70) matchedDoc = candidates[0].document;
     }
 
     if (matchedDoc) {
@@ -269,21 +277,23 @@ export function runRealtimeTripartiteReconciliation(
       const rubric =
         safeRubrics.find((r) => r.id === matchedDoc?.rubricaId) ||
         safeRubrics.find((r) => r.id === tx.matchedRubricId) ||
-        safeRubrics[0];
+        safeRubrics.find((r) => r.id === tx.idRubricaVinculada);
 
-      const rubricId = rubric ? rubric.id : "RUB-01";
-      const rubricName = rubric ? rubric.nome || rubric.nomeRubrica || "Despesa" : "Despesa";
-      const rubricStage = rubric ? rubric.etapa || "Produção / Execução" : "Produção / Execução";
+      const rubricId = rubric?.id || "";
+      const rubricName = rubric?.nome || rubric?.nomeRubrica || "Rubrica não identificada";
+      const rubricStage = rubric?.etapa || "Não identificada nos arquivos";
 
       // Update rubric execution
-      const currentExec = rubricExecutionMap.get(rubricId) || 0;
-      rubricExecutionMap.set(rubricId, currentExec + txVal);
+      if (rubricId) {
+        const currentExec = rubricExecutionMap.get(rubricId) || 0;
+        rubricExecutionMap.set(rubricId, currentExec + txVal);
+      }
 
-      const hasFiscalDoc =
-        tx.documentoFiscalCompleto !== false &&
-        Boolean(matchedDoc.numeroDoc && matchedDoc.valorBruto > 0);
-      const hasBankReceipt = Boolean(tx.comprovanteUrl || tx.temComprovante || matchedDoc.arquivoComprovanteNome);
-      const isFullyReconciled = hasFiscalDoc && hasBankReceipt;
+      const hasDocumentAttachment = tx.documentoFiscalCompleto !== false && Boolean(matchedDoc.arquivoNotaNome || matchedDoc.evidenciaFiscalExtraida);
+      const hasBankReceipt = Boolean(tx.comprovanteUrl || tx.temComprovante || matchedDoc.evidenciaBancariaExtraida);
+      const isResourceReturn = /devolu[cç][aã]o\s+(?:de\s+)?recursos/i.test(`${tx.favorecido || ""} ${tx.descricaoOriginalExtrato || ""} ${matchedDoc.arquivoNotaNome || ""}`);
+      const hasRequiredEvidence = hasDocumentAttachment && hasBankReceipt;
+      const isFullyReconciled = hasRequiredEvidence && (Boolean(rubricId) || isResourceReturn);
       const statusFinal = isFullyReconciled ? "CONCILIADO" : "PENDENTE";
 
       if (isFullyReconciled) {
@@ -307,37 +317,38 @@ export function runRealtimeTripartiteReconciliation(
       // Update doc links
       matchedDoc.idTransacao = tx.id;
       matchedDoc.rubricaId = rubricId;
+      matchedDoc.idRubrica = rubricId;
       matchedDoc.rubricaNome = rubricName;
       matchedDoc.etapa = rubricStage;
       matchedDoc.statusComprovacao = isFullyReconciled ? "Completo" : "Pendente";
 
       // Create Tripartite Shadow Entry
-      const periodStr = txDate ? txDate.slice(0, 7) : "2024-05";
+      const periodStr = txDate ? txDate.slice(0, 7) : "";
       const lancamentoId = `LANC-${String(txIndex + 1).padStart(4, "0")}`;
 
       tripartiteEntries.push({
         id: `trip-${tx.id || txIndex}`,
         idLancamento: lancamentoId,
         periodo: periodStr,
-        itemNumero: rubric?.itemNumero || `${(txIndex % 10) + 1}.1`,
-        etapa: (rubricStage as any) || "Produção / Execução",
+        itemNumero: rubric?.itemNumero || "",
+        etapa: rubricStage as any,
         rubricaId: rubricId,
         idRubrica: rubricId,
         rubricaNome: rubricName,
         descricaoRubrica: rubricName,
         idDocFiscal: matchedDoc.id,
         idTransacaoBB: tx.id,
-        fornecedor: matchedDoc.fornecedorNome || tx.favorecido || "Fornecedor",
-        cnpjCpf: matchedDoc.fornecedorCnpjCpf || tx.cnpjCpfFavorecido || "00.000.000/0001-00",
-        tipoDoc: (matchedDoc.tipo as any) || "NFS-e (Serviço)",
-        numeroDoc: matchedDoc.numeroDoc || `NF-${txIndex + 1}`,
-        dataEmissao: matchedDoc.dataEmissao || txDate,
-        dataEmissaoDoc: matchedDoc.dataEmissao || txDate,
+        fornecedor: matchedDoc.fornecedorNome || tx.favorecido || "",
+        cnpjCpf: matchedDoc.fornecedorCnpjCpf || tx.cnpjCpfFavorecido || "",
+        tipoDoc: (matchedDoc.tipo as any) || "Documento importado",
+        numeroDoc: matchedDoc.numeroDoc || "",
+        dataEmissao: matchedDoc.dataEmissao || "",
+        dataEmissaoDoc: matchedDoc.dataEmissao || "",
         dataCompensacao: txDate,
         dataPagamento: txDate,
         valorDebitoBB: txVal,
-        valorBrutoDoc: Number(matchedDoc.valorBruto) || txVal,
-        valorLiquidoPagar: Number(matchedDoc.valorLiquido) || txVal,
+        valorBrutoDoc: Number(matchedDoc.valorBruto) || 0,
+        valorLiquidoPagar: Number(matchedDoc.valorLiquido) || 0,
         valorLiquidoPago: txVal,
         retencoes: {
           iss: Number(matchedDoc.retencaoIss) || 0,
@@ -345,13 +356,13 @@ export function runRealtimeTripartiteReconciliation(
           inss: Number(matchedDoc.retencaoInss) || 0,
           outras: 0,
         },
-        documentoBancarioNumero: tx.documentoBancario || `DOC-${txIndex + 1}`,
-        saldoRubricaApos: Math.max(0, (rubric?.valorAprovado || 50000) - (rubricExecutionMap.get(rubricId) || 0)),
+        documentoBancarioNumero: tx.documentoBancario || tx.documentoNumero || "",
+        saldoRubricaApos: Math.max(0, (rubric?.valorAprovado || 0) - (rubricExecutionMap.get(rubricId) || 0)),
         checkTripe: {
-          fiscalDocAnexo: hasFiscalDoc,
+          fiscalDocAnexo: hasDocumentAttachment,
           comprovanteBancarioAnexo: hasBankReceipt,
-          relatorioExecucaoAnexo: true,
-          rubricaValida: true,
+          relatorioExecucaoAnexo: false,
+          rubricaValida: Boolean(rubricId),
         },
         statusTripartite: isFullyReconciled ? "CONCILIADO_PERFEITO" : "PENDENTE DE VÍNCULO",
         statusSalic: isFullyReconciled ? "Comprovado 100%" : "Pendente",
@@ -366,7 +377,7 @@ export function runRealtimeTripartiteReconciliation(
                   tipo: "NOTA_FISCAL" as const,
                   nomeArquivo: matchedDoc.arquivoNotaNome,
                   tamanhoFormatado: "1.2 MB",
-                  status: hasFiscalDoc ? ("VALIDADO" as const) : ("PENDENTE" as const),
+                  status: hasDocumentAttachment ? ("VALIDADO" as const) : ("PENDENTE" as const),
                 },
               ]
             : []),
@@ -394,24 +405,24 @@ export function runRealtimeTripartiteReconciliation(
       };
       updatedTransactions.push(orphanTx);
       
-      const periodStr = txDate ? txDate.slice(0, 7) : "2024-05";
+      const periodStr = txDate ? txDate.slice(0, 7) : "";
       const lancamentoId = `LANC-${String(txIndex + 1).padStart(4, "0")}`;
       
       tripartiteEntries.push({
         id: `trip-${tx.id || txIndex}`,
         idLancamento: lancamentoId,
         periodo: periodStr,
-        itemNumero: `${(txIndex % 10) + 1}.1`,
-        etapa: "Produção / Execução",
-        rubricaId: "RUB-01",
-        idRubrica: "RUB-01",
+        itemNumero: "",
+        etapa: "Não identificada nos arquivos",
+        rubricaId: "",
+        idRubrica: "",
         rubricaNome: "Pendente de Vínculo",
         descricaoRubrica: "Pendente de Vínculo",
         idDocFiscal: "",
         idTransacaoBB: tx.id,
-        fornecedor: tx.favorecido || "Fornecedor Pendente",
-        cnpjCpf: tx.cnpjCpfFavorecido || "00.000.000/0001-00",
-        tipoDoc: "NFS-e (Serviço)",
+        fornecedor: tx.favorecido || "",
+        cnpjCpf: tx.cnpjCpfFavorecido || "",
+        tipoDoc: "Documento importado" as any,
         numeroDoc: "",
         dataEmissao: txDate,
         dataEmissaoDoc: txDate,
@@ -422,7 +433,7 @@ export function runRealtimeTripartiteReconciliation(
         valorLiquidoPagar: 0,
         valorLiquidoPago: txVal,
         retencoes: { iss: 0, irrf: 0, inss: 0, outras: 0 },
-        documentoBancarioNumero: tx.documentoBancario || `DOC-${txIndex + 1}`,
+        documentoBancarioNumero: tx.documentoBancario || tx.documentoNumero || "",
         saldoRubricaApos: 0,
         checkTripe: {
           fiscalDocAnexo: false,
@@ -478,13 +489,13 @@ export function runRealtimeTripartiteReconciliation(
     id: "alert-info-tripartite",
     gravidade: "INFO",
     categoria: "Conciliação Tripartite",
-    titulo: "Vínculos Tripartite 100% Sincronizados",
-    descricao: `${matchedCount} transações bancárias vinculadas a notas fiscais e rubricas orçamentárias do projeto.`,
+    titulo: "Resultado da conciliação por evidências",
+    descricao: `${matchedCount} de ${debitTxs.length} débitos possuem documento, comprovante bancário e rubrica identificados nos arquivos importados.`,
     itemAfetado: "Extrato x Documentos x SALIC",
     baseLegal: "Art. 68 da IN MinC nº 01/2023",
-    acaoRecomendada: "Exportar Relatório Mensal / Final de Execução do SALIC.",
-    justificativaSugeridaSalic: "Todos os lançamentos conciliados com suporte probatório documental.",
-    resolvido: true,
+    acaoRecomendada: matchedCount === debitTxs.length ? "Revisar a amostragem antes da exportação." : "Revisar os vínculos pendentes e anexar as evidências ausentes.",
+    justificativaSugeridaSalic: "Resultado calculado exclusivamente a partir das evidências encontradas nos arquivos importados.",
+    resolvido: matchedCount === debitTxs.length,
   });
 
   return {
