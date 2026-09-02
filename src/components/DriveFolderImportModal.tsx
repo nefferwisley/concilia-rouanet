@@ -368,9 +368,57 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
 
     try {
       if (activeTab === "folder_files" && uploadedItems.length > 0) {
+        const configuredApiBaseUrl = import.meta.env.VITE_API_URL?.trim();
+        if (!configuredApiBaseUrl) {
+          const files = [];
+          for (const [index, item] of uploadedItems.entries()) {
+            setStatusMessage(`Lendo ${item.name} (${index + 1}/${uploadedItems.length})...`);
+            files.push({
+              name: item.name,
+              relativePath: item.relativePath,
+              subfolder: item.subfolder,
+              size: item.size,
+              mimeType: item.mimeType,
+              base64: item.base64 || (item.file ? await fileToBase64(item.file) : undefined),
+              textContent: item.textContent,
+            });
+            setProgressPercent(5 + Math.round(((index + 1) / uploadedItems.length) * 80));
+          }
+
+          const response = await fetch("/api/gemini/extract-project-files", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ files }),
+          });
+          const result = await response.json();
+          if (!response.ok || !result.success || !result.data) {
+            throw new Error(result.error || "Não foi possível extrair os dados da pasta.");
+          }
+
+          const synced = runRealtimeTripartiteReconciliation(
+            result.data.transactions || [],
+            result.data.documents || [],
+            result.data.rubrics || [],
+            activeProject,
+          );
+          setProgressPercent(100);
+          setStatus("done");
+          setStatusMessage(`${files.length} arquivos importados em ${activeProject.nome}.`);
+          onImportComplete({
+            project: activeProject,
+            rubrics: synced.rubrics,
+            transactions: synced.transactions,
+            documents: synced.documents,
+            alerts: synced.alerts,
+            tripartiteEntries: synced.tripartiteEntries,
+          });
+          onClose();
+          return;
+        }
+
         const token = localStorage.getItem("rouanet_auth_token");
         const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-        const baseUrl = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:8000/api/v1" : `${window.location.origin}/api/v1`);
+        const baseUrl = configuredApiBaseUrl;
         const normalizeId = (value: string) => value.replace(/\D/g, "");
         const activePronac = normalizeId(activeProject.pronac || "");
         if (!activePronac) throw new Error("O projeto selecionado precisa ter um PRONAC válido antes da importação.");
