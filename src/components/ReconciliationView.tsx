@@ -234,6 +234,24 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
   const [selectedDocId, setSelectedDocId] = useState<string>("");
   const [selectedRubricId, setSelectedRubricId] = useState<string>("");
 
+  const linkedDocumentIdsFromOtherTransactions = new Set(
+    safeTransactions
+      .filter((transaction) => transaction.id !== selectedTxForLink?.id)
+      .map((transaction) => transaction.matchedDocId || transaction.idDocumentoFiscalVinculado)
+      .filter((documentId): documentId is string => Boolean(documentId)),
+  );
+  const availableDocumentsForLink = safeDocuments.filter((document) => {
+    const linkedToAnotherTransaction =
+      Boolean(document.idTransacao) && document.idTransacao !== selectedTxForLink?.id;
+    const hasImportedIdentity = Boolean(
+      document.numeroDoc || document.arquivoNotaNome || document.fornecedorNome || document.descricaoServico,
+    );
+    return hasImportedIdentity && !linkedToAnotherTransaction && !linkedDocumentIdsFromOtherTransactions.has(document.id);
+  });
+  const selectedDocument = availableDocumentsForLink.find((document) => document.id === selectedDocId);
+  const selectedRubric = safeRubrics.find((rubric) => rubric.id === selectedRubricId);
+  const canConfirmManualLink = Boolean(selectedTxForLink && selectedDocument && selectedRubric);
+
   // Inspect 1:N Withholding modal
   const [inspectWithholdingDoc, setInspectWithholdingDoc] = useState<FiscalDocument | null>(null);
 
@@ -513,115 +531,11 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
     return true;
   };
 
-  // Quick generate and link specific document types (e.g. Passagens Aéreas, Verba de Alimentação)
-  const handleQuickGenerateAndLink = (tx: BankTransaction, type: "PASSAGEM" | "ALIMENTACAO" | "GENERIC") => {
-    let newDoc: FiscalDocument;
-
-    if (type === "PASSAGEM") {
-      const passRubric = safeRubrics.find((r) => r.nome.toLowerCase().includes("passagem") || r.id === "rub-203") || safeRubrics[0];
-      if (passRubric && !checkBudgetLimit(passRubric.id, tx.valor)) return;
-
-      newDoc = {
-        id: `doc-bpe-${Date.now()}`,
-        tipo: "Bilhete de Passagem Aérea (BP-e / E-Ticket)",
-        numeroDoc: `BPE-${Math.floor(100000 + Math.random() * 900000)}`,
-        serie: "1",
-        dataEmissao: tx.data,
-        fornecedorNome: "LATAM Airlines / Companhia Aérea",
-        fornecedorCnpjCpf: "02.012.862/0001-60",
-        descricaoServico: "Bilhetes de Passagem Aérea Eletrônica (BP-e) com localizadores e nomes da comitiva técnica e artística do projeto.",
-        valorBruto: tx.valor,
-        retencaoIss: 0,
-        retencaoIrrf: 0,
-        retencaoInss: 0,
-        valorLiquido: tx.valor,
-        rubricaId: passRubric?.id || "",
-        rubricaNome: passRubric?.nome,
-        etapa: passRubric?.etapa || "Produção / Execução",
-        statusComprovacao: "Completo",
-        arquivoNotaNome: `Bilhetes_Aereos_${tx.documentoBancario || "BP-e"}.pdf`,
-        arquivoComprovanteNome: `Comprovante_Pagto_${tx.documentoBancario || "Debito"}.pdf`,
-        confiabilidadeIa: 99,
-      };
-    } else if (type === "ALIMENTACAO") {
-      const alimRubric = safeRubrics.find((r) => r.nome.toLowerCase().includes("alimenta") || r.nome.toLowerCase().includes("hospedagem") || r.id === "rub-205") || safeRubrics[0];
-      if (alimRubric && !checkBudgetLimit(alimRubric.id, tx.valor)) return;
-
-      newDoc = {
-        id: `doc-alim-${Date.now()}`,
-        tipo: "Recibo de Diária / Verba de Alimentação",
-        numeroDoc: `TERMO-ALIM-${Math.floor(100 + Math.random() * 900)}/2024`,
-        serie: "U",
-        dataEmissao: tx.data,
-        fornecedorNome: "Equipe Técnica e Músicos do Festival (Termo Coletivo)",
-        fornecedorCnpjCpf: project.cnpjCpf,
-        descricaoServico: "Termo Coletivo de Recebimento de Diárias de Alimentação assinado pelos beneficiários com CPFs e discriminação de dias, em conformidade com o Art. 28 da IN MinC nº 01/2023.",
-        valorBruto: tx.valor,
-        retencaoIss: 0,
-        retencaoIrrf: 0,
-        retencaoInss: 0,
-        valorLiquido: tx.valor,
-        rubricaId: alimRubric?.id || "",
-        rubricaNome: alimRubric?.nome,
-        etapa: alimRubric?.etapa || "Produção / Execução",
-        statusComprovacao: "Completo",
-        arquivoNotaNome: `Termo_Diarias_Alimentacao_Art28.pdf`,
-        arquivoComprovanteNome: `Comprovante_PIX_${tx.documentoBancario || "Transferencia"}.pdf`,
-        confiabilidadeIa: 99,
-      };
-    } else {
-      const defaultRubric = safeRubrics[0];
-      if (defaultRubric && !checkBudgetLimit(defaultRubric.id, tx.valor)) return;
-
-      newDoc = {
-        id: `doc-gen-${Date.now()}`,
-        tipo: "NFS-e (Serviço)",
-        numeroDoc: `NF-${Math.floor(1000 + Math.random() * 9000)}`,
-        serie: "1",
-        dataEmissao: tx.data,
-        fornecedorNome: tx.descricaoExtrato.slice(0, 40),
-        fornecedorCnpjCpf: "",
-        descricaoServico: `Serviço prestado conforme comprovante ${tx.documentoBancario}`,
-        valorBruto: tx.valor,
-        retencaoIss: 0,
-        retencaoIrrf: 0,
-        retencaoInss: 0,
-        valorLiquido: tx.valor,
-        rubricaId: defaultRubric?.id || "",
-        rubricaNome: defaultRubric?.nome,
-        etapa: defaultRubric?.etapa || "Produção / Execução",
-        statusComprovacao: "Completo",
-        arquivoNotaNome: `Documento_Fiscal_${tx.id}.pdf`,
-        arquivoComprovanteNome: `Comprovante_Bancario_${tx.id}.pdf`,
-        confiabilidadeIa: 95,
-      };
-    }
-
-    const updatedDocs = [newDoc, ...safeDocuments];
-    const updatedTxs = safeTransactions.map((t) => {
-      if (t.id === tx.id) {
-        return {
-          ...t,
-          status: "CONCILIADO" as ReconciliationStatus,
-          matchedDocId: newDoc.id,
-          matchedRubricId: newDoc.rubricaId,
-          observacoes: `Conciliado com ${newDoc.tipo} nº ${newDoc.numeroDoc} (${newDoc.fornecedorNome})`,
-        };
-      }
-      return t;
-    });
-
-    onUpdateDocuments(updatedDocs);
-    onUpdateTransactions(updatedTxs);
-    setSelectedTxForLink(null);
-  };
-
   // Manual Link Submit
   const handleManualLink = () => {
-    if (!selectedTxForLink || !selectedDocId) return;
+    if (!selectedTxForLink || !selectedDocument || !selectedRubric) return;
 
-    const doc = safeDocuments.find((d) => d.id === selectedDocId);
-    const rubricIdToUse = selectedRubricId || doc?.rubricaId || safeRubrics[0]?.id;
+    const rubricIdToUse = selectedRubric.id;
 
     if (rubricIdToUse && !checkBudgetLimit(rubricIdToUse, selectedTxForLink.valor)) return;
 
@@ -630,14 +544,26 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
         return {
           ...t,
           status: "CONCILIADO" as ReconciliationStatus,
-          matchedDocId: selectedDocId,
+          matchedDocId: selectedDocument.id,
           matchedRubricId: rubricIdToUse,
-          observacoes: `Conciliado manualmente com ${doc?.tipo} nº ${doc?.numeroDoc} (${doc?.fornecedorNome})`,
+          observacoes: `Conciliado manualmente com ${selectedDocument.tipo} nº ${selectedDocument.numeroDoc} (${selectedDocument.fornecedorNome})`,
         };
       }
       return t;
     });
 
+    const updatedDocuments = safeDocuments.map((document) =>
+      document.id === selectedDocument.id
+        ? {
+            ...document,
+            idTransacao: selectedTxForLink.id,
+            rubricaId: rubricIdToUse,
+            idRubrica: rubricIdToUse,
+          }
+        : document,
+    );
+
+    onUpdateDocuments(updatedDocuments);
     onUpdateTransactions(updated);
     setSelectedTxForLink(null);
     setSelectedDocId("");
@@ -1061,8 +987,8 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                         <button
                           onClick={() => {
                             setSelectedTxForLink(tx);
-                            setSelectedDocId(documents[0]?.id || "");
-                            setSelectedRubricId(documents[0]?.rubricaId || rubrics[0]?.id || "");
+                            setSelectedDocId("");
+                            setSelectedRubricId("");
                           }}
                           className="text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-lg transition flex items-center gap-1 mx-auto"
                         >
@@ -1196,11 +1122,15 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
             <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 mb-4 text-xs space-y-1">
               <div className="flex justify-between text-slate-400">
                 <span>Data do Débito:</span>
-                <span className="font-mono text-white">{formatDate(selectedTxForLink.data)}</span>
+                <span className="font-mono text-white">
+                  {formatDate(selectedTxForLink.data || selectedTxForLink.dataTransacao || "")}
+                </span>
               </div>
               <div className="flex justify-between text-slate-400">
                 <span>Descrição no Extrato:</span>
-                <span className="font-semibold text-white">{selectedTxForLink.descricaoExtrato}</span>
+                <span className="font-semibold text-white text-right max-w-[65%]">
+                  {selectedTxForLink.descricaoExtrato || selectedTxForLink.descricaoOriginalExtrato || selectedTxForLink.favorecido || "Não identificada"}
+                </span>
               </div>
               <div className="flex justify-between text-slate-400">
                 <span>Valor do Débito:</span>
@@ -1219,17 +1149,23 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                   value={selectedDocId}
                   onChange={(e) => {
                     setSelectedDocId(e.target.value);
-                    const doc = documents.find((d) => d.id === e.target.value);
-                    if (doc?.rubricaId) setSelectedRubricId(doc.rubricaId);
+                    const doc = availableDocumentsForLink.find((document) => document.id === e.target.value);
+                    setSelectedRubricId(doc?.rubricaId || doc?.idRubrica || "");
                   }}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
                 >
-                  {documents.map((doc) => (
+                  <option value="">Selecione um documento importado</option>
+                  {availableDocumentsForLink.map((doc) => (
                     <option key={doc.id} value={doc.id}>
-                      {doc.tipo} nº {doc.numeroDoc} - {doc.fornecedorNome} ({formatCurrency(doc.valorLiquido)})
+                      {doc.numeroDoc || doc.arquivoNotaNome || "Sem número"} — {doc.fornecedorNome || "Fornecedor não identificado"} — {doc.dataEmissao ? formatDate(doc.dataEmissao) : "data não extraída"} — {(Number(doc.valorLiquido) || Number(doc.valorBruto)) > 0 ? formatCurrency(Number(doc.valorLiquido) || Number(doc.valorBruto)) : "valor não extraído"}
                     </option>
                   ))}
                 </select>
+                {availableDocumentsForLink.length === 0 && (
+                  <p className="mt-2 text-amber-400">
+                    Nenhum documento fiscal importado está disponível para vínculo. Verifique a extração dos PDFs antes de conciliar.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -1239,36 +1175,35 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                   onChange={(e) => setSelectedRubricId(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
                 >
+                  <option value="">Selecione uma rubrica real do plano de trabalho</option>
                   {rubrics.map((r) => (
                     <option key={r.id} value={r.id}>
-                      Item {r.itemNumero} - {r.nome} ({r.etapa})
+                      {r.itemNumero ? `Item ${r.itemNumero} — ` : ""}{r.nome || r.nomeRubrica || "Rubrica sem nome"}{r.etapa ? ` (${r.etapa})` : ""}
                     </option>
                   ))}
                 </select>
+                {safeRubrics.length === 0 && (
+                  <p className="mt-2 text-amber-400">
+                    Nenhuma rubrica SALIC foi extraída da planilha. A conciliação permanece bloqueada.
+                  </p>
+                )}
               </div>
 
-              {/* Quick Document Creators for Air Tickets and Food Allowance */}
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
-                <span className="text-[11px] font-semibold text-slate-300 block">
-                  Não possui documento cadastrado ainda? Crie e vincule em 1 clique:
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleQuickGenerateAndLink(selectedTxForLink, "PASSAGEM")}
-                    className="text-[11px] font-semibold bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 px-2.5 py-1 rounded-lg transition flex items-center gap-1"
-                  >
-                    <Sparkles className="w-3 h-3 text-sky-400" /> Bilhete Aéreo (BP-e LATAM)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickGenerateAndLink(selectedTxForLink, "ALIMENTACAO")}
-                    className="text-[11px] font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-lg transition flex items-center gap-1"
-                  >
-                    <Sparkles className="w-3 h-3 text-amber-400" /> Termo de Diárias / Alimentação (Art. 28)
-                  </button>
+              {!canConfirmManualLink && (
+                <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl text-amber-300">
+                  Selecione um documento importado e uma rubrica real para habilitar a conciliação.
                 </div>
-              </div>
+              )}
+
+              {selectedDocument && (
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1 text-slate-300">
+                  <p className="font-semibold text-white">Evidência selecionada</p>
+                  <p>Arquivo: {selectedDocument.arquivoNotaNome || "nome não informado"}</p>
+                  <p>Fornecedor: {selectedDocument.fornecedorNome || "não extraído"}</p>
+                  <p>Documento: {selectedDocument.numeroDoc || "não extraído"}</p>
+                  <p>Valor: {(Number(selectedDocument.valorLiquido) || Number(selectedDocument.valorBruto)) > 0 ? formatCurrency(Number(selectedDocument.valorLiquido) || Number(selectedDocument.valorBruto)) : "não extraído"}</p>
+                </div>
+              )}
 
               <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
                 <button
@@ -1281,7 +1216,8 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                 <button
                   type="button"
                   onClick={handleManualLink}
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl"
+                  disabled={!canConfirmManualLink}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-950 font-bold rounded-xl"
                 >
                   Confirmar Conciliação
                 </button>

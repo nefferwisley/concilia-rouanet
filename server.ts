@@ -886,7 +886,9 @@ function extractProjectDeterministically(files: any[]): any {
       const fornecedorName = (parts[0] || restName).replace(/\.[a-zA-Z0-9]+$/, "").trim();
       const descricao = (parts.slice(1).join(" - ") || file.name).replace(/\.[a-zA-Z0-9]+$/, "").trim();
       
-      const docId = `doc-file-${seqNum || "sem-num"}-${documents.length + 1}`;
+      const sourcePath = String(file.relativePath || `${file.subfolder || "Raiz"}/${file.name}`);
+      const sourceHash = crypto.createHash("sha256").update(sourcePath).digest("hex").slice(0, 16);
+      const docId = `doc-file-${seqNum || "sem-num"}-${sourceHash}`;
       
       documents.push({
         id: docId,
@@ -908,6 +910,8 @@ function extractProjectDeterministically(files: any[]): any {
         idRubrica: "",
         idTransacao: "",
         status: "Recebido — pendente de conciliação",
+        arquivoNotaNome: file.name,
+        arquivoOrigemCaminho: sourcePath,
       });
     }
   }
