@@ -371,7 +371,13 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
     try {
       if (activeTab === "folder_files" && uploadedItems.length > 0) {
         const configuredApiBaseUrl = import.meta.env.VITE_API_URL?.trim();
-        if (import.meta.env.PROD || !configuredApiBaseUrl) {
+        // A produção não pode concluir uma importação apenas neste navegador:
+        // isso fazia a interface parecer online, mas os dados desapareciam em
+        // outro computador. Sem API configurada, falhamos explicitamente.
+        if (!configuredApiBaseUrl && import.meta.env.PROD) {
+          throw new Error("A importação online ainda não está configurada. Defina VITE_API_URL para o backend antes de enviar a pasta.");
+        }
+        if (!configuredApiBaseUrl) {
           const extractedTransactions: BankTransaction[] = [];
           const extractedDocuments: FiscalDocument[] = [];
           const extractedRubrics: BudgetRubric[] = [];
