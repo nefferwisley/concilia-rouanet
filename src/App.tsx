@@ -43,6 +43,7 @@ import { loadOnlineSession } from "./services/onlineSession";
 import type { OnlineSessionState } from "./contracts/online";
 import { exportSalicExcel, exportSalicPdf } from "./utils/exportUtils";
 import { runRealtimeTripartiteReconciliation, selfHealDocumentsAndTransactions } from "./utils/shadowLedger";
+import { calculateProjectFinancialSummary } from "./utils/projectFinancialSummary";
 import {
   applyProject1961PendingMapping,
   PROJECT_1961_PENDING_MAPPING_VERSION,
@@ -362,7 +363,6 @@ export default function App() {
   const totalExecutadoCalc = currentTransactions
     .filter(
       (t) =>
-        t.status === "CONCILIADO" &&
         (t.tipo === "DEBITO" || t.tipo === "TARIFA" || !t.tipo || (t as any).tipoMovimento === "DEBIT")
     )
     .reduce((sum, t) => sum + (Number(t.valor) || 0), 0);
@@ -370,6 +370,11 @@ export default function App() {
   const currentProjectWithLiveStats: PronacProject = {
     ...activeProject,
     valorExecutado: totalExecutadoCalc > 0 ? totalExecutadoCalc : activeProject.valorExecutado,
+    resumoFinanceiroValidado: calculateProjectFinancialSummary(
+      activeProject,
+      currentTransactions,
+      currentRubrics
+    ),
   };
 
   // State Updaters for active project

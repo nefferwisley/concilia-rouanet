@@ -393,6 +393,51 @@ export function runRealtimeTripartiteReconciliation(
         idDocumentoFiscalVinculado: undefined,
       };
       updatedTransactions.push(orphanTx);
+      
+      const periodStr = txDate ? txDate.slice(0, 7) : "2024-05";
+      const lancamentoId = `LANC-${String(txIndex + 1).padStart(4, "0")}`;
+      
+      tripartiteEntries.push({
+        id: `trip-${tx.id || txIndex}`,
+        idLancamento: lancamentoId,
+        periodo: periodStr,
+        itemNumero: `${(txIndex % 10) + 1}.1`,
+        etapa: "Produção / Execução",
+        rubricaId: "RUB-01",
+        idRubrica: "RUB-01",
+        rubricaNome: "Pendente de Vínculo",
+        descricaoRubrica: "Pendente de Vínculo",
+        idDocFiscal: "",
+        idTransacaoBB: tx.id,
+        fornecedor: tx.favorecido || "Fornecedor Pendente",
+        cnpjCpf: tx.cnpjCpfFavorecido || "00.000.000/0001-00",
+        tipoDoc: "NFS-e (Serviço)",
+        numeroDoc: "",
+        dataEmissao: txDate,
+        dataEmissaoDoc: txDate,
+        dataCompensacao: txDate,
+        dataPagamento: txDate,
+        valorDebitoBB: txVal,
+        valorBrutoDoc: 0,
+        valorLiquidoPagar: 0,
+        valorLiquidoPago: txVal,
+        retencoes: { iss: 0, irrf: 0, inss: 0, outras: 0 },
+        documentoBancarioNumero: tx.documentoBancario || `DOC-${txIndex + 1}`,
+        saldoRubricaApos: 0,
+        checkTripe: {
+          fiscalDocAnexo: false,
+          comprovanteBancarioAnexo: Boolean(tx.comprovanteUrl || tx.temComprovante),
+          relatorioExecucaoAnexo: false,
+          rubricaValida: false,
+        },
+        statusTripartite: "PENDENTE DE VÍNCULO",
+        statusSalic: "Pendente",
+        statusGeral: "PENDENTE",
+        status: "PENDENTE",
+        anexoFiscalUrl: undefined,
+        anexoComprovanteUrl: undefined,
+        gedArquivos: [],
+      });
     }
   });
 
