@@ -165,7 +165,20 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-2 rounded-xl flex items-center gap-1.5 transition font-semibold"
             >
               <FolderUp className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden lg:inline">Importar Drive</span>
+              <span className="hidden lg:inline">Importar Drive/Pasta</span>
+            </button>
+
+            <button
+              onClick={() => {
+                if (window.confirm("ATENÇÃO: Deseja apagar o cache local e excluir o projeto antigo 21.1623 do seu navegador?")) {
+                  localStorage.clear();
+                  window.location.reload();
+                }
+              }}
+              title="Excluir Projeto Antigo (Limpar Cache Local)"
+              className="text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 px-2.5 py-2 rounded-xl flex items-center gap-1 transition font-bold"
+            >
+              Limpar PRONAC Antigo
             </button>
           </div>
 
