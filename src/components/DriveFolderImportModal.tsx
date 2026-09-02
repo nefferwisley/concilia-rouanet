@@ -369,7 +369,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
     try {
       if (activeTab === "folder_files" && uploadedItems.length > 0) {
         const configuredApiBaseUrl = import.meta.env.VITE_API_URL?.trim();
-        if (!configuredApiBaseUrl) {
+        if (import.meta.env.PROD || !configuredApiBaseUrl) {
           const extractedTransactions: BankTransaction[] = [];
           const extractedDocuments: FiscalDocument[] = [];
           const extractedRubrics: BudgetRubric[] = [];
