@@ -290,6 +290,13 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
   );
   const pendingDebitsCount = pendingDebitTransactions.length;
   const pendingCategoryCounts = getExpenseCategoryCounts(pendingDebitTransactions, safeRubrics);
+  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado === true;
+  const pendingEvidenceTitle = hasImportedBankStatement
+    ? "Pendentes de Documento"
+    : "Movimentos sem extrato bancário";
+  const pendingEvidenceDetail = hasImportedBankStatement
+    ? "Aguardando NF ou anexo"
+    : "Aguardando extrato OFX/CSV";
 
   const selectStatusFilter = (status: string) => {
     setStatusFilter(status);
@@ -690,11 +697,11 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-          <span className="text-[11px] text-slate-400">Pendentes de Documento</span>
+          <span className="text-[11px] text-slate-400">{pendingEvidenceTitle}</span>
           <div className="text-lg font-bold font-mono text-amber-400 mt-0.5">
             {pendingDebitsCount} itens
           </div>
-          <span className="text-[10px] text-amber-500">Aguardando NF ou anexo</span>
+          <span className="text-[10px] text-amber-500">{pendingEvidenceDetail}</span>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">

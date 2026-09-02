@@ -23,6 +23,8 @@ describe("ReconciliationView verified pending transactions", () => {
     );
 
     expect(markup).toContain("96 de 178 comprovados");
+    expect(markup).toContain("Movimentos sem extrato bancário");
+    expect(markup).toContain("Aguardando extrato OFX/CSV");
     expect(markup).toContain("🟡 Pendentes (82)");
     expect(markup).toContain("Categoria da despesa");
     expect(markup).toContain("Alimentação e diárias (25)");
