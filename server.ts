@@ -743,7 +743,12 @@ function extractProjectDeterministically(files: any[]): any {
             });
           }
 
-          if (lowerSheet.includes("conciliação") || lowerSheet.includes("extrato") || lowerSheet.includes("banco")) {
+          const hasReconciliationColumns = rows.some((row: any[]) => {
+            const headers = row.map((cell) => String(cell || "").trim().toLowerCase());
+            return headers.includes("controle") && headers.includes("pagamento") && headers.includes("valor") && headers.includes("saldo");
+          });
+
+          if (lowerSheet.includes("conciliação") || lowerSheet.includes("extrato") || lowerSheet.includes("banco") || hasReconciliationColumns) {
             rows.forEach((row: any[], idx: number) => {
               if (idx < 2 || !row || row.length === 0) return;
               const controle = row[0] ? String(row[0]).trim() : "";
@@ -1776,10 +1781,6 @@ app.post("/api/gemini/extract-project-files", async (req, res) => {
       return res.status(400).json({ error: "Nenhum arquivo enviado para extração." });
     }
 
-    if (!ai) {
-      return res.status(500).json({ error: "Serviço de IA não configurado no servidor." });
-    }
-
     const parts: any[] = [];
     parts.push({
       text: `Você é um auditor sênior e especialista em prestação de contas da Lei Rouanet (SALIC/Ministério da Cultura - IN MinC 01/2023).
@@ -1890,21 +1891,22 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido.`
       }
     }
 
-    console.log(`Enviando ${files.length} arquivos reais para processamento...`);
-    let parsed: any = null;
+    let parsed: any = extractProjectDeterministically(files);
 
-    try {
-      const response = await generateGeminiContentWithFallback(ai, {
-        contents: parts,
-        responseMimeType: "application/json",
-        temperature: 0.05,
-        preferredModel: "gemini-3.5-flash-lite",
-      });
+    if (!parsed.transactions.length && !parsed.documents.length && !parsed.rubrics.length && ai) {
+      console.log(`Enviando ${files.length} arquivos reais para processamento...`);
+      try {
+        const response = await generateGeminiContentWithFallback(ai, {
+          contents: parts,
+          responseMimeType: "application/json",
+          temperature: 0.05,
+          preferredModel: "gemini-3.5-flash-lite",
+        });
 
-      parsed = cleanAndParseJson(response.text, null);
-    } catch (aiErr: any) {
-      console.warn("IA temporariamente indisponível ou com alta demanda (503). Acionando motor determinístico de alta precisão:", aiErr?.message);
-      parsed = extractProjectDeterministically(files);
+        parsed = cleanAndParseJson(response.text, parsed);
+      } catch (aiErr: any) {
+        console.warn("IA temporariamente indisponível ou com alta demanda (503). Acionando motor determinístico de alta precisão:", aiErr?.message);
+      }
     }
 
     if (!parsed || !parsed.project) {
