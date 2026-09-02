@@ -833,8 +833,8 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                                   <CheckCircle2 className="w-3 h-3" /> Comp. BB
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-[10px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded border border-red-500/20">
-                                  <XCircle className="w-3 h-3" /> Falta Comp.
+                                <span className="inline-flex items-center gap-1 text-[10px] bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/20">
+                                  <XCircle className="w-3 h-3" /> Sem Extrato OFX
                                 </span>
                               )}
                             </div>
