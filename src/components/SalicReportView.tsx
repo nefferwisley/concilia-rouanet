@@ -29,6 +29,7 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
   alerts = [],
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<"pagamentos" | "receitas" | "metas">("pagamentos");
+  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado === true;
 
   // Reconciled items for the SALIC report
   const paymentRows = transactions
@@ -71,7 +72,9 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => exportBBGestaoAgilExcel(project, transactions, documents)}
-            className="text-xs font-bold bg-blue-500 hover:bg-blue-600 text-slate-950 px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow transition"
+            disabled={!hasImportedBankStatement}
+            title={hasImportedBankStatement ? "Exportar dados do extrato importado" : "Disponível após importar o extrato OFX/CSV"}
+            className="text-xs font-bold bg-blue-500 hover:bg-blue-600 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-950 px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow transition"
           >
             <Download className="w-4 h-4" />
             <span>Exportar BB Gestão Ágil</span>
@@ -92,6 +95,12 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
           </button>
         </div>
       </div>
+
+      {!hasImportedBankStatement && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+          Extrato bancário OFX/CSV não anexado. Este dossiê pode consolidar planilha, rubricas e documentos, mas não certifica conciliação bancária nem disponibiliza exportação BB Gestão Ágil.
+        </div>
+      )}
 
       {/* Sub tabs */}
       <div className="flex border-b border-slate-800 gap-4">

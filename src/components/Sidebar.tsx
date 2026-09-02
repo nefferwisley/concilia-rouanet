@@ -223,23 +223,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex justify-between text-slate-400">
             <span>Executado:</span>
             <span className="font-mono text-slate-300">
-              {formatCurrency(
-                activeProject.resumoFinanceiroValidado?.totalExecutado ??
-                  activeProject.valorExecutado ??
-                  897759.15
-              )}
+              {activeProject.resumoFinanceiroValidado?.totalExecutado != null || activeProject.valorExecutado != null
+                ? formatCurrency(activeProject.resumoFinanceiroValidado?.totalExecutado ?? activeProject.valorExecutado ?? 0)
+                : "Não informado"}
             </span>
           </div>
           <div className="flex justify-between text-amber-400 pt-1 border-t border-slate-800/60">
             <span>Pendente:</span>
             <span className="font-mono font-semibold">
-              {formatCurrency(
-                activeProject.resumoFinanceiroValidado?.totalAConciliar ??
-                  (activeProject.resumoFinanceiroValidado?.totalExecutado ??
-                    activeProject.valorExecutado ??
-                    897759.15) -
-                  (activeProject.resumoFinanceiroValidado?.totalConciliado ?? 0)
-              )}
+              {activeProject.resumoFinanceiroValidado?.totalAConciliar != null
+                ? formatCurrency(activeProject.resumoFinanceiroValidado.totalAConciliar)
+                : activeProject.resumoFinanceiroValidado?.totalExecutado != null || activeProject.valorExecutado != null
+                  ? formatCurrency(
+                      (activeProject.resumoFinanceiroValidado?.totalExecutado ?? activeProject.valorExecutado ?? 0) -
+                        (activeProject.resumoFinanceiroValidado?.totalConciliado ?? 0)
+                    )
+                  : "Não informado"}
             </span>
           </div>
         </div>

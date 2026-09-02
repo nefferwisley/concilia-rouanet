@@ -20,14 +20,6 @@ import { FinancialReviewWorkflowView } from "./components/FinancialReviewWorkflo
 import { SponsorshipManagerView } from "./components/SponsorshipManagerView";
 import { ContinuousRiskDashboardView } from "./components/ContinuousRiskDashboardView";
 import {
-  initialProjects,
-  initialRubrics,
-  initialTransactions,
-  initialDocuments,
-  initialAlerts,
-  initialTripartiteEntries,
-} from "./data/mockData";
-import {
   PronacProject,
   BudgetRubric,
   BankTransaction,
@@ -44,10 +36,6 @@ import type { OnlineSessionState } from "./contracts/online";
 import { exportSalicExcel, exportSalicPdf } from "./utils/exportUtils";
 import { runRealtimeTripartiteReconciliation, selfHealDocumentsAndTransactions } from "./utils/shadowLedger";
 import { calculateProjectFinancialSummary } from "./utils/projectFinancialSummary";
-import {
-  applyProject1961PendingMapping,
-  PROJECT_1961_PENDING_MAPPING_VERSION,
-} from "./utils/project1961PendingMapping";
 import {
   sanitizeTransactions,
   sanitizeDocuments,
@@ -71,6 +59,25 @@ const STORAGE_KEYS = {
 // rendered or persisted through the user-facing flow.
 const IS_DEMO_MODE = true;
 const ONLINE_ACTIVE_PROJECT_STORAGE_KEY = "concilia_rouanet_online_active_project_v1";
+
+const EMPTY_PROJECT: PronacProject = {
+  id: "",
+  pronac: "",
+  nome: "",
+  proponente: "",
+  cnpjCpf: "",
+  segmento: "Não informado",
+  artigoEnquadramento: "Não informado",
+  dataInicioVigencia: "",
+  dataFimVigencia: "",
+  prazoLimitePrestacao: "",
+  valorAprovado: 0,
+  valorCaptado: 0,
+  valorExecutado: 0,
+  bancoInfo: { banco: "", agencia: "", contaCaptacao: "", contaMovimento: "", saldoBloqueado: 0, saldoMovimento: 0, rendimentoAplicacao: 0 },
+  status: "Nenhum projeto selecionado",
+  resumoProjeto: "",
+};
 
 type PersistedWorkspace = {
   projects: PronacProject[];
@@ -138,7 +145,7 @@ const isSummaryItem = (item: any) => {
 };
 
 export default function App() {
-  // Load state from localStorage or initialize with mock data
+  // Load the local workspace; a new browser starts empty, never with sample projects.
   const [projects, setProjects] = useState<PronacProject[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
@@ -146,7 +153,7 @@ export default function App() {
     } catch (e) {
       console.warn("Could not load saved projects:", e);
     }
-    return initialProjects;
+    return [];
   });
 
   const [activeProjectId, setActiveProjectId] = useState<string>(() => {
@@ -156,7 +163,7 @@ export default function App() {
     } catch (e) {
       console.warn("Could not load saved active id:", e);
     }
-    return initialProjects[0]?.id || "proj-1";
+    return projects[0]?.id || "";
   });
 
   const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard");
@@ -190,11 +197,11 @@ export default function App() {
     } catch (e) {
       console.warn("Could not load saved rubrics:", e);
     }
-    return initialRubrics;
+    return {};
   });
 
   const [allTransactions, setAllTransactions] = useState<Record<string, BankTransaction[]>>(() => {
-    let loadedTransactions = initialTransactions;
+    let loadedTransactions: Record<string, BankTransaction[]> = {};
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
       if (saved) {
@@ -211,24 +218,7 @@ export default function App() {
       console.warn("Could not load saved transactions:", e);
     }
 
-    try {
-      const appliedVersion = localStorage.getItem(STORAGE_KEYS.PROJECT_1961_PENDING_MAPPING);
-      if (appliedVersion !== PROJECT_1961_PENDING_MAPPING_VERSION) {
-        const raw1961 = loadedTransactions["proj-1961"] || initialTransactions["proj-1961"];
-        loadedTransactions = {
-          ...loadedTransactions,
-          "proj-1961": sanitizeTransactions(applyProject1961PendingMapping(raw1961)),
-        };
-        localStorage.setItem(
-          STORAGE_KEYS.PROJECT_1961_PENDING_MAPPING,
-          PROJECT_1961_PENDING_MAPPING_VERSION,
-        );
-      }
-    } catch (e) {
-      console.warn("Could not apply the verified Project 1961 pending mapping:", e);
-    }
-
-    // Ensure all initial transactions are sanitized
+    // Ensure all persisted transactions are sanitized.
     const finalTransactions: Record<string, BankTransaction[]> = {};
     Object.keys(loadedTransactions).forEach((k) => {
       finalTransactions[k] = sanitizeTransactions(loadedTransactions[k] || []);
@@ -251,11 +241,7 @@ export default function App() {
     } catch (e) {
       console.warn("Could not load saved documents:", e);
     }
-    const finalDocs: Record<string, FiscalDocument[]> = {};
-    Object.keys(initialDocuments).forEach((k) => {
-      finalDocs[k] = sanitizeDocuments(initialDocuments[k] || []);
-    });
-    return finalDocs;
+    return {};
   });
 
   const [allAlerts, setAllAlerts] = useState<Record<string, AuditAlert[]>>(() => {
@@ -265,7 +251,7 @@ export default function App() {
     } catch (e) {
       console.warn("Could not load saved alerts:", e);
     }
-    return initialAlerts;
+    return {};
   });
 
   const [allTripartiteEntries, setAllTripartiteEntries] = useState<
@@ -284,11 +270,7 @@ export default function App() {
     } catch (e) {
       console.warn("Could not load saved tripartite entries:", e);
     }
-    const finalTrips: Record<string, TripartiteEntry[]> = {};
-    Object.keys(initialTripartiteEntries).forEach((k) => {
-      finalTrips[k] = sanitizeTripartiteEntries(initialTripartiteEntries[k] || []);
-    });
-    return finalTrips;
+    return {};
   });
 
   const [allReceipts, setAllReceipts] = useState<Record<string, Record<string, ReceiptItem>>>(() => {
@@ -358,7 +340,7 @@ export default function App() {
   ]);
 
   // Active Project & Safe arrays
-  const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0] || initialProjects[0];
+  const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0] || EMPTY_PROJECT;
 
   const currentRubrics: BudgetRubric[] =
     Array.isArray(allRubrics[activeProjectId])
@@ -666,11 +648,6 @@ export default function App() {
   };
 
   const handleDeleteActiveProject = () => {
-    if (projects.length <= 1) {
-      alert("Mantenha ao menos um projeto cadastrado. Crie outro projeto antes de excluir este.");
-      return;
-    }
-
     const projectToDelete = projects.find((project) => project.id === activeProjectId);
     if (!projectToDelete) return;
 
@@ -680,7 +657,7 @@ export default function App() {
     if (!confirmed) return;
 
     const nextProjects = projects.filter((project) => project.id !== activeProjectId);
-    const nextActiveProjectId = nextProjects[0].id;
+    const nextActiveProjectId = nextProjects[0]?.id || "";
     const removeProjectData = <T,>(source: Record<string, T>) => {
       const { [activeProjectId]: _removed, ...remaining } = source;
       return remaining;
@@ -752,7 +729,7 @@ export default function App() {
         onSelectProject={(selected) => setActiveProjectId(selected.id)}
         onOpenNewProjectModal={() => setIsNewProjectModalOpen(true)}
         onDeleteActiveProject={handleDeleteActiveProject}
-        canDeleteActiveProject={projects.length > 1}
+        canDeleteActiveProject={projects.length > 0}
         onOpenDriveImportModal={() => setIsDriveModalOpen(true)}
         onOpenLangChainModal={() => setIsLangChainModalOpen(true)}
         onExportExcel={() =>

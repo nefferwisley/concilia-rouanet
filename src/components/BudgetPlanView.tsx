@@ -95,8 +95,8 @@ export const BudgetPlanView: React.FC<BudgetPlanViewProps> = ({
   );
 
   // Valor do projeto em primeiríssimo lugar (evita totalizadores errados de schema)
-  const totalAprovado = project?.valorAprovado || 835000;
-  const totalExecutado = project?.valorExecutado || 897759.15;
+  const totalAprovado = Number(project?.valorAprovado) || 0;
+  const totalExecutado = Number(project?.valorExecutado) || 0;
   const saldoGeral = totalAprovado - totalExecutado;
 
   // Form state

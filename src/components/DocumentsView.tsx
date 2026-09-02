@@ -106,6 +106,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const safeRubrics = Array.isArray(rubrics) ? rubrics : [];
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
+  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado === true;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState<string>("ALL");
@@ -146,7 +147,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
   // Após OCR ou cadastro manual, tenta casar o documento com um débito do extrato
   // usando valor líquido (tolerância ±R$0,01) e data (tolerância ±5 dias).
   const autoLinkDocToTransaction = (newDoc: FiscalDocument): { linked: boolean; txDesc?: string } => {
-    if (!onUpdateTransactions || safeTransactions.length === 0) return { linked: false };
+    if (!hasImportedBankStatement || !onUpdateTransactions || safeTransactions.length === 0) return { linked: false };
 
     const docValor = Number(newDoc.valorLiquido || newDoc.valorBruto || 0);
     const docDate = newDoc.dataEmissao ? new Date(newDoc.dataEmissao) : null;
@@ -374,7 +375,9 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
     if (addedCount > 0) {
       setQueuedFiles([]);
       setShowOcrDrawer(false);
-      const linkMsg = linkedCount > 0
+      const linkMsg = !hasImportedBankStatement
+        ? "\nℹ️ Extrato OFX/CSV não anexado: documentos foram cadastrados, mas nenhum vínculo bancário foi certificado."
+        : linkedCount > 0
         ? `\n🔗 ${linkedCount} lançamento(s) bancário(s) vinculado(s) e aguardando validação da conciliação.`
         : "\n⚠️ Nenhum lançamento bancário correspondente foi encontrado. Verifique o extrato para vincular manualmente.";
       alert(`✅ ${addedCount} documento(s) fiscal(is) cadastrado(s) com sucesso.${linkMsg}`);
@@ -467,7 +470,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
         confiabilidadeIa: formState.confiabilidadeIa,
       };
       onAddDocument(newDoc);
-      // ✅ Auto-Link: tentar vincular ao extrato bancário
+      // Só tenta vínculo bancário quando há extrato importado.
       const linkResult = autoLinkDocToTransaction(newDoc);
       if (linkResult.linked) {
         alert(`✅ Documento cadastrado e vinculado ao lançamento bancário:\n"${linkResult.txDesc}"\n\nA conciliação aguarda validação.`);
@@ -536,14 +539,17 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-sm font-bold text-white">
-                Dossiê da Pasta Reconhecido com Sucesso ({documents.length} Comprovantes Fiscais)
+              Dossiê da Pasta Reconhecido com Sucesso ({safeDocuments.length} Documentos)
               </h3>
               <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
                 Reconhecimento Ativo
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-1 max-w-2xl">
-              Todos os documentos fiscais apresentados na pasta e subpastas foram mapeados para o PRONAC {project.pronac || "do projeto"}. O motor de inteligência vincula cada comprovante ao seu respectivo débito bancário do Banco do Brasil e à rubrica aprovada no SALIC.
+              Os documentos apresentados foram associados ao PRONAC {project.pronac || "do projeto"}.
+              {hasImportedBankStatement
+                ? " Vínculos com o extrato bancário seguem em validação."
+                : " O extrato OFX/CSV não foi anexado; vínculos bancários não são certificados nesta etapa."}
             </p>
           </div>
         </div>
@@ -552,12 +558,16 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
           <button
             onClick={() => {
               onSyncAll();
-              alert("Sincronização concluída! Todos os documentos fiscais foram validados e vinculados ao extrato bancário.");
+              alert(
+                hasImportedBankStatement
+                  ? "Sincronização concluída! Os vínculos documentais foram recalculados e aguardam revisão."
+                  : "Sincronização documental concluída. A validação bancária continua pendente do extrato OFX/CSV."
+              );
             }}
             className="w-full md:w-auto text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-md transition shrink-0"
           >
             <RefreshCw className="w-4 h-4" />
-            <span>Sincronizar Todos os Documentos</span>
+            <span>Sincronizar Vínculos Documentais</span>
           </button>
         )}
       </div>
@@ -861,7 +871,9 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <span className="text-xs text-slate-400 font-medium">Total Líquido Pago aos Prestadores</span>
           <div className="text-xl font-bold font-mono text-emerald-400 mt-1">{formatCurrency(totalLiquido)}</div>
-          <span className="text-[11px] text-emerald-500">Valor conciliado com saídas bancárias</span>
+          <span className="text-[11px] text-emerald-500">
+            {hasImportedBankStatement ? "Valor em validação com saídas bancárias" : "Valor informado nos documentos; extrato pendente"}
+          </span>
         </div>
       </div>
 

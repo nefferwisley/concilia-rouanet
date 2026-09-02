@@ -91,6 +91,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const safeTripartiteEntries = Array.isArray(tripartiteEntries) ? tripartiteEntries : [];
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
+  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado === true;
 
   const [activeSubTab, setActiveSubTab] = useState<TripartiteSubTab>("04_lancamentos");
   const [selectedPeriod, setSelectedPeriod] = useState<string>("ALL");
@@ -833,8 +834,12 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                                   <CheckCircle2 className="w-3 h-3" /> Comp. BB
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-[10px] bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/20">
-                                  <XCircle className="w-3 h-3" /> Sem Extrato OFX
+                                <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${
+                                  hasImportedBankStatement
+                                    ? "bg-red-500/10 text-red-400 border-red-500/20"
+                                    : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                }`}>
+                                  <XCircle className="w-3 h-3" /> {hasImportedBankStatement ? "Falta Comp." : "Aguardando OFX/CSV"}
                                 </span>
                               )}
                             </div>
@@ -842,6 +847,10 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                             {isTripodComplete ? (
                               <div className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
                                 <ShieldCheck className="w-3 h-3 text-emerald-400" /> Dossiê 100% OK
+                              </div>
+                            ) : !hasImportedBankStatement ? (
+                              <div className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
+                                <HelpCircle className="w-3 h-3" /> Validação bancária indisponível sem extrato
                               </div>
                             ) : (
                               <button

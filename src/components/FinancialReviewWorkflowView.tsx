@@ -63,6 +63,7 @@ export const FinancialReviewWorkflowView: React.FC<FinancialReviewWorkflowViewPr
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [selectedTxForReceipt, setSelectedTxForReceipt] = useState<BankTransaction | null>(null);
+  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado === true;
 
   // Filtra apenas débitos reais
   const debits = transactions
@@ -130,22 +131,30 @@ export const FinancialReviewWorkflowView: React.FC<FinancialReviewWorkflowViewPr
       step: 1 as FinancialReviewStep,
       titulo: "1. Conciliação Bancária",
       desc: "Validar correspondência 100% Extrato BB x Planilha em ordem cronológica",
-      status: "CONCLUIDO" as const,
-      detalhes: `${totalDebitos} débitos bancários mapeados (Total: ${formatCurrency(totalValorDebitos)})`,
+      status: hasImportedBankStatement ? ("CONCLUIDO" as const) : ("PENDENTE" as const),
+      detalhes: hasImportedBankStatement
+        ? `${totalDebitos} débitos bancários mapeados (Total: ${formatCurrency(totalValorDebitos)})`
+        : "Extrato OFX/CSV não anexado; movimentos exibidos pela planilha de controle",
     },
     {
       step: 2 as FinancialReviewStep,
       titulo: "2. Inclusão de Pendentes",
       desc: "Garantir que nenhum pagamento do extrato fique fora da planilha de execução",
-      status: "CONCLUIDO" as const,
-      detalhes: "0 pagamentos bancários omitidos da base",
+      status: hasImportedBankStatement ? ("CONCLUIDO" as const) : ("PENDENTE" as const),
+      detalhes: hasImportedBankStatement
+        ? "0 pagamentos bancários omitidos da base"
+        : "Verificação bancária bloqueada até a importação do extrato",
     },
     {
       step: 3 as FinancialReviewStep,
       titulo: "3. Conferência Documental",
       desc: "Verificar existência da Nota Fiscal + Comprovante de Pagamento por lançamento",
-      status: pendenciasTotais > 0 ? ("EM_PROGRESSO" as const) : ("CONCLUIDO" as const),
-      detalhes: `${comDocFiscal}/${totalDebitos} docs fiscais | ${comComprovante}/${totalDebitos} comprovantes bancários`,
+      status: hasImportedBankStatement
+        ? pendenciasTotais > 0 ? ("EM_PROGRESSO" as const) : ("CONCLUIDO" as const)
+        : ("EM_PROGRESSO" as const),
+      detalhes: hasImportedBankStatement
+        ? `${comDocFiscal}/${totalDebitos} docs fiscais | ${comComprovante}/${totalDebitos} comprovantes bancários`
+        : `${documents.length} documentos recebidos; comprovação bancária aguarda OFX/CSV`,
     },
     {
       step: 4 as FinancialReviewStep,
@@ -334,7 +343,9 @@ export const FinancialReviewWorkflowView: React.FC<FinancialReviewWorkflowViewPr
                 : "bg-slate-800 text-slate-300 hover:bg-slate-700"
             }`}
           >
-            Falta Comprovante ({totalDebitos - comComprovante})
+            {hasImportedBankStatement
+              ? `Falta Comprovante (${totalDebitos - comComprovante})`
+              : `Aguardando extrato (${totalDebitos})`}
           </button>
           <button
             onClick={() => setStatusFilter("REGULARIZADO")}
@@ -367,7 +378,7 @@ export const FinancialReviewWorkflowView: React.FC<FinancialReviewWorkflowViewPr
             <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
               <tr>
                 <th className="px-3.5 py-3.5 text-center"># Nº</th>
-                <th className="px-3.5 py-3.5">Data Extrato</th>
+                <th className="px-3.5 py-3.5">{hasImportedBankStatement ? "Data Extrato" : "Data da Planilha"}</th>
                 <th className="px-3.5 py-3.5">Favorecido (Pessoa Física + Empresa)</th>
                 <th className="px-3.5 py-3.5">FITID / Autenticação</th>
                 <th className="px-3.5 py-3.5 text-right">Valor Pago (R$)</th>
@@ -471,7 +482,7 @@ export const FinancialReviewWorkflowView: React.FC<FinancialReviewWorkflowViewPr
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded">
-                          <AlertTriangle className="w-3 h-3" /> Falta NF
+                          <AlertTriangle className="w-3 h-3" /> Vínculo fiscal pendente
                         </span>
                       )}
                     </td>
@@ -491,7 +502,7 @@ export const FinancialReviewWorkflowView: React.FC<FinancialReviewWorkflowViewPr
                         </div>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded">
-                          <AlertTriangle className="w-3 h-3" /> Falta Comp
+                          <AlertTriangle className="w-3 h-3" /> {hasImportedBankStatement ? "Falta Comp" : "Aguardando OFX/CSV"}
                         </span>
                       )}
                     </td>
@@ -528,7 +539,7 @@ export const FinancialReviewWorkflowView: React.FC<FinancialReviewWorkflowViewPr
                         </span>
                       ) : (
                         <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-1 rounded-full border border-rose-500/20">
-                          Pendente
+                          {hasImportedBankStatement ? "Pendente" : "Aguardando extrato"}
                         </span>
                       )}
                     </td>

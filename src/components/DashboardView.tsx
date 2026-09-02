@@ -624,7 +624,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </span>
           </div>
           <p className="text-[11px] text-slate-400 mb-3">
-            {financialSummary.pendingDebitCount > 0
+            {!hasImportedBankStatement
+              ? usesControlSpreadsheet
+                ? "Movimentos da planilha de controle — aguardando extrato OFX/CSV para conciliação bancária"
+                : "Extrato bancário OFX/CSV não anexado"
+              : financialSummary.pendingDebitCount > 0
               ? `${financialSummary.pendingDebitCount} débito(s) pendente(s) de Nota Fiscal`
               : "100% dos débitos amarrados a documentos fiscais"}
           </p>
