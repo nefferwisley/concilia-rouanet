@@ -665,6 +665,57 @@ export default function App() {
     setIsNewProjectModalOpen(false);
   };
 
+  const handleDeleteActiveProject = () => {
+    if (projects.length <= 1) {
+      alert("Mantenha ao menos um projeto cadastrado. Crie outro projeto antes de excluir este.");
+      return;
+    }
+
+    const projectToDelete = projects.find((project) => project.id === activeProjectId);
+    if (!projectToDelete) return;
+
+    const confirmed = window.confirm(
+      `Excluir o projeto ${projectToDelete.pronac} — ${projectToDelete.nome}?\n\nTodos os documentos, lançamentos, rubricas e alertas deste projeto serão removidos deste navegador.`
+    );
+    if (!confirmed) return;
+
+    const nextProjects = projects.filter((project) => project.id !== activeProjectId);
+    const nextActiveProjectId = nextProjects[0].id;
+    const removeProjectData = <T,>(source: Record<string, T>) => {
+      const { [activeProjectId]: _removed, ...remaining } = source;
+      return remaining;
+    };
+    const nextRubrics = removeProjectData(allRubrics);
+    const nextTransactions = removeProjectData(allTransactions);
+    const nextDocuments = removeProjectData(allDocuments);
+    const nextAlerts = removeProjectData(allAlerts);
+    const nextTripartiteEntries = removeProjectData(allTripartiteEntries);
+    const nextReceipts = removeProjectData(allReceipts);
+    const saved = persistWorkspaceSnapshot({
+      projects: nextProjects,
+      activeProjectId: nextActiveProjectId,
+      rubrics: nextRubrics,
+      transactions: nextTransactions,
+      documents: nextDocuments,
+      alerts: nextAlerts,
+      tripartiteEntries: nextTripartiteEntries,
+      receipts: nextReceipts,
+    });
+    if (!saved) {
+      alert("A exclusão foi aplicada, mas este navegador não conseguiu salvá-la. Libere espaço de armazenamento e tente novamente.");
+    }
+
+    setProjects(nextProjects);
+    setAllRubrics(nextRubrics);
+    setAllTransactions(nextTransactions);
+    setAllDocuments(nextDocuments);
+    setAllAlerts(nextAlerts);
+    setAllTripartiteEntries(nextTripartiteEntries);
+    setAllReceipts(nextReceipts);
+    setActiveProjectId(nextActiveProjectId);
+    setActiveTab("dashboard");
+  };
+
   if (!IS_DEMO_MODE) {
     return (
       <OnlineSessionBoundary
@@ -700,6 +751,8 @@ export default function App() {
         activeProject={currentProjectWithLiveStats}
         onSelectProject={(selected) => setActiveProjectId(selected.id)}
         onOpenNewProjectModal={() => setIsNewProjectModalOpen(true)}
+        onDeleteActiveProject={handleDeleteActiveProject}
+        canDeleteActiveProject={projects.length > 1}
         onOpenDriveImportModal={() => setIsDriveModalOpen(true)}
         onOpenLangChainModal={() => setIsLangChainModalOpen(true)}
         onExportExcel={() =>

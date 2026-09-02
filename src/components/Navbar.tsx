@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Cpu,
   Server,
+  Trash2,
 } from "lucide-react";
 import { PronacProject, AuditAlert } from "../types";
 import { formatCurrency, formatDate } from "../utils/formatters";
@@ -25,6 +26,8 @@ interface NavbarProps {
   activeProject: PronacProject;
   onSelectProject: (proj: PronacProject) => void;
   onOpenNewProjectModal: () => void;
+  onDeleteActiveProject: () => void;
+  canDeleteActiveProject: boolean;
   onOpenDriveImportModal: () => void;
   onOpenLangChainModal?: () => void;
   onExportExcel: () => void;
@@ -41,6 +44,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeProject,
   onSelectProject,
   onOpenNewProjectModal,
+  onDeleteActiveProject,
+  canDeleteActiveProject,
   onOpenDriveImportModal,
   onOpenLangChainModal,
   onExportExcel,
@@ -141,6 +146,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <PlusCircle className="w-3.5 h-3.5 text-emerald-400" />
               <span className="hidden lg:inline">Novo</span>
+            </button>
+
+            <button
+              onClick={onDeleteActiveProject}
+              disabled={!canDeleteActiveProject}
+              title={canDeleteActiveProject ? "Excluir projeto ativo" : "Mantenha ao menos um projeto cadastrado"}
+              aria-label="Excluir projeto ativo"
+              className="text-xs bg-slate-800 hover:bg-rose-500/15 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-500/40 px-2.5 py-2 rounded-xl flex items-center gap-1 transition disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">Excluir</span>
             </button>
 
             <button
@@ -301,6 +317,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <PlusCircle className="w-3 h-3 text-emerald-400" />
               <span>Novo</span>
+            </button>
+
+            <button
+              onClick={onDeleteActiveProject}
+              disabled={!canDeleteActiveProject}
+              className="text-[11px] bg-slate-800 hover:bg-rose-500/15 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-500/40 px-2 py-1.5 rounded-lg flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
+              title={canDeleteActiveProject ? "Excluir projeto ativo" : "Mantenha ao menos um projeto cadastrado"}
+              aria-label="Excluir projeto ativo"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>Excluir</span>
             </button>
 
             <button

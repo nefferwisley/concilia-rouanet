@@ -467,14 +467,42 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
           }
           await extractBatch();
 
+          // Projetos cadastrados por versões antigas podiam carregar o mesmo
+          // pacote de exemplo. Quando ele é reconhecido com segurança, não o
+          // mantenha como se fosse metadado comprovado após a importação real.
+          const isLegacyTemplate =
+            activeProject.proponente === "Proponente Cultural" &&
+            activeProject.cnpjCpf === "00.000.000/0001-00";
+          const importBaseProject: PronacProject = isLegacyTemplate
+            ? {
+                ...activeProject,
+                proponente: "",
+                cnpjCpf: "",
+                segmento: "Não identificado",
+                artigoEnquadramento: "Não identificado",
+                dataInicioVigencia: "",
+                dataFimVigencia: "",
+                prazoLimitePrestacao: "",
+                bancoInfo: {
+                  ...activeProject.bancoInfo,
+                  banco: "",
+                  agencia: "",
+                  contaCaptacao: "",
+                  contaMovimento: "",
+                  saldoBloqueado: 0,
+                  saldoMovimento: 0,
+                  rendimentoAplicacao: 0,
+                },
+              }
+            : activeProject;
           const importedProject: PronacProject = {
-            ...activeProject,
+            ...importBaseProject,
             ...extractedProject,
             // Nunca crie um projeto paralelo por causa de uma identificação
             // incompleta que veio em um lote isolado.
             id: activeProject.id,
             bancoInfo: {
-              ...activeProject.bancoInfo,
+              ...importBaseProject.bancoInfo,
               ...(extractedProject.bancoInfo || {}),
             },
           };
