@@ -94,6 +94,7 @@ export class ApiClient {
     }
   }
 
+
   /**
    * Lista somente os dados que o endpoint de projetos realmente fornece.
    * Totais financeiros, documentos e lançamentos serão carregados em ondas próprias.
@@ -202,4 +203,3 @@ export class ApiClient {
 }
 
 export const apiClient = ApiClient.getInstance();
-
