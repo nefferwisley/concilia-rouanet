@@ -623,9 +623,10 @@ async function generateGeminiContentWithFallback(
   }
 ) {
   const modelsToTry = [
-    options.preferredModel || "gemini-2.5-flash",
+    options.preferredModel || "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
     "gemini-3.7-flash",
-    "gemini-2.5-flash-lite",
+    "gemini-3.1-flash-lite",
   ];
 
   // Remove duplicates while maintaining priority order
@@ -1897,7 +1898,7 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido.`
         contents: parts,
         responseMimeType: "application/json",
         temperature: 0.05,
-        preferredModel: "gemini-2.5-flash",
+        preferredModel: "gemini-3.5-flash-lite",
       });
 
       parsed = cleanAndParseJson(response.text, null);
