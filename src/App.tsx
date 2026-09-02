@@ -133,6 +133,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard");
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>("ADMIN");
+  const [rulesContext, setRulesContext] = useState<"SALIC" | "FSA_ANCINE">("SALIC");
   const [onlineSession, setOnlineSession] = useState<OnlineSessionState>({
     status: "loading",
     projects: [],
@@ -684,8 +685,22 @@ export default function App() {
         onToggleMobileMenu={() => setIsMobileNavOpen(!isMobileNavOpen)}
       />
 
-      {/* Seletor de Perfil (Role) para teste de RBAC */}
-      <div className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex items-center justify-end gap-3 text-xs">
+      {/* Contexto normativo e perfil da sessão */}
+      <div className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex flex-wrap items-center justify-end gap-3 text-xs">
+        <label className="flex items-center gap-2 text-slate-400 font-medium">
+          Regras aplicáveis:
+          <select
+            value={rulesContext}
+            onChange={(e) => setRulesContext(e.target.value as "SALIC" | "FSA_ANCINE")}
+            className="bg-slate-800 text-slate-200 border border-slate-700 rounded px-2 py-1 outline-none focus:border-emerald-500"
+          >
+            <option value="SALIC">SALIC / PRONAC</option>
+            <option value="FSA_ANCINE">FSA / ANCINE</option>
+          </select>
+          <span className="text-[11px] text-slate-500">
+            {rulesContext === "SALIC" ? "SALIC = sistema MinC; PRONAC = número do projeto." : "Regras do Fundo Setorial do Audiovisual."}
+          </span>
+        </label>
         <span className="text-slate-400 font-medium">Perfil Ativo (RBAC):</span>
         <select
           value={userRole}

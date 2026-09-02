@@ -78,6 +78,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
   const [uploadedItems, setUploadedItems] = useState<UploadedFileItem[]>([]);
   const [selectedSubfolderFilter, setSelectedSubfolderFilter] = useState<string>("all");
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [estimatedTime, setEstimatedTime] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -364,6 +365,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
     const handleStartExtraction = async () => {
     setStatus("processing");
     setProgressPercent(5);
+    setEstimatedTime(null);
     setStatusMessage(`Preparando os arquivos de ${activeProject.nome}...`);
 
     try {
@@ -373,10 +375,12 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
           const extractedTransactions: BankTransaction[] = [];
           const extractedDocuments: FiscalDocument[] = [];
           const extractedRubrics: BudgetRubric[] = [];
+          let extractedProject: Partial<PronacProject> = {};
           const maxBatchBytes = 5 * 1024 * 1024;
           let batch: any[] = [];
           let batchBytes = 0;
           let processedFiles = 0;
+          const startedAt = Date.now();
 
           const extractBatch = async () => {
             if (batch.length === 0) return;
@@ -398,10 +402,24 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
             extractedTransactions.push(...(result.data.transactions || []));
             extractedDocuments.push(...(result.data.documents || []));
             extractedRubrics.push(...(result.data.rubrics || []));
+            if (
+              result.data.project?.nome &&
+              !String(result.data.project.nome).includes("PRONAC não identificado")
+            ) extractedProject = result.data.project;
             processedFiles += batch.length;
             batch = [];
             batchBytes = 0;
             setProgressPercent(5 + Math.round((processedFiles / uploadedItems.length) * 90));
+            const elapsedMs = Date.now() - startedAt;
+            const remainingMs = processedFiles > 0
+              ? Math.max(0, Math.round((elapsedMs / processedFiles) * (uploadedItems.length - processedFiles)))
+              : 0;
+            const remainingSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+            setEstimatedTime(
+              remainingSeconds < 60
+                ? `Tempo estimado restante: cerca de ${remainingSeconds}s`
+                : `Tempo estimado restante: cerca de ${Math.ceil(remainingSeconds / 60)} min`,
+            );
           };
 
           for (const [index, item] of uploadedItems.entries()) {
@@ -422,17 +440,25 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
           }
           await extractBatch();
 
+          const importedProject: PronacProject = {
+            ...activeProject,
+            ...extractedProject,
+            bancoInfo: {
+              ...activeProject.bancoInfo,
+              ...(extractedProject.bancoInfo || {}),
+            },
+          };
           const synced = runRealtimeTripartiteReconciliation(
             extractedTransactions,
             extractedDocuments,
             extractedRubrics,
-            activeProject,
+            importedProject,
           );
           setProgressPercent(100);
           setStatus("done");
-          setStatusMessage(`${processedFiles} arquivos importados em ${activeProject.nome}.`);
+          setStatusMessage(`${processedFiles} arquivos importados em ${importedProject.nome}.`);
           onImportComplete({
-            project: activeProject,
+            project: importedProject,
             rubrics: synced.rubrics,
             transactions: synced.transactions,
             documents: synced.documents,
@@ -662,7 +688,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
               <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2 flex-wrap">
                 Importar Pasta e Subpastas
                 <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                  Ultra Rápido (1-3s)
+                  Processamento em lote
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
@@ -725,7 +751,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
                 Arraste qualquer Pasta, Subpastas, ZIP ou Arquivos aqui
               </p>
               <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-                O motor vasculha automaticamente todos os níveis de subpastas e processa arquivos PDF, Planilhas (.xlsx), OFX, XMLs e comprovantes em 2 segundos.
+                O motor vasculha automaticamente todos os níveis de subpastas e processa arquivos PDF, Planilhas (.xlsx), OFX, XMLs e comprovantes. O tempo varia conforme o volume e o tamanho dos arquivos.
               </p>
 
               {/* 3 Upload Buttons */}
@@ -1021,6 +1047,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
                   <span>Progresso da extração</span>
                   <span>{progressPercent}%</span>
                 </div>
+                {estimatedTime && <p className="mt-1 text-[11px] text-slate-400">{estimatedTime}</p>}
               </div>
             )}
           </div>

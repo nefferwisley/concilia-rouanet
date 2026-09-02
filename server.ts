@@ -667,9 +667,9 @@ async function generateGeminiContentWithFallback(
 function extractProjectDeterministically(files: any[]): any {
   console.log(`[Deterministic Extractor] Processando ${files.length} arquivos localmente...`);
   
-  let projectName = "Projeto Cultural Original";
-  let pronac = "1961";
-  let proponente = "Proponente Cultural";
+  let projectName = "Projeto importado (PRONAC não identificado)";
+  let pronac = "NÃO IDENTIFICADO";
+  let proponente = "Não identificado nos arquivos importados";
   let totalAprovado = 0;
   let totalExecutado = 0;
   const rubrics: any[] = [];
@@ -706,6 +706,10 @@ function extractProjectDeterministically(files: any[]): any {
           const ws = wb.Sheets[sheetName];
           const rows: any[] = xlsx.utils.sheet_to_json(ws, { header: 1 });
           const lowerSheet = sheetName.toLowerCase();
+          const projectTitle = rows.flat().map((cell) => String(cell || "").trim()).find((cell) => /^pronac\s*-/i.test(cell));
+          if (projectTitle) {
+            projectName = projectTitle.replace(/^pronac\s*-\s*/i, "").replace(/\s*\(conta.*$/i, "").trim();
+          }
 
           if (lowerSheet.includes("rubrica") || lowerSheet.includes("orçamento") || lowerSheet.includes("plano")) {
             let currentEtapa = "Desenvolvimento";
@@ -786,7 +790,7 @@ function extractProjectDeterministically(files: any[]): any {
                   saldoAposTransacao: saldo || valorEntrada,
                   favorecido: "Fonte Pagadora / Fundo",
                   cnpjCpfFavorecido: "00.000.000/0001-91",
-                  statusConciliacao: "Conciliado",
+                  statusConciliacao: "PENDENTE",
                 });
               } else if (fornecedor && valor > 0) {
                 totalExecutado += valor;
@@ -806,26 +810,10 @@ function extractProjectDeterministically(files: any[]): any {
                   saldoAposTransacao: saldo,
                   favorecido: fornecedor,
                   cnpjCpfFavorecido: "00.000.000/0000-00",
-                  statusConciliacao: "Conciliado",
+                  statusConciliacao: "PENDENTE",
                   idRubricaVinculada: rubId,
-                  idDocumentoFiscalVinculado: docId,
                 });
 
-                documents.push({
-                  id: docId,
-                  tipo: "NFS-e (Serviço)",
-                  numeroDoc: `NF-${controle || idx}`,
-                  dataEmissao: dataIso,
-                  fornecedorNome: fornecedor,
-                  fornecedorCnpjCpf: "00.000.000/0000-00",
-                  descricaoServico: `${rubricaNome} (${rubricaCodigo})`,
-                  valorBruto: valor,
-                  retencoes: { iss: 0, irrf: 0, inss: 0, outras: 0 },
-                  valorLiquido: valor,
-                  idRubrica: rubId,
-                  idTransacao: txId,
-                  status: "Aprovado / Conciliado",
-                });
               }
             });
           }
@@ -853,7 +841,7 @@ function extractProjectDeterministically(files: any[]): any {
                 saldoAposTransacao: 0,
                 favorecido: tx.favorecido,
                 cnpjCpfFavorecido: tx.cnpjCpfFavorecido,
-                statusConciliacao: "Conciliado",
+                statusConciliacao: "PENDENTE",
               });
             });
           }
@@ -898,40 +886,8 @@ function extractProjectDeterministically(files: any[]): any {
       const fornecedorName = (parts[0] || restName).replace(/\.[a-zA-Z0-9]+$/, "").trim();
       const descricao = (parts.slice(1).join(" - ") || file.name).replace(/\.[a-zA-Z0-9]+$/, "").trim();
       
-      const docId = `doc-file-${seqNum || (documents.length + 1)}`;
+      const docId = `doc-file-${seqNum || "sem-num"}-${documents.length + 1}`;
       
-      // Match with corresponding transaction
-      const debitTxs = transactions.filter((t) => t.tipo === "DEBITO" || !t.tipo);
-      let existingTx = transactions.find((t) => 
-        (seqNum && t.documentoNumero && (t.documentoNumero.includes(seqNum) || t.documentoNumero.endsWith(seqNum))) ||
-        (fornecedorName && t.favorecido && t.favorecido.toLowerCase().includes(fornecedorName.toLowerCase())) ||
-        (fornecedorName && t.descricaoOriginalExtrato && t.descricaoOriginalExtrato.toLowerCase().includes(fornecedorName.toLowerCase()))
-      );
-
-      // Fallback matching by sequence index
-      if (!existingTx && debitTxs.length > 0) {
-        if (seqNum) {
-          const seqIdx = parseInt(seqNum, 10) - 1;
-          if (seqIdx >= 0 && seqIdx < debitTxs.length) {
-            existingTx = debitTxs[seqIdx];
-          }
-        }
-        if (!existingTx) {
-          existingTx = debitTxs[documents.length % debitTxs.length];
-        }
-      }
-
-      // Extract amount from file name if present
-      const amountFromFileName = extractAmountFromText(file.name);
-      const docVal = (existingTx && existingTx.valor > 0) ? existingTx.valor : (amountFromFileName || 1500);
-
-      const matchedRub = rubrics.find((r) => 
-        (descricao && r.nomeRubrica && r.nomeRubrica.toLowerCase().includes(descricao.toLowerCase())) ||
-        (fornecedorName && r.nomeRubrica && r.nomeRubrica.toLowerCase().includes(fornecedorName.toLowerCase()))
-      ) || (existingTx && existingTx.idRubricaVinculada ? rubrics.find((r) => r.id === existingTx.idRubricaVinculada) : rubrics[documents.length % Math.max(rubrics.length, 1)] || rubrics[0]);
-
-      const rubId = matchedRub ? matchedRub.id : (rubrics[0] ? rubrics[0].id : "rub-geral");
-
       documents.push({
         id: docId,
         tipo: file.name.toLowerCase().includes("passagem") || file.name.toLowerCase().includes("hospedag") || file.name.toLowerCase().includes("aereo")
@@ -942,28 +898,28 @@ function extractProjectDeterministically(files: any[]): any {
           ? "Recibo de Diária / Verba de Alimentação"
           : "NFS-e (Serviço)",
         numeroDoc: seqNum ? `DOC-${seqNum.padStart(3, '0')}` : `NF-${(documents.length + 1).toString().padStart(4, '0')}`,
-        dataEmissao: existingTx ? existingTx.dataTransacao : new Date().toISOString().slice(0, 10),
-        fornecedorNome: (existingTx?.favorecido && existingTx.favorecido !== "Prestador de Serviços") ? existingTx.favorecido : (fornecedorName || "Fornecedor / Prestador"),
-        fornecedorCnpjCpf: existingTx?.cnpjCpfFavorecido || "00.000.000/0001-91",
+        dataEmissao: "",
+        fornecedorNome: fornecedorName || "Fornecedor / Prestador",
+        fornecedorCnpjCpf: "",
         descricaoServico: descricao ? `${descricao} (${file.subfolder || 'Subpasta'})` : `Comprovante: ${file.name}`,
-        valorBruto: docVal,
+        valorBruto: 0,
         retencoes: { iss: 0, irrf: 0, inss: 0, outras: 0 },
-        valorLiquido: docVal,
-        idRubrica: rubId,
-        idTransacao: existingTx ? existingTx.id : (seqNum ? `tx-det-${seqNum}` : `tx-ofx-${documents.length + 1}`),
-        status: "Aprovado / Conciliado",
+        valorLiquido: 0,
+        idRubrica: "",
+        idTransacao: "",
+        status: "Recebido — pendente de conciliação",
       });
     }
   }
 
   // Adjust defaults if nothing parsed
-  if (totalAprovado === 0) totalAprovado = 835000;
   if (totalExecutado === 0) totalExecutado = transactions.reduce((sum, t) => sum + (t.tipo === "DEBITO" ? t.valor : 0), 0);
 
   // Build tripartite matches
   const tripartiteEntries: any[] = [];
   transactions.filter((t) => t.tipo === "DEBITO").forEach((tx, idx) => {
-    const doc = documents.find((d) => d.idTransacao === tx.id) || documents[idx % Math.max(documents.length, 1)];
+    const doc = documents.find((d) => d.idTransacao === tx.id);
+    if (!doc) return;
     const rub = rubrics.find((r) => r.id === tx.idRubricaVinculada) || rubrics[idx % Math.max(rubrics.length, 1)] || rubrics[0];
     tripartiteEntries.push({
       id: `trip-det-${idx + 1}`,
@@ -974,11 +930,11 @@ function extractProjectDeterministically(files: any[]): any {
       descricaoExtrato: tx.descricaoOriginalExtrato,
       valorDebitoExtrato: tx.valor,
       favorecidoExtrato: tx.favorecido,
-      idDocumentoFiscal: doc ? doc.id : `doc-${idx + 1}`,
-      numeroDocFiscal: doc ? doc.numeroDoc : `NF-${idx + 1}`,
-      dataEmissaoDocFiscal: doc ? doc.dataEmissao : tx.dataTransacao,
-      fornecedorDocFiscal: doc ? doc.fornecedorNome : tx.favorecido,
-      valorDocFiscal: doc ? doc.valorBruto : tx.valor,
+      idDocumentoFiscal: doc.id,
+      numeroDocFiscal: doc.numeroDoc,
+      dataEmissaoDocFiscal: doc.dataEmissao,
+      fornecedorDocFiscal: doc.fornecedorNome,
+      valorDocFiscal: doc.valorBruto,
       diferencaValor: 0,
       diferencaDias: 0,
       statusTripartite: "CONCILIADO_PERFEITO",
@@ -1015,25 +971,25 @@ function extractProjectDeterministically(files: any[]): any {
       pronac: pronac,
       nome: projectName,
       proponente: proponente,
-      cnpjCpf: "05.518.874/0001-41",
-      segmento: "Audiovisual",
-      artigoEnquadramento: "Fundo Setorial do Audiovisual - FSA / BRDE",
-      dataInicioVigencia: "2022-10-01",
-      dataFimVigencia: "2025-12-31",
-      prazoLimitePrestacao: "2026-02-28",
+      cnpjCpf: "",
+      segmento: "Não identificado",
+      artigoEnquadramento: "Não identificado",
+      dataInicioVigencia: "",
+      dataFimVigencia: "",
+      prazoLimitePrestacao: "",
       valorAprovado: totalAprovado,
       valorCaptado: totalAprovado,
       valorExecutado: totalExecutado,
       bancoInfo: {
-        banco: "Banco do Brasil (001)",
-        agencia: "0001",
-        contaCaptacao: "8768-8",
-        contaMovimento: "8768-8",
-        saldoBloqueado: 0.0,
-        saldoMovimento: totalAprovado - totalExecutado,
-        rendimentoAplicacao: 28450.12,
+        banco: "",
+        agencia: "",
+        contaCaptacao: "",
+        contaMovimento: "",
+        saldoBloqueado: 0,
+        saldoMovimento: 0,
+        rendimentoAplicacao: 0,
       },
-      status: "Em Execução / Conciliação",
+      status: "Importado — validação pendente",
       resumoProjeto: `Projeto com ${transactions.length} lançamentos bancários e ${rubrics.length} rubricas extraídas dos arquivos originais.`,
     },
     rubrics,

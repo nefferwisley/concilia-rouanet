@@ -337,16 +337,6 @@ export const FinancialReviewWorkflowView: React.FC<FinancialReviewWorkflowViewPr
             Falta Comprovante ({totalDebitos - comComprovante})
           </button>
           <button
-            onClick={() => setStatusFilter("AGUARDANDO_ASSINATURA")}
-            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
-              statusFilter === "AGUARDANDO_ASSINATURA"
-                ? "bg-indigo-500 text-white font-bold"
-                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-            }`}
-          >
-            Aguardando Júlia ({pendentesAssinatura})
-          </button>
-          <button
             onClick={() => setStatusFilter("REGULARIZADO")}
             className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
               statusFilter === "REGULARIZADO"

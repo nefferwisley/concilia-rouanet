@@ -105,16 +105,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const adminRubrics = safeRubrics.filter((r) => r.etapa === "Custos Administrativos");
   const totalAdminExecutado = adminRubrics.reduce((sum, r) => sum + r.valorExecutado, 0);
   const percentAdminOfTotal =
-    project.valorExecutado > 0
-      ? Number(((totalAdminExecutado / project.valorExecutado) * 100).toFixed(1))
+    totalExecutado > 0
+      ? Number(((totalAdminExecutado / totalExecutado) * 100).toFixed(1))
       : 0;
 
   // Divulgacao calculation
   const divRubrics = safeRubrics.filter((r) => r.etapa === "Divulgação / Comercialização");
   const totalDivExecutado = divRubrics.reduce((sum, r) => sum + r.valorExecutado, 0);
   const percentDivOfTotal =
-    project.valorExecutado > 0
-      ? Number(((totalDivExecutado / project.valorExecutado) * 100).toFixed(1))
+    totalExecutado > 0
+      ? Number(((totalDivExecutado / totalExecutado) * 100).toFixed(1))
       : 0;
 
   // Reconciliation Stats
@@ -332,13 +332,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {isAuditing ? "Auditando MinC..." : "Auditar com IA"}
             </button>
             <button
-              onClick={() => onNavigateTab("tripartite")}
-              className="text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition shadow"
-            >
-              <Split className="w-4 h-4 text-emerald-400" />
-              Planilha Tripartite
-            </button>
-            <button
               onClick={() => onNavigateTab("reconciliation")}
               className="text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition"
             >
@@ -549,7 +542,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-slate-400 mb-3">
-              Total executado: {formatCurrency(totalAdminExecutado)} de {formatCurrency(project.valorExecutado)}
+              Total executado: {formatCurrency(totalAdminExecutado)} de {formatCurrency(totalExecutado)}
             </p>
             <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative">
               <div
@@ -582,7 +575,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-slate-400 mb-3">
-              Total executado: {formatCurrency(totalDivExecutado)} de {formatCurrency(project.valorExecutado)}
+              Total executado: {formatCurrency(totalDivExecutado)} de {formatCurrency(totalExecutado)}
             </p>
             <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative">
               <div
