@@ -101,6 +101,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       ? Math.round((financialSummary.reconciledDebitCount / financialSummary.debitCount) * 100)
       : 0;
   const percentPendente = financialSummary.debitCount > 0 ? 100 - percentConciliado : 0;
+  const hasCapturedBudget = Number.isFinite(project.valorCaptado) && project.valorCaptado > 0;
+  const percentCaptured =
+    hasCapturedBudget && Number.isFinite(project.valorAprovado) && project.valorAprovado > 0
+      ? Math.min(100, Math.round((project.valorCaptado / project.valorAprovado) * 100))
+      : 0;
 
   // Administrative Costs calculation (Max 15% by Lei Rouanet IN 01/2023)
   const adminRubrics = safeRubrics.filter((r) => r.etapa === "Custos Administrativos");
@@ -423,7 +428,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <span className="text-slate-400">{validatedSummary?.fonte}</span>
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {/* Card 1: Valor Aprovado */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4.5 shadow">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
@@ -442,7 +447,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Card 2: Valor Conciliado */}
+        {/* Card 2: Valor Captado */}
+        <div className="bg-slate-900/90 border border-emerald-500/35 rounded-xl p-4.5 shadow">
+          <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
+            <span className="font-medium flex items-center gap-1.5">
+              <ArrowUpRight className="w-4 h-4 text-emerald-400" /> Orçamento Captado
+            </span>
+            <span className="text-[10px] bg-emerald-500/10 text-emerald-300 font-semibold px-2 py-0.5 rounded border border-emerald-500/20">
+              {hasCapturedBudget ? "Captação registrada" : "Não identificado"}
+            </span>
+          </div>
+          <div className="text-xl font-bold text-emerald-400 font-mono">
+            {hasCapturedBudget ? formatCurrency(project.valorCaptado) : "Não identificado"}
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+            <span>{hasCapturedBudget ? "Do orçamento aprovado" : "Sem valor de captação na importação"}</span>
+            <span className="text-emerald-300 font-semibold">{percentCaptured}%</span>
+          </div>
+          <div className="w-full bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
+            <div
+              className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+              style={{ width: `${percentCaptured}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Card 3: Valor Conciliado */}
         <div className="bg-slate-900/90 border border-sky-500/35 rounded-xl p-4.5 shadow">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
             <span className="font-medium flex items-center gap-1.5">
@@ -467,7 +497,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Card 3: Valor Pendente */}
+        {/* Card 4: Valor Pendente */}
         <button
           type="button"
           aria-controls="project-transactions"
@@ -498,7 +528,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </button>
 
-        {/* Card 4: Saldo Bancário & Rendimentos */}
+        {/* Card 5: Saldo Bancário & Rendimentos */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4.5 shadow">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
             <span className="font-medium flex items-center gap-1.5">

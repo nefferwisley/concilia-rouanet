@@ -19,6 +19,7 @@ export const initialProjects: PronacProject[] = [
   "artigoEnquadramento": "Artigo 18",
   "dataInicioVigencia": "2024-01-01",
   "dataFimVigencia": "2025-12-31",
+  "prazoLimitePrestacao": "",
   "valorAprovado": 661000,
   "valorCaptado": 661000,
   "valorExecutado": 671377.08,
@@ -29,7 +30,8 @@ export const initialProjects: PronacProject[] = [
     "contaCaptacao": "7.933-2",
     "saldoMovimento": 0
   },
-  "status": "Em Execução"
+  "status": "Em Execução",
+  "resumoProjeto": ""
 },
   {
   "id": "proj-1961",

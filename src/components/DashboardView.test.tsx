@@ -60,7 +60,7 @@ const pending: BankTransaction[] = [
 ];
 
 describe("DashboardView reconciliation summary", () => {
-  it("shows the four pending-focused cards with the verified Project 1961 split", () => {
+  it("shows the captured-budget card alongside the reconciliation summary", () => {
     const markup = renderToStaticMarkup(
       <DashboardView
         project={project}
@@ -75,6 +75,8 @@ describe("DashboardView reconciliation summary", () => {
     );
 
     expect(markup).toContain("Orçamento Aprovado");
+    expect(markup).toContain("Orçamento Captado");
+    expect(markup).toContain("Captação registrada");
     expect(markup).toContain("Conciliado (par completo)");
     expect(markup).toContain("96 de 178");
     expect(markup).toContain("Pendente de comprovação");
