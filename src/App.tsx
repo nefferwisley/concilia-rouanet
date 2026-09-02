@@ -371,11 +371,10 @@ export default function App() {
   const currentProjectWithLiveStats: PronacProject = {
     ...activeProject,
     valorExecutado: totalExecutadoCalc > 0 ? totalExecutadoCalc : activeProject.valorExecutado,
-    resumoFinanceiroValidado: calculateProjectFinancialSummary(
-      activeProject,
-      currentTransactions,
-      currentRubrics
-    ),
+    resumoFinanceiroValidado: {
+      ...calculateProjectFinancialSummary(currentTransactions),
+      fonte: "Recalculado a partir dos lançamentos importados",
+    },
   };
 
   // State Updaters for active project
