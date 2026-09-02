@@ -91,7 +91,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const safeTripartiteEntries = Array.isArray(tripartiteEntries) ? tripartiteEntries : [];
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
-  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado === true;
+  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado !== false;
 
   const [activeSubTab, setActiveSubTab] = useState<TripartiteSubTab>("04_lancamentos");
   const [selectedPeriod, setSelectedPeriod] = useState<string>("ALL");
@@ -857,12 +857,39 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                                 <HelpCircle className="w-3 h-3" /> Validação bancária indisponível sem extrato
                               </div>
                             ) : (
-                              <button
-                                onClick={() => handleQuickCreateDocForEntry(entry)}
-                                className="text-[10px] text-amber-400 hover:text-amber-300 underline flex items-center gap-1 font-semibold"
-                              >
-                                <Sparkles className="w-3 h-3" /> Gerar NF em 1 clique
-                              </button>
+                              <div className="flex flex-col gap-1 mt-1">
+                                {!hasFiscal && (
+                                  <div className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3 shrink-0" /> documento fiscal ausente
+                                  </div>
+                                )}
+                                {!hasBank && (
+                                  <div className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3 shrink-0" /> comprovante bancário ausente
+                                  </div>
+                                )}
+                                {!entry.idRubrica && (
+                                  <div className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3 shrink-0" /> rubrica SALIC ausente
+                                  </div>
+                                )}
+                                {(!entry.idTransacaoBB || !entry.valorDebitoBB) && (
+                                  <div className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3 shrink-0" /> lançamento sem correspondência no extrato
+                                  </div>
+                                )}
+                                {entry.statusTripartite?.includes("DIVERG") && (
+                                  <div className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3 shrink-0" /> divergência de valor/data
+                                  </div>
+                                )}
+                                <button
+                                  onClick={() => handleQuickCreateDocForEntry(entry)}
+                                  className="text-[10px] text-sky-400 hover:text-sky-300 underline flex items-center gap-1 font-semibold mt-1"
+                                >
+                                  <Sparkles className="w-3 h-3" /> Gerar NF em 1 clique
+                                </button>
+                              </div>
                             )}
                           </div>
                         </td>

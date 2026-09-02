@@ -658,8 +658,12 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
           valorExecutado: 0,
           etapa: "Orçamento do projeto",
         }));
-        const transactions = importedTransactions.length > 0 ? importedTransactions : currentTransactions;
-        const rubrics = importedRubrics.length > 0 ? importedRubrics : currentRubrics;
+        // A importação online deve refletir exclusivamente o que a API acabou
+        // de extrair dos arquivos enviados. Reutilizar currentTransactions ou
+        // currentRubrics aqui mistura dados antigos do navegador com o projeto
+        // atual e produz totais incorretos (especialmente no PRONAC 19-1961).
+        const transactions = importedTransactions;
+        const rubrics = importedRubrics;
 
         setProgressPercent(100);
         setStatus("done");

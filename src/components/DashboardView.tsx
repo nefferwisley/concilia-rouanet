@@ -68,7 +68,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
-  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado === true;
+  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado !== false;
   const usesControlSpreadsheet = project.bancoInfo?.fonteMovimentacao === "PLANILHA_CONTROLE";
 
   const liveFinancialSummary = calculateProjectFinancialSummary(safeTransactions, hasImportedBankStatement);

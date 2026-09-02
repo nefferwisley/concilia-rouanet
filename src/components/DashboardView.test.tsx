@@ -95,7 +95,17 @@ describe("DashboardView reconciliation summary", () => {
     };
     const markup = renderToStaticMarkup(
       <DashboardView
+<<<<<<< HEAD
         project={projectWithoutStatement}
+=======
+        project={{
+          ...project,
+          bancoInfo: {
+            ...project.bancoInfo!,
+            extratoBancarioImportado: false,
+          },
+        }}
+>>>>>>> 5a835c6 (fix: mostrar todos os debitos sem extrato na fila tripartite)
         rubrics={[]}
         transactions={[]}
         documents={[]}

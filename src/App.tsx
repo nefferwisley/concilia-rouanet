@@ -62,8 +62,12 @@ const STORAGE_KEYS = {
 // A interface só ativa a sessão online quando a URL da API foi configurada
 // explicitamente no ambiente. Isso evita colocar uma versão parcial de login
 // no ar antes de o serviço público estar conectado ao frontend.
+// Dados locais são permitidos somente no desenvolvimento explícito. Em uma
+// publicação, a ausência de API deve resultar em estado online indisponível,
+// nunca em reaproveitamento silencioso de dados antigos do navegador.
 const IS_DEMO_MODE =
-  import.meta.env.VITE_DEMO_MODE === "true" || !import.meta.env.VITE_API_URL?.trim();
+  import.meta.env.DEV &&
+  (import.meta.env.VITE_DEMO_MODE === "true" || !import.meta.env.VITE_API_URL?.trim());
 const ONLINE_ACTIVE_PROJECT_STORAGE_KEY = "concilia_rouanet_online_active_project_v1";
 
 const EMPTY_PROJECT: PronacProject = {

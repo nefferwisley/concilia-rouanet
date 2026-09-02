@@ -292,6 +292,10 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
   );
   const pendingDebitsCount = pendingDebitTransactions.length;
   const pendingCategoryCounts = getExpenseCategoryCounts(pendingDebitTransactions, safeRubrics);
+<<<<<<< HEAD
+=======
+  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado !== false;
+>>>>>>> 5a835c6 (fix: mostrar todos os debitos sem extrato na fila tripartite)
   const pendingEvidenceTitle = hasImportedBankStatement
     ? "Pendentes de Documento"
     : "Movimentos sem extrato bancário";
