@@ -370,10 +370,43 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
       if (activeTab === "folder_files" && uploadedItems.length > 0) {
         const configuredApiBaseUrl = import.meta.env.VITE_API_URL?.trim();
         if (!configuredApiBaseUrl) {
-          const files = [];
+          const extractedTransactions: BankTransaction[] = [];
+          const extractedDocuments: FiscalDocument[] = [];
+          const extractedRubrics: BudgetRubric[] = [];
+          const maxBatchBytes = 5 * 1024 * 1024;
+          let batch: any[] = [];
+          let batchBytes = 0;
+          let processedFiles = 0;
+
+          const extractBatch = async () => {
+            if (batch.length === 0) return;
+            setStatusMessage(`Extraindo lote de ${batch.length} arquivo(s) (${processedFiles + 1}-${processedFiles + batch.length}/${uploadedItems.length})...`);
+            let response: Response;
+            try {
+              response = await fetch("/api/gemini/extract-project-files", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ files: batch }),
+              });
+            } catch {
+              throw new Error(`Falha de conexão ao enviar o lote ${processedFiles + 1}-${processedFiles + batch.length}.`);
+            }
+            const result = await response.json().catch(() => null);
+            if (!response.ok || !result?.success || !result.data) {
+              throw new Error(result?.error || `Não foi possível extrair o lote ${processedFiles + 1}-${processedFiles + batch.length}.`);
+            }
+            extractedTransactions.push(...(result.data.transactions || []));
+            extractedDocuments.push(...(result.data.documents || []));
+            extractedRubrics.push(...(result.data.rubrics || []));
+            processedFiles += batch.length;
+            batch = [];
+            batchBytes = 0;
+            setProgressPercent(5 + Math.round((processedFiles / uploadedItems.length) * 90));
+          };
+
           for (const [index, item] of uploadedItems.entries()) {
             setStatusMessage(`Lendo ${item.name} (${index + 1}/${uploadedItems.length})...`);
-            files.push({
+            const file = {
               name: item.name,
               relativePath: item.relativePath,
               subfolder: item.subfolder,
@@ -381,29 +414,23 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
               mimeType: item.mimeType,
               base64: item.base64 || (item.file ? await fileToBase64(item.file) : undefined),
               textContent: item.textContent,
-            });
-            setProgressPercent(5 + Math.round(((index + 1) / uploadedItems.length) * 80));
+            };
+            if (batch.length > 0 && batchBytes + item.size > maxBatchBytes) await extractBatch();
+            batch.push(file);
+            batchBytes += item.size;
+            if (batch.length >= 10) await extractBatch();
           }
-
-          const response = await fetch("/api/gemini/extract-project-files", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ files }),
-          });
-          const result = await response.json();
-          if (!response.ok || !result.success || !result.data) {
-            throw new Error(result.error || "Não foi possível extrair os dados da pasta.");
-          }
+          await extractBatch();
 
           const synced = runRealtimeTripartiteReconciliation(
-            result.data.transactions || [],
-            result.data.documents || [],
-            result.data.rubrics || [],
+            extractedTransactions,
+            extractedDocuments,
+            extractedRubrics,
             activeProject,
           );
           setProgressPercent(100);
           setStatus("done");
-          setStatusMessage(`${files.length} arquivos importados em ${activeProject.nome}.`);
+          setStatusMessage(`${processedFiles} arquivos importados em ${activeProject.nome}.`);
           onImportComplete({
             project: activeProject,
             rubrics: synced.rubrics,
