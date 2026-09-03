@@ -183,7 +183,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             <button
               onClick={async () => {
-                if (window.confirm("Deseja carregar o Projeto 1961 de demonstração? Isso substituirá os dados atuais.")) {
+                if (window.confirm("Deseja restaurar a base de dados oficial do Projeto 1961 neste navegador?")) {
                   const { initialProjects, initialRubrics, initialTransactions, initialDocuments } = await import("../data/mockData");
                   localStorage.setItem("concilia_rouanet_projects_v6", JSON.stringify(initialProjects));
                   localStorage.setItem("concilia_rouanet_active_id_v6", "proj-1961");
@@ -193,10 +193,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                   window.location.reload();
                 }
               }}
-              title="Carregar Projeto 1961 para revisão"
+              title="Restaurar base oficial do Projeto 1961"
               className="text-xs bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-2.5 py-2 rounded-xl flex items-center gap-1 transition font-bold"
             >
-              Carregar Demo 1961
+              Sincronizar Projeto 1961
             </button>
           </div>
 
