@@ -43,6 +43,14 @@ import {
   sanitizeDocuments,
   sanitizeTripartiteEntries,
 } from "./utils/sanitizeFinancialData";
+import {
+  initialProjects,
+  initialRubrics,
+  initialTransactions,
+  initialDocuments,
+  initialAlerts,
+  initialTripartiteEntries,
+} from "./data/mockData";
 import { Plus, X, Building, CheckCircle2, LayoutDashboard, Split, ArrowLeftRight, ShieldCheck, Menu } from "lucide-react";
 
 const STORAGE_KEYS = {
@@ -57,17 +65,12 @@ const STORAGE_KEYS = {
   PROJECT_1961_PENDING_MAPPING: "concilia_rouanet_project_1961_pending_mapping_v6",
 };
 
-// Production always reads projects from the backend; sample data is never
-// rendered or persisted through the user-facing flow.
-// A interface só ativa a sessão online quando a URL da API foi configurada
-// explicitamente no ambiente. Isso evita colocar uma versão parcial de login
-// no ar antes de o serviço público estar conectado ao frontend.
-// Dados locais são permitidos somente no desenvolvimento explícito. Em uma
-// publicação, a ausência de API deve resultar em estado online indisponível,
-// nunca em reaproveitamento silencioso de dados antigos do navegador.
+// Se a autenticação online/API não estiver configurada no ambiente (ex: Vercel estático),
+// opera diretamente com a base de dados dos projetos locais e auditados (1961 e É Tudo Verdade).
 const IS_DEMO_MODE =
-  import.meta.env.DEV &&
-  (import.meta.env.VITE_DEMO_MODE === "true" || !import.meta.env.VITE_API_URL?.trim());
+  import.meta.env.VITE_DEMO_MODE === "true" ||
+  !import.meta.env.VITE_API_URL?.trim() ||
+  !getSupabaseAuthConfiguration();
 const ONLINE_ACTIVE_PROJECT_STORAGE_KEY = "concilia_rouanet_online_active_project_v1";
 
 const EMPTY_PROJECT: PronacProject = {
@@ -157,15 +160,18 @@ const isSummaryItem = (item: any) => {
 export default function App() {
   const [hasAuthenticatedSession, setHasAuthenticatedSession] = useState(() => Boolean(apiClient.getToken()));
   const supabaseAuthConfiguration = getSupabaseAuthConfiguration();
-  // Load the local workspace; a new browser starts empty, never with sample projects.
+  // Carrega os projetos; se o navegador estiver vazio, inicializa com a base oficial (Projeto 1961 e É Tudo Verdade)
   const [projects, setProjects] = useState<PronacProject[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
-      if (saved) return (JSON.parse(saved) as PronacProject[]).map(removePlaceholderBankData);
+      if (saved) {
+        const parsed = (JSON.parse(saved) as PronacProject[]).map(removePlaceholderBankData);
+        if (parsed.length > 0) return parsed;
+      }
     } catch (e) {
       console.warn("Could not load saved projects:", e);
     }
-    return [];
+    return initialProjects;
   });
 
   const [activeProjectId, setActiveProjectId] = useState<string>(() => {
@@ -175,7 +181,8 @@ export default function App() {
     } catch (e) {
       console.warn("Could not load saved active id:", e);
     }
-    return projects[0]?.id || "";
+    const proj1961 = projects.find((p) => p.id === "proj-1961");
+    return proj1961?.id || projects[0]?.id || "proj-1961";
   });
 
   const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard");
@@ -209,11 +216,14 @@ export default function App() {
   const [allRubrics, setAllRubrics] = useState<Record<string, BudgetRubric[]>>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.RUBRICS);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && Object.keys(parsed).length > 0) return parsed;
+      }
     } catch (e) {
       console.warn("Could not load saved rubrics:", e);
     }
-    return {};
+    return initialRubrics;
   });
 
   const [allTransactions, setAllTransactions] = useState<Record<string, BankTransaction[]>>(() => {
@@ -222,16 +232,22 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
       if (saved) {
         const parsed: Record<string, BankTransaction[]> = JSON.parse(saved);
-        const cleaned: Record<string, BankTransaction[]> = {};
-        Object.keys(parsed).forEach((k) => {
-          cleaned[k] = sanitizeTransactions(
-            (parsed[k] || []).filter((t) => !isSummaryItem(t))
-          );
-        });
-        loadedTransactions = cleaned;
+        if (parsed && Object.keys(parsed).length > 0) {
+          const cleaned: Record<string, BankTransaction[]> = {};
+          Object.keys(parsed).forEach((k) => {
+            cleaned[k] = sanitizeTransactions(
+              (parsed[k] || []).filter((t) => !isSummaryItem(t))
+            );
+          });
+          loadedTransactions = cleaned;
+        }
       }
     } catch (e) {
       console.warn("Could not load saved transactions:", e);
+    }
+
+    if (Object.keys(loadedTransactions).length === 0) {
+      return initialTransactions;
     }
 
     // Ensure all persisted transactions are sanitized.
@@ -248,26 +264,31 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEYS.DOCUMENTS);
       if (saved) {
         const parsed: Record<string, FiscalDocument[]> = JSON.parse(saved);
-        const cleaned: Record<string, FiscalDocument[]> = {};
-        Object.keys(parsed).forEach((k) => {
-          cleaned[k] = sanitizeDocuments((parsed[k] || []).filter((d) => !isSummaryItem(d)));
-        });
-        return cleaned;
+        if (parsed && Object.keys(parsed).length > 0) {
+          const cleaned: Record<string, FiscalDocument[]> = {};
+          Object.keys(parsed).forEach((k) => {
+            cleaned[k] = sanitizeDocuments((parsed[k] || []).filter((d) => !isSummaryItem(d)));
+          });
+          return cleaned;
+        }
       }
     } catch (e) {
       console.warn("Could not load saved documents:", e);
     }
-    return {};
+    return initialDocuments;
   });
 
   const [allAlerts, setAllAlerts] = useState<Record<string, AuditAlert[]>>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.ALERTS);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && Object.keys(parsed).length > 0) return parsed;
+      }
     } catch (e) {
       console.warn("Could not load saved alerts:", e);
     }
-    return {};
+    return initialAlerts;
   });
 
   const [allTripartiteEntries, setAllTripartiteEntries] = useState<
@@ -277,16 +298,18 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEYS.TRIPARTITE);
       if (saved) {
         const parsed: Record<string, TripartiteEntry[]> = JSON.parse(saved);
-        const cleaned: Record<string, TripartiteEntry[]> = {};
-        Object.keys(parsed).forEach((k) => {
-          cleaned[k] = sanitizeTripartiteEntries((parsed[k] || []).filter((trip) => !isSummaryItem(trip)));
-        });
-        return cleaned;
+        if (parsed && Object.keys(parsed).length > 0) {
+          const cleaned: Record<string, TripartiteEntry[]> = {};
+          Object.keys(parsed).forEach((k) => {
+            cleaned[k] = sanitizeTripartiteEntries((parsed[k] || []).filter((trip) => !isSummaryItem(trip)));
+          });
+          return cleaned;
+        }
       }
     } catch (e) {
       console.warn("Could not load saved tripartite entries:", e);
     }
-    return {};
+    return initialTripartiteEntries;
   });
 
   const [allReceipts, setAllReceipts] = useState<Record<string, Record<string, ReceiptItem>>>(() => {

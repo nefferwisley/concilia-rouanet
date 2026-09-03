@@ -170,33 +170,15 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             <button
               onClick={() => {
-                if (window.confirm("ATENÇÃO: Deseja apagar o cache local e excluir o projeto antigo 21.1623 do seu navegador?")) {
+                if (window.confirm("Deseja redefinir os dados deste navegador para a base oficial completa (Projeto 1961 e É Tudo Verdade)?")) {
                   localStorage.clear();
                   window.location.reload();
                 }
               }}
-              title="Excluir Projeto Antigo (Limpar Cache Local)"
-              className="text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 px-2.5 py-2 rounded-xl flex items-center gap-1 transition font-bold"
+              title="Restaurar base oficial de projetos (1961 e É Tudo Verdade)"
+              className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-2 rounded-xl flex items-center gap-1 transition font-medium"
             >
-              Limpar PRONAC Antigo
-            </button>
-
-            <button
-              onClick={async () => {
-                if (window.confirm("Deseja restaurar a base de dados oficial do Projeto 1961 neste navegador?")) {
-                  const { initialProjects, initialRubrics, initialTransactions, initialDocuments } = await import("../data/mockData");
-                  localStorage.setItem("concilia_rouanet_projects_v6", JSON.stringify(initialProjects));
-                  localStorage.setItem("concilia_rouanet_active_id_v6", "proj-1961");
-                  localStorage.setItem("concilia_rouanet_rubrics_v6", JSON.stringify(initialRubrics));
-                  localStorage.setItem("concilia_rouanet_transactions_v6", JSON.stringify(initialTransactions));
-                  localStorage.setItem("concilia_rouanet_documents_v6", JSON.stringify(initialDocuments));
-                  window.location.reload();
-                }
-              }}
-              title="Restaurar base oficial do Projeto 1961"
-              className="text-xs bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-2.5 py-2 rounded-xl flex items-center gap-1 transition font-bold"
-            >
-              Sincronizar Projeto 1961
+              Restaurar Dados Originais
             </button>
           </div>
 
