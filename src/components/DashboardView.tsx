@@ -68,7 +68,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
-  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado !== false;
+  // The bank statement flag is deliberately tri-state for legacy projects:
+  // true = confirmed import, false = confirmed absence, undefined = unknown.
+  // Never promote an unknown legacy value to confirmed evidence.
+  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado === true;
   const usesControlSpreadsheet = project.bancoInfo?.fonteMovimentacao === "PLANILHA_CONTROLE";
 
   const liveFinancialSummary = calculateProjectFinancialSummary(safeTransactions, hasImportedBankStatement);
@@ -84,9 +87,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         validatedSummary.pendingDebitCount,
       ].every(Number.isFinite),
   );
-  const financialSummary = hasValidatedSummary ? validatedSummary! : liveFinancialSummary;
+  const canUseValidatedSummary = hasImportedBankStatement && hasValidatedSummary;
+  const financialSummary = canUseValidatedSummary ? validatedSummary! : liveFinancialSummary;
   const summaryDiverges =
-    hasValidatedSummary &&
+    canUseValidatedSummary &&
     (Math.round(liveFinancialSummary.totalExecutado * 100) !==
       Math.round(financialSummary.totalExecutado * 100) ||
       Math.round(liveFinancialSummary.totalConciliado * 100) !==
@@ -198,7 +202,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [showAllPreviewTransactions, setShowAllPreviewTransactions] = useState(false);
   const transactionsSectionRef = useRef<HTMLDivElement>(null);
   const pendingDetailMismatch =
-    hasValidatedSummary && pendingTransactions.length !== financialSummary.pendingDebitCount;
+    canUseValidatedSummary && pendingTransactions.length !== financialSummary.pendingDebitCount;
   const pendingCategoryCounts = getExpenseCategoryCounts(pendingTransactions, safeRubrics);
 
   const selectTransactionStatus = (status: "ALL" | "CONCILIADO" | "PENDENTE" | "DEBITO" | "CREDITO") => {
@@ -243,13 +247,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     ? filteredPreviewTransactions
     : filteredPreviewTransactions.slice(0, 10);
 
+  // A later workflow step may only complete when its evidence-producing
+  // prerequisites are explicitly complete. Empty arrays never prove that an
+  // audit ran or that no problem exists.
+  const hasIdentifiedProject = Boolean(
+    project.pronac?.trim() &&
+      project.nome?.trim() &&
+      project.proponente?.trim() &&
+      project.cnpjCpf?.trim() &&
+      project.proponente !== "Não identificado" &&
+      project.cnpjCpf !== "Não identificado",
+  );
+  const hasBudgetEvidence = safeRubrics.length > 0;
+  const hasDocumentEvidence = safeDocuments.length > 0;
+  const hasCompleteReconciliation =
+    hasImportedBankStatement &&
+    financialSummary.debitCount > 0 &&
+    financialSummary.pendingDebitCount === 0;
+  const hasCompletedAudit =
+    hasCompleteReconciliation &&
+    project.auditoriaConcluida === true &&
+    unresolvedAlerts.length === 0;
+  const canExportDossier =
+    hasIdentifiedProject &&
+    hasBudgetEvidence &&
+    hasDocumentEvidence &&
+    hasCompletedAudit;
+
   // Workflow checklist steps calculation
   const workflowSteps = [
     {
       id: "budget",
       title: "1. Rubricas Orçamentárias",
-      description: `${safeRubrics.length} rubricas parametrizadas`,
-      completed: safeRubrics.length > 0,
+      description: `${safeRubrics.length} rubricas cadastradas`,
+      completed: hasBudgetEvidence,
       tab: "budget",
     },
     {
@@ -273,22 +304,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     {
       id: "reconciliation-match",
       title: "4. Conciliação Tripartite",
-      description: `${financialSummary.reconciledDebitCount}/${financialSummary.debitCount} débitos vinculados`,
-      completed: financialSummary.debitCount > 0 && financialSummary.pendingDebitCount === 0,
+      description: hasImportedBankStatement
+        ? `${financialSummary.reconciledDebitCount}/${financialSummary.debitCount} débitos vinculados`
+        : "Validação bancária indisponível sem extrato",
+      completed: hasCompleteReconciliation,
       tab: "tripartite",
     },
     {
       id: "audit",
       title: "5. Auditoria de Conformidade",
-      description: unresolvedAlerts.length === 0 ? "Sem alertas pendentes" : `${unresolvedAlerts.length} alerta(s) a revisar`,
-      completed: unresolvedAlerts.length === 0,
+      description: project.auditoriaConcluida === true
+        ? unresolvedAlerts.length === 0
+          ? "Auditoria concluída sem alertas pendentes"
+          : `${unresolvedAlerts.length} alerta(s) a revisar`
+        : "Auditoria ainda não concluída",
+      completed: hasCompletedAudit,
       tab: "audit",
     },
     {
       id: "salic",
       title: "6. Dossiê SALIC",
-      description: "Pronto para exportação oficial",
-      completed: financialSummary.pendingDebitCount === 0 && unresolvedAlerts.length === 0,
+      description: canExportDossier
+        ? "Pronto para exportação oficial"
+        : "Bloqueado até concluir as etapas anteriores",
+      completed: canExportDossier,
       tab: "salic",
     },
   ];
@@ -387,7 +426,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </h2>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400">Prontidão para Envio MinC:</span>
+            <span className="text-xs text-slate-400">Etapas concluídas:</span>
             <span className="text-xs font-bold text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
               {readinessPercent}%
             </span>
@@ -420,7 +459,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* KPI Cards Grid */}
-      {hasValidatedSummary && (
+      {canUseValidatedSummary && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 font-semibold text-sky-300">
             <ShieldCheck className="h-3.5 w-3.5" /> Resumo validado

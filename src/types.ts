@@ -85,6 +85,8 @@ export interface PronacProject {
   status: ProjectStatus | string;
   resumoProjeto: string;
   resumoFinanceiroValidado?: ValidatedFinancialSummary;
+  /** True only after the audit workflow has completed for the current evidence set. */
+  auditoriaConcluida?: boolean;
   [key: string]: any;
 }
 

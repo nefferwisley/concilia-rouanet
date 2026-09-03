@@ -91,8 +91,6 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const safeTripartiteEntries = Array.isArray(tripartiteEntries) ? tripartiteEntries : [];
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
-  const hasImportedBankStatement = project.bancoInfo?.extratoBancarioImportado !== false;
-
   const [activeSubTab, setActiveSubTab] = useState<TripartiteSubTab>("04_lancamentos");
   const [selectedPeriod, setSelectedPeriod] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");

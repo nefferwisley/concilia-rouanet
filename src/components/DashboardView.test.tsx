@@ -85,6 +85,33 @@ describe("DashboardView reconciliation summary", () => {
     expect(markup).toContain("Saldo em Conta");
   });
 
+  it("treats a missing legacy statement flag as unknown, never as imported evidence", () => {
+    const projectWithUnknownStatement = {
+      ...project,
+      bancoInfo: {
+        ...project.bancoInfo,
+        extratoBancarioImportado: undefined,
+      },
+    };
+    const markup = renderToStaticMarkup(
+      <DashboardView
+        project={projectWithUnknownStatement}
+        rubrics={[]}
+        transactions={reconciled}
+        documents={[]}
+        alerts={[]}
+        onNavigateTab={() => undefined}
+        onRunAiAudit={() => undefined}
+        isAuditing={false}
+      />,
+    );
+
+    expect(markup).toContain("Nenhum extrato importado");
+    expect(markup).toContain("Validação bancária indisponível sem extrato");
+    expect(markup).toContain("Saldo não informado");
+    expect(markup).not.toContain("96/96 débitos vinculados");
+  });
+
   it("does not present a project balance as real before a bank statement is imported", () => {
     const projectWithoutStatement = {
       ...project,
@@ -95,17 +122,7 @@ describe("DashboardView reconciliation summary", () => {
     };
     const markup = renderToStaticMarkup(
       <DashboardView
-<<<<<<< HEAD
         project={projectWithoutStatement}
-=======
-        project={{
-          ...project,
-          bancoInfo: {
-            ...project.bancoInfo!,
-            extratoBancarioImportado: false,
-          },
-        }}
->>>>>>> 5a835c6 (fix: mostrar todos os debitos sem extrato na fila tripartite)
         rubrics={[]}
         transactions={[]}
         documents={[]}
@@ -120,6 +137,25 @@ describe("DashboardView reconciliation summary", () => {
     expect(markup).toContain("Conta não informada");
     expect(markup).toContain("Importe o extrato bancário");
     expect(markup).not.toContain("R$ 5.344,83");
+  });
+
+  it("keeps audit and dossier blocked until their evidence is explicitly complete", () => {
+    const markup = renderToStaticMarkup(
+      <DashboardView
+        project={project}
+        rubrics={initialRubrics["proj-1961"] || []}
+        transactions={reconciled}
+        documents={initialDocuments["proj-1961"] || []}
+        alerts={[]}
+        onNavigateTab={() => undefined}
+        onRunAiAudit={() => undefined}
+        isAuditing={false}
+      />,
+    );
+
+    expect(markup).toContain("Auditoria ainda não concluída");
+    expect(markup).toContain("Bloqueado até concluir as etapas anteriores");
+    expect(markup).not.toContain("Pronto para exportação oficial");
   });
 
   it("shows the validated snapshot and warns when local detail disagrees", () => {
