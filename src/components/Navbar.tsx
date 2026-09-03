@@ -180,6 +180,24 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               Limpar PRONAC Antigo
             </button>
+
+            <button
+              onClick={async () => {
+                if (window.confirm("Deseja carregar o Projeto 1961 de demonstração? Isso substituirá os dados atuais.")) {
+                  const { initialProjects, initialRubrics, initialTransactions, initialDocuments } = await import("../data/mockData");
+                  localStorage.setItem("concilia_rouanet_projects_v6", JSON.stringify(initialProjects));
+                  localStorage.setItem("concilia_rouanet_active_id_v6", "proj-1961");
+                  localStorage.setItem("concilia_rouanet_rubrics_v6", JSON.stringify(initialRubrics));
+                  localStorage.setItem("concilia_rouanet_transactions_v6", JSON.stringify(initialTransactions));
+                  localStorage.setItem("concilia_rouanet_documents_v6", JSON.stringify(initialDocuments));
+                  window.location.reload();
+                }
+              }}
+              title="Carregar Projeto 1961 para revisão"
+              className="text-xs bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-2.5 py-2 rounded-xl flex items-center gap-1 transition font-bold"
+            >
+              Carregar Demo 1961
+            </button>
           </div>
 
           {/* Right Action Bar */}
