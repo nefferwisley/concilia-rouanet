@@ -158,7 +158,7 @@ describe("DashboardView reconciliation summary", () => {
     expect(markup).not.toContain("Pronto para exportação oficial");
   });
 
-  it("shows the validated snapshot and warns when local detail disagrees", () => {
+  it("uses current transactions and warns when the saved snapshot disagrees", () => {
     const localTransactions = [...reconciled, ...pending].map((transaction, index) => ({
       ...transaction,
       status: "CONCILIADO",
@@ -191,15 +191,15 @@ describe("DashboardView reconciliation summary", () => {
       />,
     );
 
-    expect(markup).toContain("Resumo validado");
-    expect(markup).toContain("96 de 178");
-    expect(markup).toContain("82 itens");
-    expect(markup).toContain("R$ 655.341,36");
-    expect(markup).toContain("R$ 242.417,79");
-    expect(markup).toContain("O detalhamento local ainda diverge do resumo validado");
+    expect(markup).not.toContain("Resumo conferido com os lançamentos");
+    expect(markup).toContain("178 de 178");
+    expect(markup).toContain("0 itens");
+    expect(markup).toContain("R$ 897.759,15");
+    expect(markup).not.toContain("R$ 242.417,79");
+    expect(markup).toContain("O resumo salvo diverge dos lançamentos atuais");
   });
 
-  it("links the pending card to the transaction list and keeps the validated pending count", () => {
+  it("links the pending card to the transaction list and uses the current pending count", () => {
     const localTransactions = [...reconciled, ...pending].map((transaction, index) => ({
       ...transaction,
       status: "CONCILIADO",
@@ -234,7 +234,7 @@ describe("DashboardView reconciliation summary", () => {
 
     expect(markup).toContain('aria-controls="project-transactions"');
     expect(markup).toContain('id="project-transactions"');
-    expect(markup).toContain("Pendentes (82)");
+    expect(markup).toContain("Pendentes (0)");
   });
 
   it("offers access to every filtered pending transaction instead of hiding after ten rows", () => {
@@ -274,5 +274,26 @@ describe("DashboardView reconciliation summary", () => {
     expect(markup).toContain("Categoria da despesa");
     expect(markup).toContain("Alimentação e diárias (25)");
     expect(markup).toContain("Passagens aéreas (8)");
+  });
+});
+
+
+describe("Dashboard monetary integrity", () => {
+  const render = (transactions: BankTransaction[]) => renderToStaticMarkup(
+    <DashboardView project={project} rubrics={[]} transactions={transactions}
+      documents={[]} alerts={[]} onNavigateTab={() => undefined}
+      onRunAiAudit={() => undefined} isAuditing={false} />,
+  );
+  it("does not reuse project execution when the current list is empty", () => {
+    expect(render([])).not.toContain("897.759,15");
+  });
+  it("shows the share of money rather than the share of transaction rows", () => {
+    const markup = render([
+      { ...reconciled[0], valor: 999 },
+      { ...pending[0], valor: 1 },
+    ]);
+    expect(markup).toContain("99.9");
+    expect(markup).toContain("0.1");
+    expect(markup).not.toContain(">50%");
   });
 });

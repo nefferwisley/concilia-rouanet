@@ -87,24 +87,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         validatedSummary.pendingDebitCount,
       ].every(Number.isFinite),
   );
-  const canUseValidatedSummary = hasImportedBankStatement && hasValidatedSummary;
-  const financialSummary = canUseValidatedSummary ? validatedSummary! : liveFinancialSummary;
-  const summaryDiverges =
-    canUseValidatedSummary &&
-    (Math.round(liveFinancialSummary.totalExecutado * 100) !==
-      Math.round(financialSummary.totalExecutado * 100) ||
-      Math.round(liveFinancialSummary.totalConciliado * 100) !==
-        Math.round(financialSummary.totalConciliado * 100) ||
-      liveFinancialSummary.debitCount !== financialSummary.debitCount ||
-      liveFinancialSummary.reconciledDebitCount !== financialSummary.reconciledDebitCount);
-  const totalExecutado = financialSummary.debitCount > 0 ? financialSummary.totalExecutado : project.valorExecutado;
-  const totalConciliado = financialSummary.debitCount > 0 ? financialSummary.totalConciliado : 0;
-  const totalAConciliar = financialSummary.debitCount > 0 ? financialSummary.totalAConciliar : totalExecutado;
-  const percentConciliado =
-    financialSummary.debitCount > 0
-      ? Math.round((financialSummary.reconciledDebitCount / financialSummary.debitCount) * 100)
-      : 0;
-  const percentPendente = financialSummary.debitCount > 0 ? 100 - percentConciliado : 0;
+  const summaryDiverges = Boolean(hasValidatedSummary && validatedSummary &&
+    (Object.keys(liveFinancialSummary) as Array<keyof typeof liveFinancialSummary>).some(
+      (key) => Math.round(liveFinancialSummary[key] * 100) !== Math.round(validatedSummary[key] * 100),
+    ));
+  const canUseValidatedSummary = hasImportedBankStatement && hasValidatedSummary && !summaryDiverges;
+  // Cards and transaction rows must always describe the same current dataset.
+  const financialSummary = liveFinancialSummary;
+  const totalExecutado = financialSummary.totalExecutado;
+  const totalConciliado = financialSummary.totalConciliado;
+  const totalAConciliar = financialSummary.totalAConciliar;
+  const percentConciliado = totalExecutado > 0
+    ? Number(((totalConciliado / totalExecutado) * 100).toFixed(2)) : 0;
+  const percentPendente = totalExecutado > 0
+    ? Number(((totalAConciliar / totalExecutado) * 100).toFixed(2)) : 0;
   const hasCapturedBudget = Number.isFinite(project.valorCaptado) && project.valorCaptado > 0;
   const percentCaptured =
     hasCapturedBudget && Number.isFinite(project.valorAprovado) && project.valorAprovado > 0
@@ -462,7 +458,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {canUseValidatedSummary && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 font-semibold text-sky-300">
-            <ShieldCheck className="h-3.5 w-3.5" /> Resumo validado
+            <ShieldCheck className="h-3.5 w-3.5" /> Resumo conferido com os lançamentos
           </span>
           <span className="text-slate-400">{validatedSummary?.fonte}</span>
         </div>
@@ -607,10 +603,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
           <div>
-            <p className="font-semibold">O detalhamento local ainda diverge do resumo validado</p>
+            <p className="font-semibold">O resumo salvo diverge dos lançamentos atuais</p>
             <p className="mt-0.5 text-xs text-amber-100/70">
-              Os cartões mostram a revisão validada. A lista mantém o estado local até a importação do
-              vínculo individual de cada lançamento.
+              Os cartões foram recalculados a partir dos lançamentos atuais. Revise os vínculos
+              documentais antes de concluir a prestação de contas.
             </p>
           </div>
         </div>
