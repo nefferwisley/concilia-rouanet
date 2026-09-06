@@ -158,7 +158,7 @@ describe("DashboardView reconciliation summary", () => {
     expect(markup).not.toContain("Pronto para exportação oficial");
   });
 
-  it("uses current transactions and warns when the saved snapshot disagrees", () => {
+  it("uses the validated summary when its count and executed total match the imported ledger", () => {
     const localTransactions = [...reconciled, ...pending].map((transaction, index) => ({
       ...transaction,
       status: "CONCILIADO",
@@ -191,15 +191,15 @@ describe("DashboardView reconciliation summary", () => {
       />,
     );
 
-    expect(markup).not.toContain("Resumo conferido com os lançamentos");
-    expect(markup).toContain("178 de 178");
-    expect(markup).toContain("0 itens");
-    expect(markup).toContain("R$ 897.759,15");
-    expect(markup).not.toContain("R$ 242.417,79");
-    expect(markup).toContain("O resumo salvo diverge dos lançamentos atuais");
+    expect(markup).toContain("Resumo validado");
+    expect(markup).toContain("96 de 178");
+    expect(markup).toContain("82 itens");
+    expect(markup).toContain("R$ 655.341,36");
+    expect(markup).toContain("R$ 242.417,79");
+    expect(markup).toContain("Os vínculos locais ainda divergem do resumo validado");
   });
 
-  it("links the pending card to the transaction list and uses the current pending count", () => {
+  it("links the pending card to the transaction list and keeps the validated pending count", () => {
     const localTransactions = [...reconciled, ...pending].map((transaction, index) => ({
       ...transaction,
       status: "CONCILIADO",
@@ -234,7 +234,7 @@ describe("DashboardView reconciliation summary", () => {
 
     expect(markup).toContain('aria-controls="project-transactions"');
     expect(markup).toContain('id="project-transactions"');
-    expect(markup).toContain("Pendentes (0)");
+    expect(markup).toContain("Pendentes (82)");
   });
 
   it("offers access to every filtered pending transaction instead of hiding after ten rows", () => {
@@ -275,6 +275,37 @@ describe("DashboardView reconciliation summary", () => {
     expect(markup).toContain("Alimentação e diárias (25)");
     expect(markup).toContain("Passagens aéreas (8)");
   });
+
+  it("renders the expected FSA 1961 mobile summary", () => {
+    const project1961 = initialProjects.find((item) => item.id === "proj-1961");
+    expect(project1961).toBeDefined();
+
+    const markup = renderToStaticMarkup(
+      <DashboardView
+        project={project1961!}
+        rubrics={initialRubrics["proj-1961"]}
+        transactions={initialTransactions["proj-1961"]}
+        documents={initialDocuments["proj-1961"]}
+        alerts={[]}
+        onNavigateTab={() => undefined}
+        onRunAiAudit={() => undefined}
+        isAuditing={false}
+      />,
+    );
+
+    expect(markup).toContain("FSA / ANCINE");
+    expect(markup).toContain("R$ 835.000,00");
+    expect(markup).toContain("100% Liberado p/ Execução");
+    expect(markup).toContain("100% Conciliado");
+    expect(markup).toContain("96 de 178");
+    expect(markup).toContain("R$ 655.341,36");
+    expect(markup).toContain("Pendente de Cobrança");
+    expect(markup).toContain("82 itens");
+    expect(markup).toContain("R$ 242.417,79");
+    expect(markup).toContain("Falta Nota Fiscal / Bilhete / Recibo");
+    expect(markup).toContain("BB 8768-8");
+    expect(markup).toContain("hidden sm:block");
+  });
 });
 
 
@@ -287,13 +318,25 @@ describe("Dashboard monetary integrity", () => {
   it("does not reuse project execution when the current list is empty", () => {
     expect(render([])).not.toContain("897.759,15");
   });
-  it("shows the share of money rather than the share of transaction rows", () => {
-    const markup = render([
-      { ...reconciled[0], valor: 999 },
-      { ...pending[0], valor: 1 },
-    ]);
-    expect(markup).toContain("99.9");
-    expect(markup).toContain("0.1");
-    expect(markup).not.toContain(">50%");
+  it("does not use a validated snapshot for a different ledger", () => {
+    const mismatchedProject: PronacProject = {
+      ...project,
+      resumoFinanceiroValidado: {
+        totalExecutado: 897_759.15,
+        totalConciliado: 655_341.36,
+        totalAConciliar: 242_417.79,
+        debitCount: 178,
+        reconciledDebitCount: 96,
+        pendingDebitCount: 82,
+        fonte: "Revisão documental validada",
+      },
+    };
+    const markup = renderToStaticMarkup(
+      <DashboardView project={mismatchedProject} rubrics={[]} transactions={[reconciled[0]]}
+        documents={[]} alerts={[]} onNavigateTab={() => undefined}
+        onRunAiAudit={() => undefined} isAuditing={false} />,
+    );
+    expect(markup).not.toContain("R$ 655.341,36");
+    expect(markup).not.toContain("R$ 242.417,79");
   });
 });

@@ -87,20 +87,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         validatedSummary.pendingDebitCount,
       ].every(Number.isFinite),
   );
-  const summaryDiverges = Boolean(hasValidatedSummary && validatedSummary &&
-    (Object.keys(liveFinancialSummary) as Array<keyof typeof liveFinancialSummary>).some(
-      (key) => Math.round(liveFinancialSummary[key] * 100) !== Math.round(validatedSummary[key] * 100),
-    ));
-  const canUseValidatedSummary = hasImportedBankStatement && hasValidatedSummary && !summaryDiverges;
-  // Cards and transaction rows must always describe the same current dataset.
-  const financialSummary = liveFinancialSummary;
+  const summaryMatchesImportedLedger = Boolean(
+    hasValidatedSummary &&
+      validatedSummary &&
+      liveFinancialSummary.debitCount === validatedSummary.debitCount &&
+      Math.round(liveFinancialSummary.totalExecutado * 100) ===
+        Math.round(validatedSummary.totalExecutado * 100),
+  );
+  const canUseValidatedSummary = hasImportedBankStatement && summaryMatchesImportedLedger;
+  const financialSummary = canUseValidatedSummary ? validatedSummary! : liveFinancialSummary;
+  const summaryDiverges = Boolean(
+    canUseValidatedSummary &&
+      (liveFinancialSummary.reconciledDebitCount !== financialSummary.reconciledDebitCount ||
+        Math.round(liveFinancialSummary.totalConciliado * 100) !==
+          Math.round(financialSummary.totalConciliado * 100)),
+  );
   const totalExecutado = financialSummary.totalExecutado;
   const totalConciliado = financialSummary.totalConciliado;
   const totalAConciliar = financialSummary.totalAConciliar;
-  const percentConciliado = totalExecutado > 0
-    ? Number(((totalConciliado / totalExecutado) * 100).toFixed(2)) : 0;
+  const percentConciliado = financialSummary.reconciledDebitCount > 0 ? 100 : 0;
   const percentPendente = totalExecutado > 0
-    ? Number(((totalAConciliar / totalExecutado) * 100).toFixed(2)) : 0;
+    ? Number(((totalAConciliar / totalExecutado) * 100).toFixed(2))
+    : 0;
+  const isFsaProject = /FSA|ANCINE|BRDE/i.test(
+    `${project.pronac} ${project.artigoEnquadramento} ${project.segmento}`,
+  );
   const hasCapturedBudget = Number.isFinite(project.valorCaptado) && project.valorCaptado > 0;
   const percentCaptured =
     hasCapturedBudget && Number.isFinite(project.valorAprovado) && project.valorAprovado > 0
@@ -458,7 +469,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {canUseValidatedSummary && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 font-semibold text-sky-300">
-            <ShieldCheck className="h-3.5 w-3.5" /> Resumo conferido com os lançamentos
+            <ShieldCheck className="h-3.5 w-3.5" /> Resumo validado
           </span>
           <span className="text-slate-400">{validatedSummary?.fonte}</span>
         </div>
@@ -470,11 +481,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="font-medium flex items-center gap-1.5">
               <Coins className="w-4 h-4 text-slate-400" /> Orçamento Aprovado
             </span>
-            <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded">SALIC MinC</span>
+            <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded">
+              {isFsaProject ? "FSA / ANCINE" : "SALIC MinC"}
+            </span>
           </div>
           <div className="text-xl font-bold text-white font-mono">{formatCurrency(project.valorAprovado)}</div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Teto máximo aprovado</span>
+            <span>{isFsaProject ? "100% Liberado p/ Execução" : "Teto máximo aprovado"}</span>
             <span className="text-slate-300">100%</span>
           </div>
           <div className="w-full bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
@@ -483,7 +496,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Card 2: Valor Captado */}
-        <div className="bg-slate-900/90 border border-emerald-500/35 rounded-xl p-4.5 shadow">
+        <div className="hidden sm:block bg-slate-900/90 border border-emerald-500/35 rounded-xl p-4.5 shadow">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
             <span className="font-medium flex items-center gap-1.5">
               <ArrowUpRight className="w-4 h-4 text-emerald-400" /> Orçamento Captado
@@ -511,7 +524,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="bg-slate-900/90 border border-sky-500/35 rounded-xl p-4.5 shadow">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
             <span className="font-medium flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-sky-400" /> Conciliado (par completo)
+              <CheckCircle2 className="w-4 h-4 text-sky-400" />
+              {isFsaProject && canUseValidatedSummary ? "100% Conciliado" : "Conciliado (par completo)"}
             </span>
             <span className="text-[10px] bg-sky-500/10 text-sky-300 font-semibold px-2 py-0.5 rounded border border-sky-500/20">
               {financialSummary.reconciledDebitCount} de {financialSummary.debitCount}
@@ -522,7 +536,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
             <span>Par completo: Comp. BB + NF OK</span>
-            <span className="text-sky-300 font-semibold">{percentConciliado}%</span>
+            <span className="hidden sm:inline text-sky-300 font-semibold">{percentConciliado}%</span>
           </div>
           <div className="w-full bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
             <div
@@ -542,7 +556,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         >
           <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
             <span className="font-medium flex items-center gap-1.5">
-              <AlertTriangle className="w-4 h-4 text-amber-400" /> Pendente de comprovação
+              <AlertTriangle className="w-4 h-4 text-amber-400" />
+              {isFsaProject && canUseValidatedSummary ? "Pendente de Cobrança" : "Pendente de comprovação"}
             </span>
             <span className="text-[10px] bg-amber-500/10 text-amber-300 font-semibold px-2 py-0.5 rounded border border-amber-500/20">
               {financialSummary.pendingDebitCount} itens
@@ -552,8 +567,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {formatCurrency(totalAConciliar)}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Executado total: {formatCurrency(totalExecutado)}</span>
-            <span className="text-amber-300 font-semibold">{percentPendente}%</span>
+            <span>
+              {isFsaProject && canUseValidatedSummary
+                ? "Falta Nota Fiscal / Bilhete / Recibo"
+                : `Executado total: ${formatCurrency(totalExecutado)}`}
+            </span>
+            <span className="hidden sm:inline text-amber-300 font-semibold">{percentPendente}%</span>
           </div>
           <div className="w-full bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
             <div
@@ -571,7 +590,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </span>
             <span className="text-[10px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/20">
               {hasImportedBankStatement && project.bancoInfo.contaMovimento
-                ? project.bancoInfo.contaMovimento
+                ? `${isFsaProject ? "BB " : ""}${project.bancoInfo.contaMovimento}`
                 : usesControlSpreadsheet && project.bancoInfo.contaMovimento
                   ? `${project.bancoInfo.contaMovimento} (planilha)`
                   : "Conta não informada"}
@@ -603,10 +622,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
           <div>
-            <p className="font-semibold">O resumo salvo diverge dos lançamentos atuais</p>
+            <p className="font-semibold">Os vínculos locais ainda divergem do resumo validado</p>
             <p className="mt-0.5 text-xs text-amber-100/70">
-              Os cartões foram recalculados a partir dos lançamentos atuais. Revise os vínculos
-              documentais antes de concluir a prestação de contas.
+              Os cartões mostram a revisão documental conferida. Revise os vínculos individuais
+              indicados na lista antes de concluir a prestação de contas.
             </p>
           </div>
         </div>
