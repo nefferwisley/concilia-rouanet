@@ -51,6 +51,12 @@ import {
   initialAlerts,
   initialTripartiteEntries,
 } from "./data/mockData";
+import {
+  mergeOfficialProject1961,
+  mergeOfficialProject1961Dataset,
+  OFFICIAL_PROJECT_1961_DATA_VERSION,
+  OFFICIAL_PROJECT_1961_DATA_VERSION_KEY,
+} from "./utils/officialProject1961Migration";
 import { Plus, X, Building, CheckCircle2, LayoutDashboard, Split, ArrowLeftRight, ShieldCheck, Menu } from "lucide-react";
 
 const STORAGE_KEYS = {
@@ -72,6 +78,25 @@ const IS_DEMO_MODE =
   !import.meta.env.VITE_API_URL?.trim() ||
   !getSupabaseAuthConfiguration();
 const ONLINE_ACTIVE_PROJECT_STORAGE_KEY = "concilia_rouanet_online_active_project_v1";
+
+const shouldRefreshOfficialProject1961 = (): boolean => {
+  if (!IS_DEMO_MODE || typeof localStorage === "undefined") return false;
+  try {
+    if (localStorage.getItem(OFFICIAL_PROJECT_1961_DATA_VERSION_KEY) ===
+      OFFICIAL_PROJECT_1961_DATA_VERSION) return false;
+    const backupKey = `${OFFICIAL_PROJECT_1961_DATA_VERSION_KEY}_backup`;
+    if (!localStorage.getItem(backupKey)) {
+      const backup = Object.fromEntries(
+        Object.values(STORAGE_KEYS).map((key) => [key, localStorage.getItem(key)]),
+      );
+      localStorage.setItem(backupKey, JSON.stringify(backup));
+    }
+    return true;
+  } catch (error) {
+    console.warn("A atualização do 1961 aguarda espaço para preservar os dados atuais.", error);
+    return false;
+  }
+};
 
 const EMPTY_PROJECT: PronacProject = {
   id: "",
@@ -114,6 +139,9 @@ function persistWorkspaceSnapshot(snapshot: PersistedWorkspace): boolean {
     localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(snapshot.alerts));
     localStorage.setItem(STORAGE_KEYS.TRIPARTITE, JSON.stringify(snapshot.tripartiteEntries));
     localStorage.setItem(STORAGE_KEYS.RECEIPTS, JSON.stringify(snapshot.receipts));
+    if (localStorage.getItem(`${OFFICIAL_PROJECT_1961_DATA_VERSION_KEY}_backup`)) {
+      localStorage.setItem(OFFICIAL_PROJECT_1961_DATA_VERSION_KEY, OFFICIAL_PROJECT_1961_DATA_VERSION);
+    }
     return true;
   } catch (error) {
     console.error("Não foi possível salvar o projeto neste navegador:", error);
@@ -166,7 +194,13 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
       if (saved) {
         const parsed = (JSON.parse(saved) as PronacProject[]).map(removePlaceholderBankData);
-        if (parsed.length > 0) return parsed;
+        if (parsed.length > 0) {
+          return mergeOfficialProject1961(
+            parsed,
+            initialProjects,
+            shouldRefreshOfficialProject1961(),
+          );
+        }
       }
     } catch (e) {
       console.warn("Could not load saved projects:", e);
@@ -218,7 +252,13 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEYS.RUBRICS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && Object.keys(parsed).length > 0) return parsed;
+        if (parsed && Object.keys(parsed).length > 0) {
+          return mergeOfficialProject1961Dataset(
+            parsed,
+            initialRubrics,
+            shouldRefreshOfficialProject1961(),
+          );
+        }
       }
     } catch (e) {
       console.warn("Could not load saved rubrics:", e);
@@ -256,7 +296,11 @@ export default function App() {
       finalTransactions[k] = sanitizeTransactions(loadedTransactions[k] || []);
     });
 
-    return finalTransactions;
+    return mergeOfficialProject1961Dataset(
+      finalTransactions,
+      initialTransactions,
+      shouldRefreshOfficialProject1961(),
+    );
   });
 
   const [allDocuments, setAllDocuments] = useState<Record<string, FiscalDocument[]>>(() => {
@@ -269,7 +313,11 @@ export default function App() {
           Object.keys(parsed).forEach((k) => {
             cleaned[k] = sanitizeDocuments((parsed[k] || []).filter((d) => !isSummaryItem(d)));
           });
-          return cleaned;
+          return mergeOfficialProject1961Dataset(
+            cleaned,
+            initialDocuments,
+            shouldRefreshOfficialProject1961(),
+          );
         }
       }
     } catch (e) {
@@ -283,7 +331,13 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEYS.ALERTS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && Object.keys(parsed).length > 0) return parsed;
+        if (parsed && Object.keys(parsed).length > 0) {
+          return mergeOfficialProject1961Dataset(
+            parsed,
+            initialAlerts,
+            shouldRefreshOfficialProject1961(),
+          );
+        }
       }
     } catch (e) {
       console.warn("Could not load saved alerts:", e);
@@ -303,7 +357,11 @@ export default function App() {
           Object.keys(parsed).forEach((k) => {
             cleaned[k] = sanitizeTripartiteEntries((parsed[k] || []).filter((trip) => !isSummaryItem(trip)));
           });
-          return cleaned;
+          return mergeOfficialProject1961Dataset(
+            cleaned,
+            initialTripartiteEntries,
+            shouldRefreshOfficialProject1961(),
+          );
         }
       }
     } catch (e) {
