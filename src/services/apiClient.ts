@@ -200,6 +200,141 @@ export class ApiClient {
     }
     return null;
   }
+
+  /**
+   * Dispara o pipeline contábil e de conciliação assíncrono oficial
+   */
+  public async iniciarProcessamento(
+    projetoId: string,
+    payload: ProcessarPayload = {},
+  ): Promise<IniciarProcessamentoResult | null> {
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
+
+      const res = await fetch(`${this.apiBaseUrl}/projetos/${encodeURIComponent(projetoId)}/processar`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        return (await res.json()) as IniciarProcessamentoResult;
+      }
+    } catch (e) {
+      console.warn("Falha ao iniciar processamento do pipeline:", e);
+    }
+    return null;
+  }
+
+  /**
+   * Consulta o status de um job de processamento pelo ID
+   */
+  public async obterStatusProcessamento(jobId: string): Promise<JobProcessamentoStatus | null> {
+    try {
+      const headers: Record<string, string> = {};
+      if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
+
+      const res = await fetch(`${this.apiBaseUrl}/processamentos/${encodeURIComponent(jobId)}`, { headers });
+      if (res.ok) {
+        return (await res.json()) as JobProcessamentoStatus;
+      }
+    } catch (e) {
+      console.warn(`Falha ao consultar status do job ${jobId}:`, e);
+    }
+    return null;
+  }
+
+  /**
+   * Consulta o status do processamento mais recente para um projeto
+   */
+  public async obterProcessamentoAtual(projetoId: string): Promise<JobProcessamentoStatus | null> {
+    try {
+      const headers: Record<string, string> = {};
+      if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
+
+      const res = await fetch(`${this.apiBaseUrl}/projetos/${encodeURIComponent(projetoId)}/processamento-atual`, {
+        headers,
+      });
+      if (res.ok) {
+        return (await res.json()) as JobProcessamentoStatus;
+      }
+    } catch (e) {
+      console.warn(`Falha ao consultar processamento atual do projeto ${projetoId}:`, e);
+    }
+    return null;
+  }
+
+  /**
+   * Reprocessa um job que falhou ou foi interrompido
+   */
+  public async reprocessarJob(jobId: string): Promise<IniciarProcessamentoResult | null> {
+    try {
+      const headers: Record<string, string> = {};
+      if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
+
+      const res = await fetch(`${this.apiBaseUrl}/processamentos/${encodeURIComponent(jobId)}/retry`, {
+        method: "POST",
+        headers,
+      });
+      if (res.ok) {
+        return (await res.json()) as IniciarProcessamentoResult;
+      }
+    } catch (e) {
+      console.warn(`Falha ao reprocessar job ${jobId}:`, e);
+    }
+    return null;
+  }
+}
+
+export interface ProcessarPayload {
+  fonte?: string;
+  importacao_id?: string;
+  caminho_pasta?: string;
+  drive_link?: string;
+  manifest_hash?: string;
+  idempotency_key?: string;
+  reprocessar?: boolean;
+}
+
+export interface IniciarProcessamentoResult {
+  job_id: string;
+  projeto_id: string;
+  status: string;
+  stage: string;
+  progress: number;
+  message: string;
+  status_url: string;
+  idempotency_key: string;
+  reused: boolean;
+}
+
+export interface RegraValidacaoInfo {
+  regra: string;
+  nome: string;
+  sucesso: boolean;
+  severidade: string;
+  mensagem: string;
+  detalhes?: Record<string, any>;
+}
+
+export interface JobProcessamentoStatus {
+  job_id: string;
+  projeto_id: string;
+  status: 'queued' | 'running' | 'completed' | 'needs_review' | 'failed' | 'interrompido' | string;
+  stage: 'queued' | 'extracting' | 'validating' | 'matching' | 'posting' | 'auditing' | string;
+  progress: number;
+  processed: number;
+  total: number;
+  warnings: string[];
+  error?: string | null;
+  reconciliados: number;
+  pendentes: number;
+  valor_conciliado: number;
+  valor_pendente: number;
+  regras_validacao: RegraValidacaoInfo[];
+  criado_em: string;
+  atualizado_em: string;
 }
 
 export const apiClient = ApiClient.getInstance();
+

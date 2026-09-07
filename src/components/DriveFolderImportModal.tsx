@@ -26,6 +26,7 @@ import JSZip from "jszip";
 import { PronacProject, BudgetRubric, BankTransaction, FiscalDocument, AuditAlert, TripartiteEntry } from "../types";
 import { requestGoogleDriveToken } from "../services/googleDriveService";
 import { runRealtimeTripartiteReconciliation } from "../utils/shadowLedger";
+import { apiClient } from "../services/apiClient";
 
 export interface UploadedFileItem {
   id: string;
@@ -531,6 +532,10 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
           setProgressPercent(100);
           setStatus("done");
           setStatusMessage(`${processedFiles} arquivos importados em ${importedProject.nome}.`);
+          void apiClient.iniciarProcessamento(importedProject.id, {
+            fonte: "modal_pasta_arquivos",
+            caminho_pasta: selectedSubfolderFilter,
+          });
           onImportComplete({
             project: importedProject,
             rubrics: synced.rubrics,
@@ -668,6 +673,9 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
         setProgressPercent(100);
         setStatus("done");
         setStatusMessage(`${transactions.length} movimentações carregadas em ${activeProject.nome}.`);
+        void apiClient.iniciarProcessamento(activeProject.id, {
+          fonte: "modal_upload_online",
+        });
         onImportComplete({
           project: activeProject,
           rubrics,
@@ -742,6 +750,10 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
       );
 
       setTimeout(() => {
+        void apiClient.iniciarProcessamento(importedProject.id, {
+          fonte: "modal_google_drive",
+          drive_link: folderUrl,
+        });
         onImportComplete({
           project: importedProject,
           rubrics: synced.rubrics,

@@ -87,4 +87,78 @@ describe("API URLs", () => {
       status: 401,
     });
   });
+
+  it("calls processing pipeline and returns job response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            job_id: "job-123",
+            projeto_id: "1961",
+            status: "queued",
+            stage: "queued",
+            progress: 0,
+            message: "Iniciado",
+            status_url: "/api/v1/processamentos/job-123",
+            idempotency_key: "key-123",
+            reused: false,
+          }),
+          { status: 202 },
+        ),
+      ),
+    );
+
+    const { ApiClient } = await import("./apiClient");
+    const client = ApiClient.createForTesting("https://api.example.com/api/v1");
+
+    const res = await client.iniciarProcessamento("1961", { fonte: "test" });
+    expect(res).toEqual({
+      job_id: "job-123",
+      projeto_id: "1961",
+      status: "queued",
+      stage: "queued",
+      progress: 0,
+      message: "Iniciado",
+      status_url: "/api/v1/processamentos/job-123",
+      idempotency_key: "key-123",
+      reused: false,
+    });
+  });
+
+  it("fetches current processing job for project", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            job_id: "job-456",
+            projeto_id: "1961",
+            status: "needs_review",
+            stage: "auditing",
+            progress: 100,
+            processed: 96,
+            total: 178,
+            warnings: ["82 pendências"],
+            reconciliados: 96,
+            pendentes: 82,
+            valor_conciliado: 655341.36,
+            valor_pendente: 242417.79,
+            regras_validacao: [],
+            criado_em: "2026-09-07T10:00:00Z",
+            atualizado_em: "2026-09-07T10:05:00Z",
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    const { ApiClient } = await import("./apiClient");
+    const client = ApiClient.createForTesting("https://api.example.com/api/v1");
+
+    const job = await client.obterProcessamentoAtual("1961");
+    expect(job?.reconciliados).toBe(96);
+    expect(job?.pendentes).toBe(82);
+    expect(job?.status).toBe("needs_review");
+  });
 });
