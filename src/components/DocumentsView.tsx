@@ -146,7 +146,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
   // ─── Auto-Link: vincula documento ao lançamento bancário correspondente ───
   // Após OCR ou cadastro manual, tenta casar o documento com um débito do extrato
   // usando valor líquido (tolerância ±R$0,01) e data (tolerância ±5 dias).
-  const autoLinkDocToTransaction = (newDoc: FiscalDocument): { linked: boolean; txDesc?: string } => {
+  const autoLinkDocToTransaction = (newDoc: FiscalDocument): { linked: boolean; txId?: string; txDesc?: string } => {
     if (!hasImportedBankStatement || !onUpdateTransactions || safeTransactions.length === 0) return { linked: false };
 
     const docValor = Number(newDoc.valorLiquido || newDoc.valorBruto || 0);
@@ -182,7 +182,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
       )
     );
 
-    return { linked: true, txDesc: match.descricaoOriginalExtrato || match.favorecido || match.id };
+    return { linked: true, txId: match.id, txDesc: match.descricaoOriginalExtrato || match.favorecido || match.id };
   };
 
 
@@ -199,12 +199,13 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
     return matchesType && matchesSearch;
   });
 
-  const totalBruto = safeDocuments.reduce((acc, d) => acc + (Number(d?.valorBruto) || 0), 0);
-  const totalRetencoes = safeDocuments.reduce(
+  const financialDocuments = safeDocuments.filter((doc) => Boolean(doc?.idTransacao));
+  const totalBruto = financialDocuments.reduce((acc, d) => acc + (Number(d?.valorBruto) || 0), 0);
+  const totalRetencoes = financialDocuments.reduce(
     (acc, d) => acc + (Number(d?.retencaoIss) || 0) + (Number(d?.retencaoIrrf) || 0) + (Number(d?.retencaoInss) || 0),
     0
   );
-  const totalLiquido = safeDocuments.reduce((acc, d) => acc + (Number(d?.valorLiquido) || 0), 0);
+  const totalLiquido = financialDocuments.reduce((acc, d) => acc + (Number(d?.valorLiquido) || 0), 0);
 
   const updateGrossOrTaxes = (gross: number, iss: number, irrf: number, inss: number) => {
     const net = Math.max(0, gross - (iss + irrf + inss));
@@ -335,7 +336,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
     queuedFiles.forEach((item) => {
       if (item.status === "success" && item.extractedData) {
         const res = item.extractedData;
-        let matchedRubricId = rubrics[0]?.id || "";
+        let matchedRubricId = "";
         if (res.sugestaoRubrica) {
           const found = rubrics.find(
             (r) =>
@@ -364,17 +365,19 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
           rubricaId: matchedRubricId,
           rubricaNome: selRubric?.nome,
           etapa: selRubric?.etapa,
-          statusComprovacao: "Completo",
+          statusComprovacao: "Pendente de vínculo financeiro",
           confiabilidadeIa: res.confiabilidade || 95,
           arquivoNotaNome: item.name,
         };
 
+        const linkResult = autoLinkDocToTransaction(newDoc);
+        if (linkResult.linked) {
+          newDoc.idTransacao = linkResult.txId;
+          newDoc.statusComprovacao = "Completo";
+          linkedCount++;
+        }
         onAddDocument(newDoc);
         addedCount++;
-
-        // ✅ Auto-Link: vincular ao lançamento bancário correspondente
-        const linkResult = autoLinkDocToTransaction(newDoc);
-        if (linkResult.linked) linkedCount++;
       }
     });
 
@@ -382,10 +385,10 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
       setQueuedFiles([]);
       setShowOcrDrawer(false);
       const linkMsg = !hasImportedBankStatement
-        ? "\nℹ️ Extrato OFX/CSV não anexado: documentos foram cadastrados, mas nenhum vínculo bancário foi certificado."
+        ? "\nℹ️ Extrato OFX/CSV não anexado: documentos foram cadastrados, mas ficaram fora dos totais financeiros."
         : linkedCount > 0
         ? `\n🔗 ${linkedCount} lançamento(s) bancário(s) vinculado(s) e aguardando validação da conciliação.`
-        : "\n⚠️ Nenhum lançamento bancário correspondente foi encontrado. Verifique o extrato para vincular manualmente.";
+        : "\n⚠️ Nenhum lançamento bancário correspondente foi encontrado. O documento ficou fora dos totais financeiros até o vínculo manual.";
       alert(`✅ ${addedCount} documento(s) fiscal(is) cadastrado(s) com sucesso.${linkMsg}`);
     }
   };
@@ -863,9 +866,9 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
       {/* Stats Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-          <span className="text-xs text-slate-400 font-medium">Total Bruto dos Documentos</span>
+          <span className="text-xs text-slate-400 font-medium">Total Bruto Conciliado</span>
           <div className="text-xl font-bold font-mono text-white mt-1">{formatCurrency(totalBruto)}</div>
-          <span className="text-[11px] text-slate-500">{documents.length} documentos cadastrados</span>
+          <span className="text-[11px] text-slate-500">{financialDocuments.length} de {documents.length} documentos vinculados</span>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
@@ -878,7 +881,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
           <span className="text-xs text-slate-400 font-medium">Total Líquido Pago aos Prestadores</span>
           <div className="text-xl font-bold font-mono text-emerald-400 mt-1">{formatCurrency(totalLiquido)}</div>
           <span className="text-[11px] text-emerald-500">
-            {hasImportedBankStatement ? "Valor em validação com saídas bancárias" : "Valor informado nos documentos; extrato pendente"}
+            {hasImportedBankStatement ? "Somente documentos vinculados a saídas bancárias" : "Extrato pendente; documentos fora do total financeiro"}
           </span>
         </div>
       </div>
@@ -1000,6 +1003,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
                   const rubric = rubrics.find((r) => r.id === doc.rubricaId);
                   const retencoes = (doc.retencaoIss || 0) + (doc.retencaoIrrf || 0) + (doc.retencaoInss || 0);
                   const providerInfo = resolveProviderAndCompany(doc.fornecedorNome, doc.fornecedorCnpjCpf);
+                  const pendingFinancialLink = Number(doc.valorBruto || 0) > 0 && !doc.idTransacao;
 
                   return (
                     <tr key={doc.id || idx} className="hover:bg-slate-800/40 transition">
@@ -1041,7 +1045,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
                       </td>
                       <td className="px-4 py-3 text-center space-y-1">
                         <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> {doc.statusComprovacao}
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> {pendingFinancialLink ? "Pendente de vínculo financeiro" : doc.statusComprovacao}
                         </span>
                         {doc.validacaoSefaz === "VALIDO" ? (
                           <div className="text-[10px] text-emerald-400 font-bold">SEFAZ OK</div>
