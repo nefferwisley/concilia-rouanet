@@ -334,8 +334,8 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
         if (res.sugestaoRubrica) {
           const found = rubrics.find(
             (r) =>
-              r.nome.toLowerCase().includes(res.sugestaoRubrica.toLowerCase()) ||
-              r.etapa.toLowerCase().includes((res.sugestaoEtapa || "").toLowerCase())
+              (r.nome || "").toLowerCase().includes(res.sugestaoRubrica.toLowerCase()) ||
+              (r.etapa || "").toLowerCase().includes((res.sugestaoEtapa || "").toLowerCase())
           );
           if (found) matchedRubricId = found.id;
         }
