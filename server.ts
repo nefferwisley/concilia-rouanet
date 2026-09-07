@@ -109,10 +109,14 @@ app.get("/api/v1/projetos", requireSupabaseUser, async (req: AuthenticatedReques
         criado_em: row.created_at,
       };
     });
+    // Este é o mesmo identificador canônico usado pelo estado inicial do
+    // frontend. Mantê-lo evita gravar os uploads em "1961" enquanto a tela
+    // continua exibindo "proj-1961", situação que não teria como encontrar
+    // os arquivos persistidos para gerar as miniaturas.
     const availableProjects = projects.length > 0 ? projects : [{
-      id: "1961",
-      pronac: "1961",
-      nome: "PROJETO 1961 - PRODUÇÃO AUDIOVISUAL (FSA / ANCINE)",
+      id: "proj-1961",
+      pronac: "19-1961/FSA-BRDE",
+      nome: "1961 (Longa-Metragem Documental - ANCINE/FSA)",
       transacoes_count: 0,
       criado_em: new Date().toISOString(),
     }];
