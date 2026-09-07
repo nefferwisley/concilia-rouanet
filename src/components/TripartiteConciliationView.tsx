@@ -847,41 +847,28 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                             </div>
 
                             {(hasFiscal || hasBank) && (
-                              <div className="flex items-center gap-1.5" aria-label="Miniaturas dos arquivos vinculados">
-                                {hasFiscal && (
-                                  <div
-                                    className="relative flex h-10 w-8 shrink-0 flex-col items-center justify-center overflow-hidden rounded border border-emerald-500/30 bg-slate-900 text-[8px] font-bold text-emerald-300"
-                                    title={`Miniatura da nota fiscal ${entry.numeroDoc || "vinculada"}`}
-                                  >
-                                    <FileText className="h-3.5 w-3.5" />
-                                    <span>NF</span>
-                                    {entry.idDocFiscal && (
-                                      <img
-                                        src={`/api/v1/documentos/${entry.idDocFiscal}/thumbnail`}
-                                        alt={`Prévia da nota fiscal ${entry.numeroDoc || "vinculada"}`}
-                                        loading="lazy"
-                                        className="absolute inset-0 h-full w-full object-cover"
-                                        onError={(event) => { event.currentTarget.style.display = "none"; }}
-                                      />
-                                    )}
-                                  </div>
-                                )}
-                                {hasBank && (
-                                  <div
-                                    className="relative flex h-10 w-8 shrink-0 flex-col items-center justify-center overflow-hidden rounded border border-sky-500/30 bg-slate-900 text-[8px] font-bold text-sky-300"
-                                    title={`Miniatura do comprovante BB ${entry.idTransacaoBB || "vinculado"}`}
-                                  >
-                                    <FileText className="h-3.5 w-3.5" />
-                                    <span>BB</span>
-                                    <img
-                                      src={`/api/v1/extratos/thumbnail?data=${encodeURIComponent(entry.dataCompensacao || "")}`}
-                                      alt={`Prévia do comprovante BB ${entry.idTransacaoBB || "vinculado"}`}
-                                      loading="lazy"
-                                      className="absolute inset-0 h-full w-full object-cover"
-                                      onError={(event) => { event.currentTarget.style.display = "none"; }}
-                                    />
-                                  </div>
-                                )}
+                              <div className="rounded-md border border-slate-700 bg-slate-950/70 p-1.5" aria-label="Miniaturas dos arquivos vinculados">
+                                <div className="mb-1 text-[8px] font-bold uppercase tracking-wide text-slate-400">Arquivos</div>
+                                <div className="flex items-center gap-1.5">
+                                  {hasFiscal && (
+                                    <div
+                                      className="flex h-12 w-10 shrink-0 flex-col items-center justify-center rounded border border-emerald-500/50 bg-emerald-500/15 text-[9px] font-bold text-emerald-300"
+                                      title={`Nota fiscal ${entry.numeroDoc || "vinculada"}`}
+                                    >
+                                      <FileText className="h-4 w-4" />
+                                      <span>NF</span>
+                                    </div>
+                                  )}
+                                  {hasBank && (
+                                    <div
+                                      className="flex h-12 w-10 shrink-0 flex-col items-center justify-center rounded border border-sky-500/50 bg-sky-500/15 text-[9px] font-bold text-sky-300"
+                                      title={`Comprovante BB ${entry.idTransacaoBB || "vinculado"}`}
+                                    >
+                                      <FileText className="h-4 w-4" />
+                                      <span>BB</span>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             )}
 
