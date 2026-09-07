@@ -165,7 +165,8 @@ export type FiscalDocType =
   | "RPA (Autônomo)"
   | "Cupom Fiscal"
   | "Recibo de Cachê"
-  | "Guia de Recolhimento (DARF/GPS/DAM)";
+  | "Guia de Recolhimento (DARF/GPS/DAM)"
+  | "Documento importado";
 
 export interface FiscalDocument {
   id: string;

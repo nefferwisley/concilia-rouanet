@@ -2051,6 +2051,12 @@ app.post("/api/reconciliation-engine/pdf-extract", async (req, res) => {
 // DOSSIÊ CONCLUSIVO OFICIAL SALIC / ANCINE (PRONAC 19-1961)
 // =========================================================================
 app.get("/api/projetos/1961/dossie-conclusivo", (_req, res) => {
+  const debitosTotal = 178;
+  const debitosConciliados = 96;
+  const debitosPendentes = 82;
+  const valorConciliado = 655341.36;
+  const valorPendente = 242417.79;
+
   const dossie = {
     projeto: "Longa-Metragem Documental 1961",
     pronac: "19-1961",
@@ -2063,20 +2069,25 @@ app.get("/api/projetos/1961/dossie-conclusivo", (_req, res) => {
       totalRecursos: 892414.32,
       totalDespesasExecutadas: 897759.15,
       saldo: -5344.83,
-      totalLancamentosDebitos: 178,
+      totalLancamentosDebitos: debitosTotal,
+      debitosConciliados,
+      debitosPendentes,
+      valorConciliado,
+      valorPendente,
     },
     esteiraRevisao: {
-      etapa1_conciliacaoBancaria: "100% CONCLUÍDO (178 débitos em ordem cronológica)",
-      etapa2_inclusaoPendentes: "100% CONCLUÍDO (0 omissões)",
-      etapa3_conferenciaDocumental: "136 Notas Fiscais + 42 Recibos mapeados",
+      etapa1_conciliacaoBancaria: `${debitosConciliados} de ${debitosTotal} débitos conciliados (${debitosPendentes} pendentes)`,
+      etapa2_inclusaoPendentes: `${debitosPendentes} pendências de comprovação em aberto aguardando documentação`,
+      etapa3_conferenciaDocumental: "96 documentos fiscais vinculados com correspondência comprovada",
       etapa4_organizacaoDocumental: "Indexação sequencial #001 a #178 padronizada",
-      etapa5_regularizacaoRecibos: "Fluxo de assinaturas ativo com Júlia Bárbara Melo de Sousa",
-      etapa6_dossieSalic: "100% Pronto para emissão do Relatório de Execução Financeira (REF)",
+      etapa5_regularizacaoRecibos: "Fila de revisão ativa para os 82 lançamentos pendentes",
+      etapa6_dossieSalic: "Bloqueado para emissão conclusiva até a regularização das 82 pendências",
     },
     conformidadeNormativa: {
       regrasAuditadas: 4,
-      regrasAprovadas: 4,
-      parecerAuditoria: "Prestação de contas regular e em conformidade estrita com a IN MinC e ANCINE.",
+      regrasAprovadas: 2,
+      regrasComPendencia: 2,
+      parecerAuditoria: "Prestação de contas em análise: 96 débitos documentalmente comprovados (R$ 655.341,36) e 82 débitos pendentes de comprovação idônea (R$ 242.417,79). Dossiê bloqueado para finalização até saneamento das pendências.",
     },
   };
   res.json({ success: true, data: dossie });

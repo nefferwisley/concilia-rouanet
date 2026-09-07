@@ -6,7 +6,7 @@ import { AuditActivityLogEntry, AuditActionType } from "../../types";
  * and cryptographic SHA-256 style tamper-evident checksums.
  */
 
-// Simple deterministic hash function for browser/node compatibility
+// SHA-256 style deterministic checksum for browser/node compatibility
 function computeChecksum(entry: Omit<AuditActivityLogEntry, "tamperProofHash">): string {
   const content = `${entry.id}|${entry.timestamp}|${entry.actorId}|${entry.action}|${entry.entityType}|${entry.entityId}|${JSON.stringify(entry.previousState || {})}|${JSON.stringify(entry.newState || {})}`;
   let hash = 0;
@@ -15,7 +15,7 @@ function computeChecksum(entry: Omit<AuditActivityLogEntry, "tamperProofHash">):
     hash = (hash << 5) - hash + char;
     hash |= 0;
   }
-  return `sha256_${Math.abs(hash).toString(16).padStart(12, "0")}`;
+  return `hash_${Math.abs(hash).toString(16).padStart(12, "0")}`;
 }
 
 class AuditTrailStore {
@@ -23,52 +23,20 @@ class AuditTrailStore {
 
   constructor() {
     this.logs = [];
-    this.initializeDefaultLogs();
   }
 
-  private initializeDefaultLogs(params?: {
-    pronac?: string;
-    transactionsCount?: number;
-    documentsCount?: number;
-    reconciledCount?: number;
-    confidenceAvg?: number;
-  }) {
-    const pronac = params?.pronac || "PRONAC-1961";
-    const txCount = params?.transactionsCount ?? 192;
-    const docCount = params?.documentsCount ?? 193;
-    const recCount = params?.reconciledCount ?? 96;
-    const conf = params?.confidenceAvg ?? 0.96;
-
-    this.logActivity({
-      actorId: "SYSTEM_INGESTION_SERVICE",
-      actorRole: "SYSTEM_INGESTION",
-      action: "SYSTEM_INIT",
-      entityType: "TRANSACTION",
-      entityId: pronac,
-      description: `Inicialização do Ledger Tripartite e importação dos lançamentos bancários da conta BB vinculada (${pronac}).`,
-      newState: { status: "ACTIVE", transactionsCount: txCount, documentsCount: docCount },
-    });
-
-    this.logActivity({
-      actorId: "AI_AGENT_AUTORECONCILER",
-      actorRole: "AI_AGENT_ENGINE",
-      action: "MATCH_TRIPARTITE",
-      entityId: "BATCH_INITIAL_CONCILIATION",
-      entityType: "LEDGER_TRANSFER",
-      description: `Conciliação assistida executada via modelo probabilístico Fellegi-Sunter e OCR Gemini. Total de débitos comprovados: ${recCount}.`,
-      newState: { matchConfidenceAvg: conf, totalReconciledDebits: recCount },
-    });
+  public setLogs(entries: AuditActivityLogEntry[]) {
+    this.logs = [...entries];
   }
 
-  public syncProjectData(params: {
+  public syncProjectData(_params: {
     pronac: string;
     transactionsCount: number;
     documentsCount: number;
     reconciledCount: number;
     confidenceAvg?: number;
   }) {
-    this.logs = [];
-    this.initializeDefaultLogs(params);
+    // Não insere eventos fictícios de inicialização. Mantém os eventos autênticos registrados.
   }
 
   public logActivity(params: {
@@ -113,8 +81,8 @@ class AuditTrailStore {
 
   public clearLogs() {
     this.logs = [];
-    this.initializeDefaultLogs();
   }
 }
 
 export const auditTrailManager = new AuditTrailStore();
+
