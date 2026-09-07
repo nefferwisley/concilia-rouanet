@@ -10,6 +10,34 @@ export interface SupabaseAccessSession {
 
 export class SupabaseAuthError extends Error {}
 
+export function getSupabaseInviteToken(): string | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const accessToken = params.get("access_token");
+  const type = params.get("type");
+  return accessToken && (type === "invite" || type === "recovery") ? accessToken : null;
+}
+
+export async function setSupabasePassword(
+  configuration: SupabaseAuthConfiguration,
+  accessToken: string,
+  password: string,
+): Promise<void> {
+  const response = await fetch(`${configuration.url}/auth/v1/user`, {
+    method: "PUT",
+    headers: {
+      apikey: configuration.publishableKey,
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ password }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string; msg?: string } | null;
+    throw new SupabaseAuthError(payload?.message || payload?.msg || "Não foi possível definir a senha.");
+  }
+}
+
 export function getSupabaseAuthConfiguration(): SupabaseAuthConfiguration | null {
   const url = import.meta.env.VITE_SUPABASE_URL?.trim().replace(/\/$/, "");
   const publishableKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();

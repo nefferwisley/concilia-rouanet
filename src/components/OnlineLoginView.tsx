@@ -3,6 +3,8 @@ import { LockKeyhole, LogIn } from "lucide-react";
 import {
   SupabaseAuthConfiguration,
   SupabaseAuthError,
+  getSupabaseInviteToken,
+  setSupabasePassword,
   signInWithSupabasePassword,
 } from "../services/supabaseAuth";
 
@@ -16,6 +18,27 @@ export function OnlineLoginView({ configuration, onAuthenticated }: OnlineLoginV
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inviteToken = getSupabaseInviteToken();
+
+  async function handleSetPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!configuration || !inviteToken) return;
+    if (password.length < 8) {
+      setError("Use uma senha com pelo menos 8 caracteres.");
+      return;
+    }
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await setSupabasePassword(configuration, inviteToken, password);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      onAuthenticated(inviteToken);
+    } catch (caught) {
+      setError(caught instanceof SupabaseAuthError ? caught.message : "Falha ao definir a senha.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,9 +62,11 @@ export function OnlineLoginView({ configuration, onAuthenticated }: OnlineLoginV
           <LockKeyhole className="h-6 w-6" />
           <span className="text-sm font-semibold uppercase tracking-wider">Concilia Rouanet</span>
         </div>
-        <h1 className="mt-5 text-2xl font-bold">Acessar projetos online</h1>
+        <h1 className="mt-5 text-2xl font-bold">{inviteToken ? "Definir senha de acesso" : "Acessar projetos online"}</h1>
         <p className="mt-2 text-sm text-slate-400">
-          Entre para acessar projetos, documentos e importações vinculados à sua conta.
+          {inviteToken
+            ? "Escolha uma senha para ativar seu acesso administrativo ao projeto."
+            : "Entre para acessar projetos, documentos e importações vinculados à sua conta."}
         </p>
 
         {!configuration ? (
@@ -49,8 +74,8 @@ export function OnlineLoginView({ configuration, onAuthenticated }: OnlineLoginV
             A autenticação online ainda não foi configurada neste ambiente.
           </p>
         ) : (
-          <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-            <label className="block text-sm font-medium text-slate-300">
+          <form className="mt-6 space-y-4" onSubmit={inviteToken ? handleSetPassword : handleSubmit}>
+            {!inviteToken && <label className="block text-sm font-medium text-slate-300">
               E-mail
               <input
                 required
@@ -60,13 +85,13 @@ export function OnlineLoginView({ configuration, onAuthenticated }: OnlineLoginV
                 onChange={(event) => setEmail(event.target.value)}
                 className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-white outline-none focus:border-emerald-400"
               />
-            </label>
+            </label>}
             <label className="block text-sm font-medium text-slate-300">
-              Senha
+              {inviteToken ? "Nova senha" : "Senha"}
               <input
                 required
                 type="password"
-                autoComplete="current-password"
+                autoComplete={inviteToken ? "new-password" : "current-password"}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-white outline-none focus:border-emerald-400"
@@ -79,7 +104,7 @@ export function OnlineLoginView({ configuration, onAuthenticated }: OnlineLoginV
               className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <LogIn className="h-4 w-4" />
-              {isSubmitting ? "Entrando..." : "Entrar"}
+              {isSubmitting ? "Salvando..." : inviteToken ? "Ativar acesso" : "Entrar"}
             </button>
           </form>
         )}
