@@ -690,7 +690,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-          <span className="text-[11px] text-slate-400">Total 100% Conciliado</span>
+          <span className="text-[11px] text-slate-400">Total conciliado (pares completos)</span>
           <div className="text-lg font-bold font-mono text-emerald-400 mt-0.5">{formatCurrency(totalConciliado)}</div>
           <span className="text-[10px] text-emerald-500">
             {reconciledDebitsCount} de {debitsCount} comprovados
