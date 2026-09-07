@@ -80,6 +80,47 @@ export class ApiClient {
     return this.authToken;
   }
 
+  private authenticatedHeaders(contentType = false): Record<string, string> {
+    const headers: Record<string, string> = {};
+    if (contentType) headers["Content-Type"] = "application/json";
+    if (this.authToken) headers.Authorization = `Bearer ${this.authToken}`;
+    return headers;
+  }
+
+  public async saveProjectSnapshot(projectId: string, snapshot: unknown): Promise<void> {
+    const response = await fetch(`${this.apiBaseUrl}/projetos/${encodeURIComponent(projectId)}/snapshot`, {
+      method: "PUT",
+      headers: this.authenticatedHeaders(true),
+      body: JSON.stringify({ snapshot }),
+    });
+    if (!response.ok) throw new ApiClientError(response.status, "Não foi possível salvar o projeto online.");
+  }
+
+  public async loadProjectSnapshot<T>(projectId: string): Promise<T | null> {
+    const response = await fetch(`${this.apiBaseUrl}/projetos/${encodeURIComponent(projectId)}/snapshot`, {
+      headers: this.authenticatedHeaders(),
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new ApiClientError(response.status, "Não foi possível carregar o projeto salvo.");
+    const payload = await response.json() as { snapshot?: T };
+    return payload.snapshot ?? null;
+  }
+
+  public async uploadProjectDocument(
+    projectId: string,
+    documentId: string,
+    fileName: string,
+    mimeType: string,
+    base64: string,
+  ): Promise<void> {
+    const response = await fetch(`${this.apiBaseUrl}/projetos/${encodeURIComponent(projectId)}/documentos`, {
+      method: "POST",
+      headers: this.authenticatedHeaders(true),
+      body: JSON.stringify({ documentId, fileName, mimeType, base64 }),
+    });
+    if (!response.ok) throw new ApiClientError(response.status, `Não foi possível armazenar ${fileName}.`);
+  }
+
   /**
    * Checa o status de saúde da API FastAPI e conexão com o banco
    */

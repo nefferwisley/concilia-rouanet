@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ApiClient } from '../services/apiClient';
-import { FileCheck, Receipt, CheckCircle2, Utensils, AlertCircle } from 'lucide-react';
+import { FileCheck, AlertCircle } from 'lucide-react';
 
 interface AttachmentThumbnailProps {
   documentId?: string;
@@ -8,6 +7,8 @@ interface AttachmentThumbnailProps {
   detectedType?: string;
   fileName: string;
   fallbackUrl?: string;
+  projectId?: string;
+  compact?: boolean;
 }
 
 export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
@@ -15,7 +16,9 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
   fileId,
   detectedType,
   fileName,
-  fallbackUrl
+  fallbackUrl,
+  projectId = "1961",
+  compact = false,
 }) => {
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [error, setError] = useState<boolean>(false);
@@ -34,9 +37,9 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
         const token = localStorage.getItem("rouanet_auth_token");
         const headers: any = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
-        const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
-        
-        const res = await fetch(`${baseUrl}/documentos/${id}/signed-url`, { headers });
+        const configuredBaseUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
+        const baseUrl = configuredBaseUrl || "/api/v1";
+        const res = await fetch(`${baseUrl}/documentos/${encodeURIComponent(id)}/visualizacao?projectId=${encodeURIComponent(projectId)}`, { headers });
         if (!res.ok) throw new Error("HTTP " + res.status);
         const data = await res.json();
         
@@ -54,13 +57,14 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
     };
     fetchUrl();
     return () => { mounted = false; };
-  }, [documentId, fileId, fallbackUrl]);
+  }, [documentId, fileId, fallbackUrl, projectId]);
 
-  if (loading) return <div className="w-full h-32 bg-slate-800 animate-pulse rounded-lg flex items-center justify-center text-xs text-slate-500">Carregando miniatura...</div>;
+  const sizeClass = compact ? "h-12 w-10" : "w-full h-32";
+  if (loading) return <div className={`${sizeClass} bg-slate-800 animate-pulse rounded-lg flex items-center justify-center text-[9px] text-slate-500`}>...</div>;
   if (error || !signedUrl) return (
-    <div className="w-full h-32 bg-slate-900 rounded-lg flex flex-col items-center justify-center text-xs text-slate-500 border border-slate-800">
-      <AlertCircle className="w-6 h-6 mb-2 text-slate-600" />
-      <span>Prévia indisponível</span>
+    <div className={`${sizeClass} bg-slate-900 rounded-lg flex flex-col items-center justify-center text-[9px] text-slate-500 border border-slate-800`} title="Arquivo ainda não foi salvo online ou a sessão expirou.">
+      <AlertCircle className="w-4 h-4 mb-1 text-slate-600" />
+      {!compact && <span>Prévia indisponível</span>}
     </div>
   );
 
@@ -69,7 +73,7 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
 
   if (isImage) {
     return (
-      <a href={signedUrl} target="_blank" rel="noreferrer" className="block w-full h-32 overflow-hidden rounded-lg border border-slate-700 hover:border-emerald-500 transition">
+      <a href={signedUrl} target="_blank" rel="noreferrer" className={`block ${sizeClass} overflow-hidden rounded-lg border border-slate-700 hover:border-emerald-500 transition`}>
         <img src={signedUrl} alt={fileName} loading="lazy" className="w-full h-full object-cover" />
       </a>
     );
@@ -77,7 +81,7 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
 
   if (isPdf) {
     return (
-      <a href={signedUrl} target="_blank" rel="noreferrer" className="block w-full h-32 overflow-hidden rounded-lg border border-slate-700 hover:border-emerald-500 transition relative group">
+      <a href={signedUrl} target="_blank" rel="noreferrer" className={`block ${sizeClass} overflow-hidden rounded-lg border border-slate-700 hover:border-emerald-500 transition relative group`}>
         <iframe src={signedUrl + "#view=FitH"} title={fileName} className="w-full h-full pointer-events-none" />
         <div className="absolute inset-0 bg-transparent group-hover:bg-slate-900/20 transition cursor-pointer" />
       </a>
@@ -86,7 +90,7 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
 
   // Fallback for other files
   return (
-    <a href={signedUrl} target="_blank" rel="noreferrer" className="w-full h-32 bg-slate-900 rounded-lg flex flex-col items-center justify-center text-xs text-slate-400 border border-slate-700 hover:border-emerald-500 hover:text-emerald-400 transition">
+    <a href={signedUrl} target="_blank" rel="noreferrer" className={`${sizeClass} bg-slate-900 rounded-lg flex flex-col items-center justify-center text-xs text-slate-400 border border-slate-700 hover:border-emerald-500 hover:text-emerald-400 transition`}>
       <FileCheck className="w-8 h-8 mb-2" />
       <span className="px-4 text-center break-all line-clamp-2">Abrir {fileName}</span>
     </a>

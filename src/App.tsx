@@ -78,7 +78,6 @@ const STORAGE_KEYS = {
 // opera diretamente com a base de dados dos projetos locais e auditados (1961 e É Tudo Verdade).
 const IS_DEMO_MODE =
   import.meta.env.VITE_DEMO_MODE === "true" ||
-  !import.meta.env.VITE_API_URL?.trim() ||
   !getSupabaseAuthConfiguration();
 const ONLINE_ACTIVE_PROJECT_STORAGE_KEY = "concilia_rouanet_online_active_project_v1";
 
@@ -253,6 +252,7 @@ export default function App() {
     activeProjectId: null,
     message: null,
   });
+  const [hasOnlineSnapshot, setHasOnlineSnapshot] = useState(false);
 
   const refreshOnlineSession = useCallback(async () => {
     if (!apiClient.getToken()) {
@@ -404,6 +404,27 @@ export default function App() {
     return {};
   });
 
+  useEffect(() => {
+    const projectId = onlineSession.activeProjectId;
+    if (IS_DEMO_MODE || onlineSession.status !== "ready" || !projectId || !apiClient.getToken()) return;
+    let active = true;
+    void apiClient.loadProjectSnapshot<PersistedWorkspace>(projectId)
+      .then((snapshot) => {
+        if (!active || !snapshot) return;
+        setHasOnlineSnapshot(true);
+        setProjects(snapshot.projects?.map(removePlaceholderBankData) || []);
+        setActiveProjectId(snapshot.activeProjectId || projectId);
+        setAllRubrics(snapshot.rubrics || {});
+        setAllTransactions(snapshot.transactions || {});
+        setAllDocuments(snapshot.documents || {});
+        setAllAlerts(snapshot.alerts || {});
+        setAllTripartiteEntries(snapshot.tripartiteEntries || {});
+        setAllReceipts(snapshot.receipts || {});
+      })
+      .catch((error) => console.warn("Não foi possível recuperar o último estado online:", error));
+    return () => { active = false; };
+  }, [onlineSession.activeProjectId, onlineSession.status]);
+
   // Global AI audit loader
   const [isAuditingGlobal, setIsAuditingGlobal] = useState(false);
 
@@ -459,6 +480,23 @@ export default function App() {
     allTripartiteEntries,
     allReceipts,
   ]);
+
+  useEffect(() => {
+    if (IS_DEMO_MODE || !hasOnlineSnapshot || !apiClient.getToken() || !activeProjectId) return;
+    const timer = window.setTimeout(() => {
+      void apiClient.saveProjectSnapshot(activeProjectId, {
+        projects,
+        activeProjectId,
+        rubrics: allRubrics,
+        transactions: allTransactions,
+        documents: allDocuments,
+        alerts: allAlerts,
+        tripartiteEntries: allTripartiteEntries,
+        receipts: allReceipts,
+      }).catch((error) => console.warn("Não foi possível atualizar o projeto online:", error));
+    }, 750);
+    return () => window.clearTimeout(timer);
+  }, [hasOnlineSnapshot, activeProjectId, projects, allRubrics, allTransactions, allDocuments, allAlerts, allTripartiteEntries, allReceipts]);
 
   // Active Project & Safe arrays
   const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0] || EMPTY_PROJECT;
@@ -814,44 +852,30 @@ export default function App() {
     setActiveTab("dashboard");
   };
 
-  if (!IS_DEMO_MODE) {
-    if (!hasAuthenticatedSession) {
-      return (
-        <OnlineLoginView
-          configuration={supabaseAuthConfiguration}
-          onAuthenticated={(accessToken) => {
-            apiClient.setToken(accessToken);
-            setHasAuthenticatedSession(true);
-          }}
-        />
-      );
-    }
-
+  if (!IS_DEMO_MODE && !hasAuthenticatedSession) {
     return (
-      <OnlineSessionBoundary
-        session={onlineSession}
-        isDemoMode={false}
-        onRetry={() => void refreshOnlineSession()}
-        onSelectProject={(projectId) => {
-          localStorage.setItem(ONLINE_ACTIVE_PROJECT_STORAGE_KEY, projectId);
-          setOnlineSession((current) => ({ ...current, activeProjectId: projectId }));
+      <OnlineLoginView
+        configuration={supabaseAuthConfiguration}
+        onAuthenticated={(accessToken) => {
+          apiClient.setToken(accessToken);
+          setHasAuthenticatedSession(true);
         }}
-      >
-        <main className="min-h-screen bg-slate-950 px-4 py-12 text-slate-100">
-          <section className="mx-auto max-w-3xl rounded-2xl border border-slate-800 bg-slate-900 p-8">
-            <h1 className="text-2xl font-bold">Sessão online preparada</h1>
-            <p className="mt-3 text-slate-300">
-              O projeto foi identificado pela API. Lançamentos, documentos e indicadores financeiros
-              serão conectados nas próximas etapas, sempre a partir de dados online.
-            </p>
-          </section>
-        </main>
-      </OnlineSessionBoundary>
+      />
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950">
+    <OnlineSessionBoundary
+      session={onlineSession}
+      isDemoMode={IS_DEMO_MODE}
+      onRetry={() => void refreshOnlineSession()}
+      onSelectProject={(projectId) => {
+        localStorage.setItem(ONLINE_ACTIVE_PROJECT_STORAGE_KEY, projectId);
+        setOnlineSession((current) => ({ ...current, activeProjectId: projectId }));
+        setActiveProjectId(projectId);
+      }}
+    >
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950">
       {/* Top Accessibility Toolbar (eMAG / WCAG 2.1) */}
       <AccessibilityToolbar onNavigateTab={(tab) => setActiveTab(tab as any)} />
 
@@ -1354,6 +1378,7 @@ export default function App() {
           setAllDocuments(nextDocuments);
           setAllAlerts(nextAlerts);
           setAllTripartiteEntries(nextTripartiteEntries);
+          setHasOnlineSnapshot(true);
 
           // Automatically navigate to "reconciliation" so the user can verify all transactions
           setActiveTab("reconciliation");
@@ -1379,6 +1404,7 @@ export default function App() {
         }}
       />
 
-    </div>
+      </div>
+    </OnlineSessionBoundary>
   );
 }

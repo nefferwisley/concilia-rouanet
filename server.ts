@@ -14,6 +14,66 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
+const DOCUMENT_BUCKET = "documentos-1961";
+const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
+const SUPABASE_URL = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+]);
+
+type AuthenticatedRequest = express.Request & {
+  authUser?: { id: string; email?: string | null };
+};
+
+function isPersistentStorageConfigured() {
+  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_SERVICE_ROLE_KEY);
+}
+
+function restHeaders(extra: Record<string, string> = {}) {
+  return {
+    apikey: SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    ...extra,
+  };
+}
+
+function storagePath(projectId: string, documentId: string, fileName: string) {
+  const clean = (value: string) => value
+    .normalize("NFKD")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120) || "arquivo";
+  return `${clean(projectId)}/${clean(documentId)}/${crypto.randomUUID()}-${clean(fileName)}`;
+}
+
+function storageObjectUrl(objectPath: string) {
+  const encodedPath = objectPath.split("/").map(encodeURIComponent).join("/");
+  return `${SUPABASE_URL}/storage/v1/object/${DOCUMENT_BUCKET}/${encodedPath}`;
+}
+
+async function requireSupabaseUser(req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) {
+  if (!isPersistentStorageConfigured()) {
+    return res.status(503).json({ error: "Persistência de documentos ainda não foi configurada no serviço." });
+  }
+  const token = req.header("authorization")?.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return res.status(401).json({ error: "Autenticação obrigatória para acessar os documentos." });
+
+  try {
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+    });
+    const user = await response.json().catch(() => null) as { id?: string; email?: string | null } | null;
+    if (!response.ok || !user?.id) return res.status(401).json({ error: "Sessão inválida ou expirada." });
+    req.authUser = { id: user.id, email: user.email };
+    return next();
+  } catch {
+    return res.status(503).json({ error: "Não foi possível validar a sessão agora." });
+  }
+}
 
 app.use(express.json({ limit: "250mb" }));
 app.use(express.urlencoded({ extended: true, limit: "250mb" }));
@@ -23,21 +83,156 @@ app.get(["/health", "/api/health"], (_req, res) => {
   res.json({ status: "ok", online: true, version: "2.0.0", timestamp: new Date().toISOString() });
 });
 
-// Projects Endpoint for Online Session Boundary
-app.get("/api/v1/projetos", (_req, res) => {
-  res.json({
-    total: 1,
-    page: 1,
-    projetos: [
-      {
-        id: "1961",
-        pronac: "1961",
-        nome: "PROJETO 1961 - PRODUÇÃO AUDIOVISUAL (FSA / ANCINE)",
-        transacoes_count: 178,
-        criado_em: "2026-09-01T10:00:00Z",
-      },
-    ],
-  });
+app.get("/api/v1/storage/status", (_req, res) => {
+  res.json({ configured: isPersistentStorageConfigured(), bucket: DOCUMENT_BUCKET, maxFileBytes: MAX_DOCUMENT_BYTES });
+});
+
+// A lista é protegida pelo usuário Supabase; o serviço jamais confunde os
+// dados locais de uma sessão com um projeto persistido de outro usuário.
+app.get("/api/v1/projetos", requireSupabaseUser, async (req: AuthenticatedRequest, res) => {
+  const ownerId = req.authUser!.id;
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/project_snapshots?owner_id=eq.${encodeURIComponent(ownerId)}&select=project_id,payload,created_at&order=updated_at.desc`,
+      { headers: restHeaders() },
+    );
+    if (!response.ok) throw new Error(`snapshot list ${response.status}`);
+    const rows = await response.json() as Array<{ project_id: string; payload: any; created_at: string }>;
+    const projects = rows.map((row) => {
+      const project = row.payload?.projects?.find((item: any) => item.id === row.project_id) || row.payload?.project || {};
+      const transactions = row.payload?.transactions?.[row.project_id] || [];
+      return {
+        id: row.project_id,
+        pronac: String(project.pronac || row.project_id),
+        nome: String(project.nome || `Projeto ${row.project_id}`),
+        transacoes_count: Array.isArray(transactions) ? transactions.length : 0,
+        criado_em: row.created_at,
+      };
+    });
+    const availableProjects = projects.length > 0 ? projects : [{
+      id: "1961",
+      pronac: "1961",
+      nome: "PROJETO 1961 - PRODUÇÃO AUDIOVISUAL (FSA / ANCINE)",
+      transacoes_count: 0,
+      criado_em: new Date().toISOString(),
+    }];
+    res.json({ total: availableProjects.length, page: 1, projetos: availableProjects });
+  } catch (error) {
+    console.error("Falha ao listar snapshots:", error);
+    res.status(502).json({ error: "Não foi possível consultar os projetos persistidos." });
+  }
+});
+
+app.get("/api/v1/projetos/:projectId/snapshot", requireSupabaseUser, async (req: AuthenticatedRequest, res) => {
+  const projectId = String(req.params.projectId || "");
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/project_snapshots?project_id=eq.${encodeURIComponent(projectId)}&owner_id=eq.${encodeURIComponent(req.authUser!.id)}&select=payload&limit=1`,
+      { headers: restHeaders() },
+    );
+    if (!response.ok) throw new Error(`snapshot read ${response.status}`);
+    const rows = await response.json() as Array<{ payload: unknown }>;
+    if (!rows[0]) return res.status(404).json({ error: "Projeto ainda não foi salvo online." });
+    return res.json({ snapshot: rows[0].payload });
+  } catch (error) {
+    console.error("Falha ao ler snapshot:", error);
+    return res.status(502).json({ error: "Não foi possível carregar o projeto salvo." });
+  }
+});
+
+app.put("/api/v1/projetos/:projectId/snapshot", requireSupabaseUser, async (req: AuthenticatedRequest, res) => {
+  const projectId = String(req.params.projectId || "").trim();
+  const snapshot = req.body?.snapshot;
+  if (!projectId || !snapshot || typeof snapshot !== "object") {
+    return res.status(400).json({ error: "projectId e snapshot são obrigatórios." });
+  }
+  const serialized = JSON.stringify(snapshot);
+  if (Buffer.byteLength(serialized, "utf8") > 10 * 1024 * 1024) {
+    return res.status(413).json({ error: "O estado do projeto excede o limite de 10 MB." });
+  }
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/project_snapshots?on_conflict=project_id`, {
+      method: "POST",
+      headers: restHeaders({ "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" }),
+      body: JSON.stringify({ project_id: projectId, owner_id: req.authUser!.id, payload: snapshot }),
+    });
+    if (!response.ok) throw new Error(`snapshot write ${response.status}`);
+    return res.json({ saved: true, projectId });
+  } catch (error) {
+    console.error("Falha ao salvar snapshot:", error);
+    return res.status(502).json({ error: "Não foi possível salvar o projeto." });
+  }
+});
+
+app.post("/api/v1/projetos/:projectId/documentos", requireSupabaseUser, async (req: AuthenticatedRequest, res) => {
+  const projectId = String(req.params.projectId || "").trim();
+  const { documentId, fileName, mimeType, base64 } = req.body || {};
+  if (!projectId || !documentId || !fileName || !base64 || !ALLOWED_DOCUMENT_MIME_TYPES.has(mimeType)) {
+    return res.status(400).json({ error: "Documento inválido. Aceitos: PDF, PNG ou JPEG." });
+  }
+  const rawBase64 = String(base64).replace(/^data:[^;]+;base64,/, "");
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(rawBase64) || rawBase64.length % 4 !== 0) {
+    return res.status(400).json({ error: "Conteúdo do arquivo inválido." });
+  }
+  const bytes = Buffer.from(rawBase64, "base64");
+  if (!bytes.length || bytes.length > MAX_DOCUMENT_BYTES) {
+    return res.status(413).json({ error: "Arquivo vazio ou acima de 25 MB." });
+  }
+  const objectPath = storagePath(projectId, String(documentId), String(fileName));
+  try {
+    const previousResponse = await fetch(
+      `${SUPABASE_URL}/rest/v1/document_assets?project_id=eq.${encodeURIComponent(projectId)}&document_id=eq.${encodeURIComponent(documentId)}&owner_id=eq.${encodeURIComponent(req.authUser!.id)}&select=object_path`,
+      { headers: restHeaders() },
+    );
+    const previous = previousResponse.ok ? await previousResponse.json() as Array<{ object_path: string }> : [];
+    const upload = await fetch(storageObjectUrl(objectPath), {
+      method: "POST",
+      headers: restHeaders({ "Content-Type": mimeType, "x-upsert": "false" }),
+      body: bytes,
+    });
+    if (!upload.ok) throw new Error(`storage upload ${upload.status}`);
+    const reference = await fetch(`${SUPABASE_URL}/rest/v1/document_assets?on_conflict=project_id,document_id`, {
+      method: "POST",
+      headers: restHeaders({ "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" }),
+      body: JSON.stringify({ project_id: projectId, document_id: String(documentId), owner_id: req.authUser!.id, object_path: objectPath, file_name: String(fileName), mime_type: mimeType, byte_size: bytes.length }),
+    });
+    if (!reference.ok) {
+      await fetch(storageObjectUrl(objectPath), { method: "DELETE", headers: restHeaders() });
+      throw new Error(`asset reference ${reference.status}`);
+    }
+    if (previous[0]?.object_path) await fetch(storageObjectUrl(previous[0].object_path), { method: "DELETE", headers: restHeaders() });
+    return res.status(201).json({ stored: true, documentId, fileName, byteSize: bytes.length });
+  } catch (error) {
+    console.error("Falha ao armazenar documento:", error);
+    return res.status(502).json({ error: "Não foi possível armazenar o documento." });
+  }
+});
+
+app.get("/api/v1/documentos/:documentId/visualizacao", requireSupabaseUser, async (req: AuthenticatedRequest, res) => {
+  const projectId = String(req.query.projectId || "").trim();
+  const documentId = String(req.params.documentId || "").trim();
+  if (!projectId || !documentId) return res.status(400).json({ error: "projectId e documentId são obrigatórios." });
+  try {
+    const assetResponse = await fetch(
+      `${SUPABASE_URL}/rest/v1/document_assets?project_id=eq.${encodeURIComponent(projectId)}&document_id=eq.${encodeURIComponent(documentId)}&owner_id=eq.${encodeURIComponent(req.authUser!.id)}&select=object_path,file_name,mime_type&limit=1`,
+      { headers: restHeaders() },
+    );
+    if (!assetResponse.ok) throw new Error(`asset read ${assetResponse.status}`);
+    const assets = await assetResponse.json() as Array<{ object_path: string; file_name: string; mime_type: string }>;
+    if (!assets[0]) return res.status(404).json({ error: "Arquivo não encontrado para este projeto." });
+    const sign = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${DOCUMENT_BUCKET}/${assets[0].object_path.split("/").map(encodeURIComponent).join("/")}`, {
+      method: "POST",
+      headers: restHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ expiresIn: 300 }),
+    });
+    const signed = await sign.json().catch(() => null) as { signedURL?: string } | null;
+    if (!sign.ok || !signed?.signedURL) throw new Error(`asset sign ${sign.status}`);
+    const signedUrl = signed.signedURL.startsWith("http") ? signed.signedURL : `${SUPABASE_URL}/storage/v1${signed.signedURL}`;
+    return res.json({ signedUrl, fileName: assets[0].file_name, mimeType: assets[0].mime_type, expiresIn: 300 });
+  } catch (error) {
+    console.error("Falha ao assinar visualização:", error);
+    return res.status(502).json({ error: "Não foi possível preparar a visualização." });
+  }
 });
 
 // Helper to safely clean markdown codeblocks and parse JSON

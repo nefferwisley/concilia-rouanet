@@ -382,6 +382,8 @@ export function runRealtimeTripartiteReconciliation(
                   nomeArquivo: matchedDoc.arquivoNotaNome,
                   tamanhoFormatado: "1.2 MB",
                   status: hasDocumentAttachment ? ("VALIDADO" as const) : ("PENDENTE" as const),
+                  documentId: matchedDoc.id,
+                  detectedType: "application/pdf",
                 },
               ]
             : []),
@@ -392,6 +394,8 @@ export function runRealtimeTripartiteReconciliation(
                   nomeArquivo: matchedDoc.arquivoComprovanteNome,
                   tamanhoFormatado: "340 KB",
                   status: hasBankReceipt ? ("VALIDADO" as const) : ("PENDENTE" as const),
+                  documentId: matchedDoc.id,
+                  detectedType: "application/pdf",
                 },
               ]
             : []),

@@ -372,17 +372,17 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
     try {
       if (activeTab === "folder_files" && uploadedItems.length > 0) {
         const configuredApiBaseUrl = import.meta.env.VITE_API_URL?.trim();
-        // A produção não pode concluir uma importação apenas neste navegador:
-        // isso fazia a interface parecer online, mas os dados desapareciam em
-        // outro computador. Sem API configurada, falhamos explicitamente.
-        if (!configuredApiBaseUrl && import.meta.env.PROD) {
-          throw new Error("A importação online ainda não está configurada. Defina VITE_API_URL para o backend antes de enviar a pasta.");
-        }
-        if (!configuredApiBaseUrl) {
+        // O servidor Node publicado oferece extração e persistência no mesmo
+        // domínio. Não dependa de um FastAPI externo para salvar a pasta.
+        if (!configuredApiBaseUrl || configuredApiBaseUrl === "/api/v1") {
+          if (!apiClient.getToken()) {
+            throw new Error("Entre na sua conta antes de importar: os arquivos serão salvos no cofre privado do projeto.");
+          }
           const extractedTransactions: BankTransaction[] = [];
           const extractedDocuments: FiscalDocument[] = [];
           const extractedRubrics: BudgetRubric[] = [];
           const extractedAlerts: AuditAlert[] = [];
+          const filesForStorage: Array<{ id: string; name: string; mimeType: string; base64?: string }> = [];
           let extractedProject: Partial<PronacProject> = {};
           const maxBatchBytes = 5 * 1024 * 1024;
           let batch: any[] = [];
@@ -477,6 +477,9 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
               base64: item.base64 || (item.file ? await fileToBase64(item.file) : undefined),
               textContent: item.textContent,
             };
+            if (file.base64 && (file.mimeType === "application/pdf" || file.mimeType === "image/png" || file.mimeType === "image/jpeg")) {
+              filesForStorage.push({ id: item.id, name: item.name, mimeType: file.mimeType, base64: file.base64 });
+            }
             if (batch.length > 0 && batchBytes + item.size > maxBatchBytes) await extractBatch();
             batch.push(file);
             batchBytes += item.size;
@@ -529,6 +532,34 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
             extractedRubrics,
             importedProject,
           );
+          const storedSourceIds = new Set<string>();
+          const filesByName = new Map(filesForStorage.map((file) => [file.name, file]));
+          for (const document of synced.documents) {
+            const source = filesByName.get(document.arquivoNotaNome || "");
+            if (!source?.base64) continue;
+            await apiClient.uploadProjectDocument(importedProject.id, document.id, source.name, source.mimeType, source.base64);
+            storedSourceIds.add(source.id);
+          }
+          // Arquivos sem nota identificável também ficam guardados para nova
+          // conciliação; apenas não recebem miniatura até haver vínculo.
+          for (const source of filesForStorage) {
+            if (!source.base64 || storedSourceIds.has(source.id)) continue;
+            await apiClient.uploadProjectDocument(importedProject.id, `fonte-${source.id}`, source.name, source.mimeType, source.base64);
+          }
+          const mergedAlerts = Array.from(
+            new Map([...synced.alerts, ...extractedAlerts].map((alert) => [alert.id, alert])).values(),
+          );
+          const snapshot = {
+            projects: [importedProject],
+            activeProjectId: importedProject.id,
+            rubrics: { [importedProject.id]: synced.rubrics },
+            transactions: { [importedProject.id]: synced.transactions },
+            documents: { [importedProject.id]: synced.documents },
+            alerts: { [importedProject.id]: mergedAlerts },
+            tripartiteEntries: { [importedProject.id]: synced.tripartiteEntries },
+            receipts: {},
+          };
+          await apiClient.saveProjectSnapshot(importedProject.id, snapshot);
           setProgressPercent(100);
           setStatus("done");
           setStatusMessage(`${processedFiles} arquivos importados em ${importedProject.nome}.`);
@@ -541,11 +572,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
             rubrics: synced.rubrics,
             transactions: synced.transactions,
             documents: synced.documents,
-            alerts: Array.from(
-              new Map(
-                [...synced.alerts, ...extractedAlerts].map((alert) => [alert.id, alert]),
-              ).values(),
-            ),
+            alerts: snapshot.alerts[importedProject.id],
             tripartiteEntries: synced.tripartiteEntries,
           });
           onClose();

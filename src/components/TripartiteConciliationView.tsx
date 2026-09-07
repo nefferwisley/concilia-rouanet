@@ -851,22 +851,20 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                                 <div className="mb-1 text-[8px] font-bold uppercase tracking-wide text-slate-400">Arquivos</div>
                                 <div className="flex items-center gap-1.5">
                                   {hasFiscal && (
-                                    <div
-                                      className="flex h-12 w-10 shrink-0 flex-col items-center justify-center rounded border border-emerald-500/50 bg-emerald-500/15 text-[9px] font-bold text-emerald-300"
-                                      title={`Nota fiscal ${entry.numeroDoc || "vinculada"}`}
-                                    >
-                                      <FileText className="h-4 w-4" />
-                                      <span>NF</span>
-                                    </div>
+                                    <AttachmentThumbnail
+                                      documentId={entry.idDocFiscal}
+                                      fileName={entry.anexoFiscalUrl || `NF-${entry.numeroDoc || "vinculada"}.pdf`}
+                                      detectedType="application/pdf"
+                                      compact
+                                    />
                                   )}
                                   {hasBank && (
-                                    <div
-                                      className="flex h-12 w-10 shrink-0 flex-col items-center justify-center rounded border border-sky-500/50 bg-sky-500/15 text-[9px] font-bold text-sky-300"
-                                      title={`Comprovante BB ${entry.idTransacaoBB || "vinculado"}`}
-                                    >
-                                      <FileText className="h-4 w-4" />
-                                      <span>BB</span>
-                                    </div>
+                                    <AttachmentThumbnail
+                                      documentId={entry.idDocFiscal}
+                                      fileName={entry.anexoComprovanteUrl || `BB-${entry.idTransacaoBB || "vinculado"}.pdf`}
+                                      detectedType="application/pdf"
+                                      compact
+                                    />
                                   )}
                                 </div>
                               </div>

@@ -193,13 +193,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
               title={
                 backendStatus.online
-                  ? "Backend FastAPI e PostgreSQL ativos (Porta 8000)"
+                  ? "Servidor da aplicação acessível; armazenamento documental ainda depende de configuração"
                   : "Modo Offline (Persistência em LocalStorage Ativa)"
               }
             >
               <Server className={`w-3.5 h-3.5 ${backendStatus.online ? "text-emerald-400" : "text-slate-500"}`} />
               <span className="text-[11px] font-medium">
-                {backendStatus.online ? "FastAPI Online" : "LocalStorage"}
+                {backendStatus.online ? "Servidor online" : "LocalStorage"}
               </span>
             </div>
 
