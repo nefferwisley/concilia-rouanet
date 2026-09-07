@@ -54,8 +54,11 @@ import {
 import {
   mergeOfficialProject1961,
   mergeOfficialProject1961Dataset,
+  OFFICIAL_PROJECT_1961_ACTIVE_VERSION,
+  OFFICIAL_PROJECT_1961_ACTIVE_VERSION_KEY,
   OFFICIAL_PROJECT_1961_DATA_VERSION,
   OFFICIAL_PROJECT_1961_DATA_VERSION_KEY,
+  resolveInitialActiveProjectId,
 } from "./utils/officialProject1961Migration";
 import { Plus, X, Building, CheckCircle2, LayoutDashboard, Split, ArrowLeftRight, ShieldCheck, Menu } from "lucide-react";
 
@@ -94,6 +97,16 @@ const shouldRefreshOfficialProject1961 = (): boolean => {
     return true;
   } catch (error) {
     console.warn("A atualização do 1961 aguarda espaço para preservar os dados atuais.", error);
+    return false;
+  }
+};
+
+const shouldActivateOfficialProject1961 = (): boolean => {
+  if (!IS_DEMO_MODE || typeof localStorage === "undefined") return false;
+  try {
+    return localStorage.getItem(OFFICIAL_PROJECT_1961_ACTIVE_VERSION_KEY) !==
+      OFFICIAL_PROJECT_1961_ACTIVE_VERSION;
+  } catch {
     return false;
   }
 };
@@ -142,6 +155,10 @@ function persistWorkspaceSnapshot(snapshot: PersistedWorkspace): boolean {
     if (localStorage.getItem(`${OFFICIAL_PROJECT_1961_DATA_VERSION_KEY}_backup`)) {
       localStorage.setItem(OFFICIAL_PROJECT_1961_DATA_VERSION_KEY, OFFICIAL_PROJECT_1961_DATA_VERSION);
     }
+    localStorage.setItem(
+      OFFICIAL_PROJECT_1961_ACTIVE_VERSION_KEY,
+      OFFICIAL_PROJECT_1961_ACTIVE_VERSION,
+    );
     return true;
   } catch (error) {
     console.error("Não foi possível salvar o projeto neste navegador:", error);
@@ -211,12 +228,19 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState<string>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.ACTIVE_ID);
-      if (saved && projects.some((p) => p.id === saved)) return saved;
+      return resolveInitialActiveProjectId(
+        saved,
+        projects.map((project) => project.id),
+        shouldActivateOfficialProject1961(),
+      );
     } catch (e) {
       console.warn("Could not load saved active id:", e);
     }
-    const proj1961 = projects.find((p) => p.id === "proj-1961");
-    return proj1961?.id || projects[0]?.id || "proj-1961";
+    return resolveInitialActiveProjectId(
+      null,
+      projects.map((project) => project.id),
+      true,
+    );
   });
 
   const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard");

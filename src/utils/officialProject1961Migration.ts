@@ -2,6 +2,9 @@ export const OFFICIAL_PROJECT_1961_ID = "proj-1961";
 export const OFFICIAL_PROJECT_1961_DATA_VERSION = "validated-ledger-2026-09-06";
 export const OFFICIAL_PROJECT_1961_DATA_VERSION_KEY =
   "concilia_rouanet_project_1961_data_version";
+export const OFFICIAL_PROJECT_1961_ACTIVE_VERSION = "default-active-2026-09-07";
+export const OFFICIAL_PROJECT_1961_ACTIVE_VERSION_KEY =
+  "concilia_rouanet_project_1961_active_version";
 
 export function mergeOfficialProject1961<T extends { id: string }>(
   savedProjects: T[],
@@ -34,4 +37,26 @@ export function mergeOfficialProject1961Dataset<T>(
     ...saved,
     [OFFICIAL_PROJECT_1961_ID]: official[OFFICIAL_PROJECT_1961_ID],
   };
+}
+
+export function resolveInitialActiveProjectId(
+  savedActiveProjectId: string | null,
+  availableProjectIds: string[],
+  shouldActivateOfficialProject1961: boolean,
+): string {
+  if (
+    shouldActivateOfficialProject1961 &&
+    availableProjectIds.includes(OFFICIAL_PROJECT_1961_ID)
+  ) {
+    return OFFICIAL_PROJECT_1961_ID;
+  }
+  if (
+    savedActiveProjectId &&
+    availableProjectIds.includes(savedActiveProjectId)
+  ) {
+    return savedActiveProjectId;
+  }
+  return availableProjectIds.includes(OFFICIAL_PROJECT_1961_ID)
+    ? OFFICIAL_PROJECT_1961_ID
+    : availableProjectIds[0] || OFFICIAL_PROJECT_1961_ID;
 }

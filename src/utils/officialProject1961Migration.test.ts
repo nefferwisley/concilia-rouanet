@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   mergeOfficialProject1961,
   mergeOfficialProject1961Dataset,
+  resolveInitialActiveProjectId,
 } from "./officialProject1961Migration";
 
 describe("official Project 1961 migration", () => {
@@ -33,5 +34,25 @@ describe("official Project 1961 migration", () => {
     const saved = { "proj-1961": [{ amount: 123 }] };
     const official = { "proj-1961": [{ amount: 897759.15 }] };
     expect(mergeOfficialProject1961Dataset(saved, official, false)).toBe(saved);
+  });
+
+  it("opens 1961 once even when another project was saved as active", () => {
+    expect(
+      resolveInitialActiveProjectId(
+        "proj-27o-etv",
+        ["proj-27o-etv", "proj-1961"],
+        true,
+      ),
+    ).toBe("proj-1961");
+  });
+
+  it("preserves the user's later project selection after the default was applied", () => {
+    expect(
+      resolveInitialActiveProjectId(
+        "proj-27o-etv",
+        ["proj-27o-etv", "proj-1961"],
+        false,
+      ),
+    ).toBe("proj-27o-etv");
   });
 });
