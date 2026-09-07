@@ -27,6 +27,7 @@ from backend.routes import (
     salic,
     websocket,
     real_imports,
+    processamento,
 )
 # NOTA: backend/routes/conciliacao.py foi restaurado do commit c274379 — o
 # fluxo "Conciliar Pasta 1961" (001→006, POST /api/v1/conciliar, polling,
@@ -55,6 +56,14 @@ async def lifespan(app: FastAPI):
         await reclaim_orphaned_jobs()
     except Exception as e:
         log.warning("Não foi possível recuperar jobs órfãos no startup: %s", e)
+
+    try:
+        from backend.services.processamento_service import recuperar_jobs_orfaos
+        qtd_orfaos = recuperar_jobs_orfaos()
+        if qtd_orfaos > 0:
+            log.info("Recuperados %d jobs de processamento interrompidos.", qtd_orfaos)
+    except Exception as e:
+        log.warning("Não foi possível recuperar jobs de processamento no startup: %s", e)
 
 
     # Inicia o monitoramento em tempo real da pasta de uploads.
@@ -135,6 +144,7 @@ app.include_router(regularizacao.router)
 app.include_router(planilha.router)
 app.include_router(rubricas.router)
 app.include_router(orquestrador.router)
+app.include_router(processamento.router)
 # Login de demonstração SEM autenticação (rota /api/v1/dev/demo-login).
 app.include_router(dev_demo.router)
 
