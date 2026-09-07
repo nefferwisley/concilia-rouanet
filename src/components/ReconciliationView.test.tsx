@@ -29,6 +29,7 @@ describe("ReconciliationView verified pending transactions", () => {
     expect(markup).toContain("Categoria da despesa");
     expect(markup).toContain("Alimentação e diárias (25)");
     expect(markup).toContain("Passagens aéreas (8)");
+    expect(markup).toContain("Miniatura do arquivo");
   });
 
   it("gives every pending row a stable unique visual identity", () => {

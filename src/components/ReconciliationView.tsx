@@ -837,6 +837,10 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                 const rawDate = tx.data || (tx as any).dataTransacao || (tx as any).dtposted;
                 const rawDesc = tx.descricaoExtrato || tx.descricao || (tx as any).descricaoOriginalExtrato || (tx.favorecido ? `PAGTO - ${tx.favorecido}` : "DÉBITO EM CONTA BB");
                 const rawFitid = tx.documentoBancario || tx.documentoNumero || (tx as any).fitid || `BB-${String(idx + 1).padStart(4, "0")}`;
+                const fiscalFileName = matchedDoc?.arquivoNotaNome || `${matchedDoc?.tipo || "Documento"} ${matchedDoc?.numeroDoc || ""}`.trim();
+                const fiscalFileExtension = fiscalFileName.includes(".")
+                  ? fiscalFileName.slice(fiscalFileName.lastIndexOf(".") + 1).toUpperCase()
+                  : "DOC";
 
                 const providerInfo = resolveProviderAndCompany(
                   matchedDoc?.fornecedorNome || tx.favorecido || tx.descricao || "",
@@ -898,29 +902,46 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                     </td>
                     <td className="px-4 py-3 max-w-xs">
                       {matchedDoc ? (
-                        <div>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-semibold text-emerald-300">
-                              {matchedDoc.tipo} nº {matchedDoc.numeroDoc}
-                            </span>
+                        <div className="flex items-start gap-2">
+                          <div
+                            aria-label={`Miniatura do arquivo ${fiscalFileName}`}
+                            className="relative flex h-12 w-10 shrink-0 flex-col items-center justify-center overflow-hidden rounded border border-slate-700 bg-slate-900 text-[8px] font-bold text-slate-400"
+                            title={fiscalFileName}
+                          >
+                            <FileText className="h-4 w-4 text-emerald-400" />
+                            <span>{fiscalFileExtension}</span>
+                            <img
+                              src={`/api/v1/documentos/${matchedDoc.id}/thumbnail`}
+                              alt={`Prévia de ${fiscalFileName}`}
+                              loading="lazy"
+                              className="absolute inset-0 h-full w-full object-cover"
+                              onError={(event) => { event.currentTarget.style.display = "none"; }}
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-semibold text-emerald-300">
+                                {matchedDoc.tipo} nº {matchedDoc.numeroDoc}
+                              </span>
+                              {hasRetentions && (
+                                <button
+                                  onClick={() => setInspectWithholdingDoc(matchedDoc)}
+                                  className="text-[10px] bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 px-1.5 py-0.2 rounded font-mono font-semibold"
+                                  title="Ver desmembramento 1:N de retenções tributárias"
+                                >
+                                  1:N Retenção
+                                </button>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                              Bruto: {formatCurrency(matchedDoc.valorBruto)} | Líq: {formatCurrency(matchedDoc.valorLiquido)}
+                            </div>
                             {hasRetentions && (
-                              <button
-                                onClick={() => setInspectWithholdingDoc(matchedDoc)}
-                                className="text-[10px] bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 px-1.5 py-0.2 rounded font-mono font-semibold"
-                                title="Ver desmembramento 1:N de retenções tributárias"
-                              >
-                                1:N Retenção
-                              </button>
+                              <div className="text-[9px] text-amber-400 font-mono">
+                                Retenções na Fonte: {formatCurrency((matchedDoc.retencaoIrrf || 0) + (matchedDoc.retencaoIss || 0) + (matchedDoc.retencaoInss || 0))}
+                              </div>
                             )}
                           </div>
-                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                            Bruto: {formatCurrency(matchedDoc.valorBruto)} | Líq: {formatCurrency(matchedDoc.valorLiquido)}
-                          </div>
-                          {hasRetentions && (
-                            <div className="text-[9px] text-amber-400 font-mono">
-                              Retenções na Fonte: {formatCurrency((matchedDoc.retencaoIrrf || 0) + (matchedDoc.retencaoIss || 0) + (matchedDoc.retencaoInss || 0))}
-                            </div>
-                          )}
                         </div>
                       ) : isCredit ? (
                         <span className="text-sky-400 text-[11px] font-medium">Recurso Federal Aportado</span>
