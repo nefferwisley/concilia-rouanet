@@ -40,6 +40,16 @@ export interface UploadedFileItem {
   textContent?: string;
 }
 
+/**
+ * A pasta pode conter somente uma parte do dossiê (por exemplo, notas
+ * pendentes). Ao importar esse lote, as coleções que não vierem no arquivo
+ * precisam sobreviver: uma importação documental não pode apagar o extrato.
+ * Itens do novo lote prevalecem quando têm o mesmo identificador, pois são a
+ * versão mais recente daquele registro.
+ */
+const mergeById = <T extends { id: string }>(existing: T[], imported: T[]): T[] =>
+  Array.from(new Map([...existing, ...imported].map((item) => [item.id, item])).values());
+
 interface DriveFolderImportModalProps {
   isOpen: boolean;
   activeProject: PronacProject;
@@ -526,10 +536,13 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
               ...(extractedProject.bancoInfo || {}),
             },
           };
+          const mergedTransactions = mergeById(currentTransactions, extractedTransactions);
+          const mergedDocuments = mergeById(currentDocuments, extractedDocuments);
+          const mergedRubrics = mergeById(currentRubrics, extractedRubrics);
           const synced = runRealtimeTripartiteReconciliation(
-            extractedTransactions,
-            extractedDocuments,
-            extractedRubrics,
+            mergedTransactions,
+            mergedDocuments,
+            mergedRubrics,
             importedProject,
           );
           const storedSourceIds = new Set<string>();
@@ -546,9 +559,10 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
             if (!source.base64 || storedSourceIds.has(source.id)) continue;
             await apiClient.uploadProjectDocument(importedProject.id, `fonte-${source.id}`, source.name, source.mimeType, source.base64);
           }
-          const mergedAlerts = Array.from(
-            new Map([...synced.alerts, ...extractedAlerts].map((alert) => [alert.id, alert])).values(),
-          );
+          const mergedAlerts = mergeById(currentAlerts, [
+            ...synced.alerts,
+            ...extractedAlerts,
+          ]);
           const snapshot = {
             projects: [importedProject],
             activeProjectId: importedProject.id,
