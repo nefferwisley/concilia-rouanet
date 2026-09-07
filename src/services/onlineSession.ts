@@ -46,12 +46,17 @@ export async function loadOnlineSession(
       activeProjectId: chooseActiveProjectId(result.projetos, preferredProjectId),
       message: null,
     };
-  } catch {
+  } catch (error) {
+    const status = typeof error === "object" && error && "status" in error
+      ? (error as { status?: unknown }).status
+      : undefined;
     return {
       status: "error",
       projects: [],
       activeProjectId: null,
-      message: "A conexão foi realizada, mas os projetos não puderam ser carregados.",
+      message: status === 401
+        ? "Sua sessão expirou ou não é mais válida. Entre novamente para acessar os projetos."
+        : "A conexão foi realizada, mas os projetos não puderam ser carregados.",
     };
   }
 }

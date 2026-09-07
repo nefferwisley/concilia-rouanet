@@ -80,6 +80,13 @@ export class ApiClient {
     return this.authToken;
   }
 
+  public clearToken() {
+    this.authToken = null;
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem("rouanet_auth_token");
+    }
+  }
+
   private authenticatedHeaders(contentType = false): Record<string, string> {
     const headers: Record<string, string> = {};
     if (contentType) headers["Content-Type"] = "application/json";

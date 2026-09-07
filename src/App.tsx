@@ -261,7 +261,13 @@ export default function App() {
     }
     const preferredProjectId = localStorage.getItem(ONLINE_ACTIVE_PROJECT_STORAGE_KEY);
     setOnlineSession({ status: "loading", projects: [], activeProjectId: null, message: null });
-    setOnlineSession(await loadOnlineSession(apiClient, preferredProjectId));
+    const nextSession = await loadOnlineSession(apiClient, preferredProjectId);
+    if (nextSession.message === "Sua sessão expirou ou não é mais válida. Entre novamente para acessar os projetos.") {
+      apiClient.clearToken();
+      setHasAuthenticatedSession(false);
+      return;
+    }
+    setOnlineSession(nextSession);
   }, []);
 
   useEffect(() => {
