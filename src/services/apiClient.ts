@@ -93,7 +93,11 @@ export class ApiClient {
       headers: this.authenticatedHeaders(true),
       body: JSON.stringify({ snapshot }),
     });
-    if (!response.ok) throw new ApiClientError(response.status, "Não foi possível salvar o projeto online.");
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { error?: unknown } | null;
+      const detail = typeof payload?.error === "string" ? payload.error : "Não foi possível salvar o projeto online.";
+      throw new ApiClientError(response.status, `${detail} (HTTP ${response.status})`);
+    }
   }
 
   public async loadProjectSnapshot<T>(projectId: string): Promise<T | null> {
