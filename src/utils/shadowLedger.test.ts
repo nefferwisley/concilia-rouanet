@@ -1,8 +1,71 @@
 import { describe, expect, it } from "vitest";
+import { initialDocuments, initialRubrics, initialTransactions } from "../data/mockData";
 import type { BankTransaction, BudgetRubric, FiscalDocument } from "../types";
 import { runRealtimeTripartiteReconciliation } from "./shadowLedger";
 
 describe("runRealtimeTripartiteReconciliation", () => {
+  it("does not erase the 96 validated Project 1961 links when incomplete uploads are present", () => {
+    const incompleteUploads: FiscalDocument[] = Array.from({ length: 28 }, (_, index) => ({
+      id: `incomplete-${index}`,
+      tipo: "Documento importado",
+      numeroDoc: "",
+      dataEmissao: "2026-09-07",
+      fornecedorNome: `Arquivo ${index}`,
+      fornecedorCnpjCpf: "",
+      descricaoServico: "Documento importado",
+      valorBruto: 0,
+      valorLiquido: 0,
+    }));
+
+    const result = runRealtimeTripartiteReconciliation(
+      initialTransactions["proj-1961"],
+      [...initialDocuments["proj-1961"], ...incompleteUploads],
+      initialRubrics["proj-1961"],
+    );
+
+    expect(result.matchedCount).toBe(96);
+    expect(result.transactions.filter((transaction) => transaction.status === "CONCILIADO")).toHaveLength(96);
+  });
+
+  it("preserves a validated legacy reconciliation when the stored document predates file metadata", () => {
+    const result = runRealtimeTripartiteReconciliation(
+      [{
+        id: "tx-legacy",
+        tipo: "DEBITO",
+        valor: 500,
+        status: "CONCILIADO",
+        statusConciliacao: "Conciliado",
+        matchedDocId: "doc-legacy",
+        idDocumentoFiscalVinculado: "doc-legacy",
+        idRubricaVinculada: "rub-legacy",
+        temComprovante: true,
+      }],
+      [{
+        id: "doc-legacy",
+        tipo: "NFS-e (Serviço)",
+        numeroDoc: "10",
+        dataEmissao: "2022-11-04",
+        fornecedorNome: "Fornecedor",
+        fornecedorCnpjCpf: "",
+        descricaoServico: "Serviço",
+        valorBruto: 500,
+        valorLiquido: 500,
+        idTransacao: "tx-legacy",
+        status: "Aprovado / Conciliado",
+      }],
+      [{
+        id: "rub-legacy",
+        etapa: "Produção / Execução",
+        nomeRubrica: "Serviço",
+        valorAprovado: 500,
+        valorExecutado: 500,
+      }],
+    );
+
+    expect(result.matchedCount).toBe(1);
+    expect(result.transactions[0].status).toBe("CONCILIADO");
+  });
+
   it("keeps a transaction pending when only the bank receipt is complete", () => {
     const transaction: BankTransaction = {
       id: "tx-pending-fiscal",

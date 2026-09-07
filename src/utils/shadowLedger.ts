@@ -289,7 +289,11 @@ export function runRealtimeTripartiteReconciliation(
         rubricExecutionMap.set(rubricId, currentExec + txVal);
       }
 
-      const hasDocumentAttachment = tx.documentoFiscalCompleto !== false && Boolean(matchedDoc.arquivoNotaNome || matchedDoc.evidenciaFiscalExtraida);
+      const hasLegacyValidatedDocument =
+        matchedDoc.idTransacao === tx.id && /conciliad/i.test(String(matchedDoc.status || ""));
+      const hasDocumentAttachment = tx.documentoFiscalCompleto !== false && Boolean(
+        matchedDoc.arquivoNotaNome || matchedDoc.evidenciaFiscalExtraida || hasLegacyValidatedDocument
+      );
       const hasBankReceipt = Boolean(tx.comprovanteUrl || tx.temComprovante || matchedDoc.evidenciaBancariaExtraida);
       const isResourceReturn = /devolu[cç][aã]o\s+(?:de\s+)?recursos/i.test(`${tx.favorecido || ""} ${tx.descricaoOriginalExtrato || ""} ${matchedDoc.arquivoNotaNome || ""}`);
       const hasRequiredEvidence = hasDocumentAttachment && hasBankReceipt;

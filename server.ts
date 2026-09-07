@@ -1204,8 +1204,13 @@ app.post("/api/gemini/analyze-document", async (req, res) => {
     const { documentText, imageBase64, mimeType, projectContext } = req.body;
     const ai = getGeminiClient();
 
+    let extractedText = documentText || "";
+    if (!extractedText && imageBase64 && mimeType === "application/pdf") {
+      extractedText = await extractPdfText(imageBase64);
+    }
+
     // If text or XML is provided, run quick heuristic fallback base
-    const baseHeuristic = extractFiscalDocumentHeuristics(documentText || "");
+    const baseHeuristic = extractFiscalDocumentHeuristics(extractedText);
 
     if (!ai) {
       console.log("Gemini API key não configurada; utilizando extrator heurístico inteligente de comprovantes fiscais.");
@@ -1249,7 +1254,7 @@ Retorne SEMPRE um objeto JSON puro e válido:
 ${projectContext || "Projeto Cultural aprovado na Lei Rouanet"}
 
 Conteúdo / Texto / XML do Documento:
-${documentText || "Documento em anexo via imagem/PDF"}
+${extractedText || "Documento em anexo via imagem/PDF"}
 
 Extraia rigorosamente: Tipo de documento, número, data de emissão no padrão YYYY-MM-DD, nome do emitente, CNPJ/CPF, descrição do serviço, valor bruto, deduções de impostos retidos (ISS/IRRF/INSS), valor líquido e a melhor etapa/rubrica do plano de trabalho Rouanet.`;
 

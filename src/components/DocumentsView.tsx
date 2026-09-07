@@ -311,6 +311,11 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
 
       try {
         const extracted = await processFileItem(updatedQueue[i].file);
+        const extractedValue = Number(extracted?.valorLiquido || extracted?.valorBruto || 0);
+        const extractedDate = String(extracted?.dataEmissao || "");
+        if (extractedValue <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(extractedDate)) {
+          throw new Error("Extração incompleta: valor e data não foram identificados. Revise o documento antes de cadastrar.");
+        }
         updatedQueue[i].status = "success";
         updatedQueue[i].extractedData = extracted;
       } catch (err: any) {
@@ -361,6 +366,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
           etapa: selRubric?.etapa,
           statusComprovacao: "Completo",
           confiabilidadeIa: res.confiabilidade || 95,
+          arquivoNotaNome: item.name,
         };
 
         onAddDocument(newDoc);
