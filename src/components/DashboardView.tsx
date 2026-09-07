@@ -105,7 +105,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const totalExecutado = financialSummary.totalExecutado;
   const totalConciliado = financialSummary.totalConciliado;
   const totalAConciliar = financialSummary.totalAConciliar;
-  const percentConciliado = financialSummary.reconciledDebitCount > 0 ? 100 : 0;
+  const percentConciliado = financialSummary.debitCount > 0
+    ? Number(((financialSummary.reconciledDebitCount / financialSummary.debitCount) * 100).toFixed(2))
+    : 0;
   const percentPendente = totalExecutado > 0
     ? Number(((totalAConciliar / totalExecutado) * 100).toFixed(2))
     : 0;
@@ -267,6 +269,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   );
   const hasBudgetEvidence = safeRubrics.length > 0;
   const hasDocumentEvidence = safeDocuments.length > 0;
+  const linkedDocumentCount = safeDocuments.filter((document) => Boolean(document?.idTransacao)).length;
   const hasCompleteReconciliation =
     hasImportedBankStatement &&
     financialSummary.debitCount > 0 &&
@@ -304,7 +307,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     {
       id: "documents",
       title: "3. Documentos Fiscais",
-      description: `${safeDocuments.length} notas/comprovantes anexados`,
+      description: `${linkedDocumentCount} documentos vinculados de ${safeDocuments.length} no dossiê`,
       completed: safeDocuments.length > 0,
       tab: "documents",
     },
@@ -525,7 +528,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
             <span className="font-medium flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-sky-400" />
-              {isFsaProject && canUseValidatedSummary ? "100% Conciliado" : "Conciliado (par completo)"}
+              Conciliado (par completo)
             </span>
             <span className="text-[10px] bg-sky-500/10 text-sky-300 font-semibold px-2 py-0.5 rounded border border-sky-500/20">
               {financialSummary.reconciledDebitCount} de {financialSummary.debitCount}

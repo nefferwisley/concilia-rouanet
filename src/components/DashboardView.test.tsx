@@ -296,7 +296,7 @@ describe("DashboardView reconciliation summary", () => {
     expect(markup).toContain("FSA / ANCINE");
     expect(markup).toContain("R$ 835.000,00");
     expect(markup).toContain("100% Liberado p/ Execução");
-    expect(markup).toContain("100% Conciliado");
+    expect(markup).toContain("Conciliado (par completo)");
     expect(markup).toContain("96 de 178");
     expect(markup).toContain("R$ 655.341,36");
     expect(markup).toContain("Pendente de Cobrança");
