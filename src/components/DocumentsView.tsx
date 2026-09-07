@@ -28,6 +28,7 @@ import { resolveProviderAndCompany } from "../utils/providerHelper";
 import { analyzeDocumentWithAi } from "../services/geminiService";
 import { taxAuthorityIntegrationService } from "../services/taxAuthorityIntegrationService";
 import { linkFiscalDocumentForReview } from "../utils/autoLinkTransaction";
+import { AttachmentThumbnail } from "./AttachmentThumbnail";
 
 interface DocumentsViewProps {
   documents: FiscalDocument[];
@@ -981,6 +982,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
               <tr>
                 <th className="px-3 py-3.5 text-center w-12"># Nº</th>
                 <th className="px-4 py-3.5">Doc Fiscal</th>
+                <th className="px-3 py-3.5 text-center">Arquivo</th>
                 <th className="px-4 py-3.5">Emissão</th>
                 <th className="px-4 py-3.5">Favorecido / Fornecedor (Pessoa + Empresa)</th>
                 <th className="px-4 py-3.5">Rubrica SALIC</th>
@@ -994,7 +996,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
             <tbody className="divide-y divide-slate-800/80">
               {filteredDocs.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={11} className="px-4 py-8 text-center text-slate-500">
                     Nenhum documento fiscal encontrado com os filtros selecionados.
                   </td>
                 </tr>
@@ -1015,6 +1017,15 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
                           {doc.tipo} nº {doc.numeroDoc}
                         </div>
                         <div className="text-[10px] text-slate-400">Série: {doc.serie || "1"}</div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <AttachmentThumbnail
+                          documentId={doc.id}
+                          projectId={project.id}
+                          detectedType="application/pdf"
+                          fileName={doc.arquivoNotaNome || `${doc.tipo} ${doc.numeroDoc || doc.id}.pdf`}
+                          compact
+                        />
                       </td>
                       <td className="px-4 py-3 font-mono text-slate-300 whitespace-nowrap">{formatDate(doc.dataEmissao)}</td>
                       <td className="px-4 py-3 max-w-xs">
