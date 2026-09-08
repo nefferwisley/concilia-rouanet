@@ -33,7 +33,7 @@ import {
   calculateProjectFinancialSummary,
   isTransactionReconciled,
 } from "../utils/projectFinancialSummary";
-import { resolveProviderAndCompany } from "../utils/providerHelper";
+import { resolveFiscalProvider } from "../utils/fiscalProvider";
 import { getTransactionRowKey } from "../utils/transactionRowKey";
 import {
   EXPENSE_CATEGORY_LABELS,
@@ -1056,7 +1056,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <th className="py-2.5 px-3 text-center w-12"># Nº</th>
                 <th className="py-2.5 px-3">Data</th>
                 <th className="py-2.5 px-3">Descrição no Extrato BB</th>
-                <th className="py-2.5 px-3">Favorecido / Fornecedor (Pessoa + Empresa)</th>
+                <th className="py-2.5 px-3">Prestador / Razão Social da NF</th>
                 <th className="py-2.5 px-3 text-right">Valor</th>
                 <th className="py-2.5 px-3">Rubrica SALIC</th>
                 <th className="py-2.5 px-3 text-center">Status MinC</th>
@@ -1083,10 +1083,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   const isReconciled = isTransactionReconciled(tx, hasImportedBankStatement);
                   const expenseCategory = resolveExpenseCategory(tx, safeRubrics);
 
-                  const providerInfo = resolveProviderAndCompany(
-                    matchedDoc?.fornecedorNome || tx.favorecido || tx.descricao || "",
-                    matchedDoc?.fornecedorCnpjCpf || tx.cnpjCpfFavorecido
-                  );
+                  const providerInfo = resolveFiscalProvider(matchedDoc);
 
                   return (
                     <tr key={getTransactionRowKey(tx, idx)} className="hover:bg-slate-800/40 transition">
@@ -1114,11 +1111,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           </div>
                         ) : (
                           <div>
-                            <div className="font-semibold text-slate-100 truncate" title={providerInfo.personName}>
-                              {providerInfo.personName}
+                            <div className={`font-semibold truncate ${providerInfo.identified ? "text-slate-100" : "text-amber-300"}`} title={providerInfo.name}>
+                              {providerInfo.name}
                             </div>
-                            <div className="text-[10px] text-emerald-400 font-medium flex items-center gap-1 truncate" title={providerInfo.companyName}>
-                              <Building2 className="w-2.5 h-2.5 shrink-0" /> {providerInfo.companyName}
+                            <div className="text-[10px] text-emerald-400 font-medium flex items-center gap-1 truncate" title={providerInfo.taxId}>
+                              <Building2 className="w-2.5 h-2.5 shrink-0" /> {providerInfo.taxId || "CNPJ/CPF não identificado na NF"}
                             </div>
                           </div>
                         )}

@@ -49,6 +49,8 @@ import {
   Bot
 } from "lucide-react";
 import { runRealtimeTripartiteReconciliation } from "../utils/shadowLedger";
+import { resolveFiscalProvider } from "../utils/fiscalProvider";
+import { applyTripartiteRateio } from "../utils/tripartiteRateio";
 import { LangChainRagSelfCorrectionModal } from "./LangChainRagSelfCorrectionModal";
 import { AttachmentThumbnail } from "./AttachmentThumbnail";
 
@@ -102,7 +104,53 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
   const [isLangChainModalOpen, setIsLangChainModalOpen] = useState(false);
   const [isRateioModalOpen, setIsRateioModalOpen] = useState(false);
   const [rateioEntry, setRateioEntry] = useState<TripartiteEntry | null>(null);
+  const [rateioRubricId, setRateioRubricId] = useState("");
+  const [rateioAmount, setRateioAmount] = useState("");
+  const [rateioJustification, setRateioJustification] = useState("");
+  const [rateioError, setRateioError] = useState<string | null>(null);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
+  const openRateioModal = (entry: TripartiteEntry) => {
+    const destination = safeRubrics.find((rubric) => rubric.id !== entry.idRubrica);
+    const sourceAmount = Number(entry.valorDebitoBB) || Number(entry.valorBrutoDoc) || 0;
+    setRateioEntry(entry);
+    setRateioRubricId(destination?.id || "");
+    setRateioAmount(sourceAmount > 0 ? String(sourceAmount / 2) : "");
+    setRateioJustification("");
+    setRateioError(null);
+    setIsRateioModalOpen(true);
+  };
+
+  const closeRateioModal = () => {
+    setIsRateioModalOpen(false);
+    setRateioEntry(null);
+    setRateioError(null);
+  };
+
+  const handleApplyRateio = () => {
+    if (!rateioEntry) return;
+    const destinationRubric = safeRubrics.find((rubric) => rubric.id === rateioRubricId);
+    try {
+      if (!destinationRubric) throw new Error("Selecione a rubrica de destino.");
+      const result = applyTripartiteRateio({
+        entries: safeTripartiteEntries,
+        documents: safeDocuments,
+        entry: rateioEntry,
+        destinationRubric,
+        amount: Number(rateioAmount),
+        justification: rateioJustification,
+      });
+      onUpdateTripartiteEntries(result.entries);
+      onUpdateDocuments(result.documents);
+      setSearchQuery(result.createdEntry.idLancamento || "");
+      setSelectedPeriod("ALL");
+      setFilterStatus("ALL");
+      setSyncFeedback(`Rateio salvo. O lançamento ${result.createdEntry.idLancamento} está destacado pela busca.`);
+      closeRateioModal();
+    } catch (error) {
+      setRateioError(error instanceof Error ? error.message : "Não foi possível aplicar o rateio.");
+    }
+  };
 
   // Fast & Instant Real-Time Shadow Ledger Sync
   const handleRealtimeShadowSync = () => {
@@ -650,6 +698,12 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
             </div>
           </div>
 
+          {syncFeedback && (
+            <div role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-200">
+              {syncFeedback}
+            </div>
+          )}
+
           {/* Filter Bar */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
@@ -722,9 +776,9 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                   <tr>
                     <th className="py-3.5 px-4">Lançamento / Período</th>
                     <th className="py-3.5 px-4">Rubrica SALIC</th>
-                    <th className="py-3.5 px-4">Fornecedor & Doc Fiscal</th>
+                    <th className="py-3.5 px-4">Prestador / Razão Social da NF</th>
                     <th className="py-3.5 px-4">Débito BB</th>
-                    <th className="py-3.5 px-4">Bruto / Retenções</th>
+                    <th className="py-3.5 px-4">Saldo após lançamento</th>
                     <th className="py-3.5 px-4">Tripé Comprobatório</th>
                     <th className="py-3.5 px-4">Status SALIC</th>
                     <th className="py-3.5 px-4 text-right">Ações & GED</th>
@@ -735,6 +789,10 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                     const hasFiscal = Boolean(entry?.checkTripe?.fiscalDocAnexo);
                     const hasBank = hasImportedBankStatement && Boolean(entry?.checkTripe?.comprovanteBancarioAnexo);
                     const isTripodComplete = hasFiscal && hasBank;
+                    const fiscalDocument = safeDocuments.find((document) => document.id === entry.idDocFiscal);
+                    const fiscalProvider = resolveFiscalProvider(fiscalDocument);
+                    const bankTransaction = safeTransactions.find((transaction) => transaction.id === entry.idTransacaoBB);
+                    const bankDocumentNumber = entry.documentoBancarioNumero || bankTransaction?.documentoBancario || bankTransaction?.documentoNumero;
 
                     return (
                       <tr
@@ -764,8 +822,8 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
 
                         {/* Provider & Doc */}
                         <td className="py-3.5 px-4 max-w-[240px]">
-                          <div className="font-medium text-slate-200 line-clamp-1">
-                            {entry.fornecedor}
+                          <div className={`font-medium line-clamp-2 ${fiscalProvider.identified ? "text-slate-200" : "text-amber-300"}`} title={fiscalProvider.name}>
+                            {fiscalProvider.name}
                           </div>
                           <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
                             {entry.tipoDoc && entry.tipoDoc.includes("Passagem") ? (
@@ -776,11 +834,14 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                               <Receipt className="w-3 h-3 text-slate-500 shrink-0" />
                             )}
                             <span className="font-mono text-slate-300">{entry.numeroDoc}</span>
-                            {entry.cnpjCpf && (
+                            {fiscalProvider.taxId && (
                               <span className="text-[10px] text-slate-500 truncate">
-                                • {entry.cnpjCpf}
+                                • {fiscalProvider.taxId}
                               </span>
                             )}
+                          </div>
+                          <div className="mt-1 text-[10px] text-sky-300 font-mono">
+                            Documento BB: {bankDocumentNumber || "não identificado no comprovante"}
                           </div>
                         </td>
 
@@ -794,27 +855,14 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                           </div>
                         </td>
 
-                        {/* Bruto / Retencoes */}
+                        {/* Saldo bancário após o lançamento */}
                         <td className="py-3.5 px-4">
                           <div className="font-medium text-slate-200 font-mono">
-                            {formatCurrency(entry.valorBrutoDoc)}
+                            {bankTransaction?.saldoAposTransacao != null && Number.isFinite(Number(bankTransaction.saldoAposTransacao))
+                              ? formatCurrency(Number(bankTransaction.saldoAposTransacao))
+                              : "Não informado"}
                           </div>
-                          {entry.retencoes &&
-                          ((entry.retencoes.irrf || 0) > 0 ||
-                            (entry.retencoes.iss || 0) > 0 ||
-                            (entry.retencoes.inss || 0) > 0) ? (
-                            <div className="text-[10px] text-amber-400 flex items-center gap-1 font-mono">
-                              <Split className="w-2.5 h-2.5" />
-                              Ret: -
-                              {formatCurrency(
-                                (entry.retencoes.irrf || 0) +
-                                  (entry.retencoes.iss || 0) +
-                                  (entry.retencoes.inss || 0)
-                              )}
-                            </div>
-                          ) : (
-                            <div className="text-[10px] text-slate-500">Sem retenção</div>
-                          )}
+                          <div className="text-[10px] text-slate-500">Saldo BB após este débito</div>
                         </td>
 
                         {/* Tripe Comprobatorio */}
@@ -939,10 +987,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                               <button
-                                onClick={() => {
-                                  setRateioEntry(entry);
-                                  setIsRateioModalOpen(true);
-                                }}
+                                onClick={() => openRateioModal(entry)}
                                 title="Ratear Despesa (Dividir)"
                                 className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition border border-slate-700"
                               >
@@ -1698,10 +1743,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                 Rateio de Despesa
               </h3>
               <button
-                onClick={() => {
-                  setIsRateioModalOpen(false);
-                  setRateioEntry(null);
-                }}
+                onClick={closeRateioModal}
                 className="text-slate-400 hover:text-white"
               >
                 <X className="w-5 h-5" />
@@ -1718,27 +1760,25 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                  </div>
                  <div className="flex justify-between items-center text-sm">
                    <span className="text-slate-400">Nova Rubrica de Destino:</span>
-                   <select className="bg-slate-800 text-sm text-slate-200 border border-slate-700 rounded p-1">
-                     {safeRubrics.map(r => (
+                   <select value={rateioRubricId} onChange={(event) => setRateioRubricId(event.target.value)} className="bg-slate-800 text-sm text-slate-200 border border-slate-700 rounded p-1">
+                     {safeRubrics.filter((r) => r.id !== rateioEntry.idRubrica).map(r => (
                        <option key={r.id} value={r.id}>{r.nome}</option>
                      ))}
                    </select>
                  </div>
                  <div className="flex justify-between items-center text-sm">
                    <span className="text-slate-400">Valor a Mover:</span>
-                   <input type="number" className="bg-slate-800 text-sm text-slate-200 border border-slate-700 rounded p-1 w-32" defaultValue={(rateioEntry.valorBrutoDoc || 0) / 2} />
+                   <input type="number" min="0.01" step="0.01" value={rateioAmount} onChange={(event) => setRateioAmount(event.target.value)} className="bg-slate-800 text-sm text-slate-200 border border-slate-700 rounded p-1 w-32" />
                  </div>
                  <div className="flex justify-between items-center text-sm">
                    <span className="text-slate-400">Justificativa:</span>
-                   <input type="text" className="bg-slate-800 text-sm text-slate-200 border border-slate-700 rounded p-1 flex-1 ml-2" placeholder="Motivo do rateio" />
+                   <input type="text" value={rateioJustification} onChange={(event) => setRateioJustification(event.target.value)} className="bg-slate-800 text-sm text-slate-200 border border-slate-700 rounded p-1 flex-1 ml-2" placeholder="Motivo do rateio" />
                  </div>
               </div>
+              {rateioError && <p role="alert" className="text-sm text-rose-300">{rateioError}</p>}
               <div className="flex justify-end gap-3 pt-4">
-                 <button onClick={() => setIsRateioModalOpen(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancelar</button>
-                 <button onClick={() => {
-                   alert("Rateio efetuado com sucesso (mock).");
-                   setIsRateioModalOpen(false);
-                 }} className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold">Aplicar Rateio</button>
+                 <button onClick={closeRateioModal} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancelar</button>
+                 <button onClick={handleApplyRateio} className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold">Aplicar Rateio</button>
               </div>
             </div>
           </div>

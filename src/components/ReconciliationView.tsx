@@ -48,7 +48,7 @@ import {
 } from "../services/geminiService";
 import { runRealtimeTripartiteReconciliation } from "../utils/shadowLedger";
 import { LangChainRagSelfCorrectionModal } from "./LangChainRagSelfCorrectionModal";
-import { resolveProviderAndCompany } from "../utils/providerHelper";
+import { resolveFiscalProvider } from "../utils/fiscalProvider";
 import { isTransactionReconciled } from "../utils/projectFinancialSummary";
 import { getTransactionRowKey } from "../utils/transactionRowKey";
 import {
@@ -817,7 +817,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                 <th className="px-3 py-3.5">Descrição no Extrato BB</th>
                 <th className="px-3 py-3.5">FITID / Autenticação</th>
                 <th className="px-3 py-3.5 text-right">Valor (R$)</th>
-                <th className="px-4 py-3.5">Favorecido / Fornecedor (Pessoa + Empresa)</th>
+                <th className="px-4 py-3.5">Prestador / Razão Social da NF</th>
                 <th className="px-4 py-3.5">Documento Fiscal & Retenções (1:N)</th>
                 <th className="px-4 py-3.5">Aba / Rubrica Orçamentária</th>
                 <th className="px-3 py-3.5 text-center">Status</th>
@@ -842,10 +842,7 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                   ? fiscalFileName.slice(fiscalFileName.lastIndexOf(".") + 1).toUpperCase()
                   : "DOC";
 
-                const providerInfo = resolveProviderAndCompany(
-                  matchedDoc?.fornecedorNome || tx.favorecido || tx.descricao || "",
-                  matchedDoc?.fornecedorCnpjCpf || tx.cnpjCpfFavorecido
-                );
+                const providerInfo = resolveFiscalProvider(matchedDoc);
 
                 return (
                   <tr key={getTransactionRowKey(tx, idx)} className="hover:bg-slate-800/40 transition">
@@ -888,14 +885,11 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                         </div>
                       ) : (
                         <div>
-                          <div className="font-semibold text-slate-100 truncate" title={providerInfo.personName}>
-                            {providerInfo.personName}
+                          <div className={`font-semibold truncate ${providerInfo.identified ? "text-slate-100" : "text-amber-300"}`} title={providerInfo.name}>
+                            {providerInfo.name}
                           </div>
-                          <div className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 truncate" title={providerInfo.companyName}>
-                            <Building className="w-3 h-3 shrink-0" /> {providerInfo.companyName}
-                          </div>
-                          <div className="text-[10px] text-slate-400 font-mono">
-                            {providerInfo.cnpjCpf} {providerInfo.roleOrCategory ? `• ${providerInfo.roleOrCategory}` : ""}
+                          <div className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 truncate" title={providerInfo.taxId}>
+                            <Building className="w-3 h-3 shrink-0" /> {providerInfo.taxId || "CNPJ/CPF não identificado na NF"}
                           </div>
                         </div>
                       )}

@@ -125,7 +125,12 @@ function providerSimilarity(transaction: BankTransaction, document: FiscalDocume
     ).length;
     return intersection / Math.min(txTokens.size, docTokens.size);
   };
-  return Math.max(similarity(document.fornecedorNome), similarity(document.arquivoNotaNome));
+  return Math.max(
+    similarity(document.prestadorServicoNome),
+    similarity(document.razaoSocialEmitente),
+    similarity(document.fornecedorNome),
+    similarity(document.arquivoNotaNome)
+  );
 }
 
 function rubricFilenameSimilarity(transaction: BankTransaction, document: FiscalDocument): number {
@@ -138,6 +143,7 @@ function rubricFilenameSimilarity(transaction: BankTransaction, document: Fiscal
 
 function documentMatchScore(transaction: BankTransaction, document: FiscalDocument): number {
   if (transaction.matchedDocId === document.id || (transaction.id && document.idTransacao === transaction.id)) return 1000;
+  if (document.evidenciaFiscalExtraida === false && document.evidenciaBancariaExtraida) return -1;
 
   const txValue = Number(transaction.valor) || 0;
   const gross = Number(document.valorBruto) || 0;
@@ -342,8 +348,8 @@ export function runRealtimeTripartiteReconciliation(
         descricaoRubrica: rubricName,
         idDocFiscal: matchedDoc.id,
         idTransacaoBB: tx.id,
-        fornecedor: matchedDoc.fornecedorNome || tx.favorecido || "",
-        cnpjCpf: matchedDoc.fornecedorCnpjCpf || tx.cnpjCpfFavorecido || "",
+        fornecedor: matchedDoc.prestadorServicoNome || matchedDoc.razaoSocialEmitente || matchedDoc.fornecedorNome || "",
+        cnpjCpf: matchedDoc.fornecedorCnpjCpf || matchedDoc.cnpjCpfEmitente || "",
         tipoDoc: (matchedDoc.tipo as any) || "Documento importado",
         numeroDoc: matchedDoc.numeroDoc || "",
         dataEmissao: matchedDoc.dataEmissao || "",

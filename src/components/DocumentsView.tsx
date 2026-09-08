@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { FiscalDocument, BudgetRubric, FiscalDocType, BudgetStageName, PronacProject, BankTransaction, TripartiteEntry } from "../types";
 import { formatCurrency, formatDate, formatCnpjCpf } from "../utils/formatters";
-import { resolveProviderAndCompany } from "../utils/providerHelper";
+import { resolveFiscalProvider } from "../utils/fiscalProvider";
 import { analyzeDocumentWithAi } from "../services/geminiService";
 import { taxAuthorityIntegrationService } from "../services/taxAuthorityIntegrationService";
 import { linkFiscalDocumentForReview } from "../utils/autoLinkTransaction";
@@ -1014,7 +1014,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
                 <th className="px-4 py-3.5">Doc Fiscal</th>
                 <th className="px-3 py-3.5 text-center">Arquivo</th>
                 <th className="px-4 py-3.5">Emissão</th>
-                <th className="px-4 py-3.5">Favorecido / Fornecedor (Pessoa + Empresa)</th>
+                <th className="px-4 py-3.5">Prestador / Razão Social da NF</th>
                 <th className="px-4 py-3.5">Rubrica SALIC</th>
                 <th className="px-4 py-3.5 text-right">Vlr Bruto</th>
                 <th className="px-4 py-3.5 text-right">Retenções</th>
@@ -1034,7 +1034,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
                 filteredDocs.map((doc, idx) => {
                   const rubric = rubrics.find((r) => r.id === doc.rubricaId);
                   const retencoes = (doc.retencaoIss || 0) + (doc.retencaoIrrf || 0) + (doc.retencaoInss || 0);
-                  const providerInfo = resolveProviderAndCompany(doc.fornecedorNome, doc.fornecedorCnpjCpf);
+                  const providerInfo = resolveFiscalProvider(doc);
                   const pendingFinancialLink = Number(doc.valorBruto || 0) > 0 && !doc.idTransacao;
 
                   return (
@@ -1064,14 +1064,11 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
                       </td>
                       <td className="px-4 py-3 font-mono text-slate-300 whitespace-nowrap">{formatDate(doc.dataEmissao)}</td>
                       <td className="px-4 py-3 max-w-xs">
-                        <div className="font-semibold text-slate-100 truncate" title={providerInfo.personName}>
-                          {providerInfo.personName}
-                        </div>
-                        <div className="text-[11px] text-emerald-400 font-medium truncate" title={providerInfo.companyName}>
-                          {providerInfo.companyName}
+                        <div className={`font-semibold truncate ${providerInfo.identified ? "text-slate-100" : "text-amber-300"}`} title={providerInfo.name}>
+                          {providerInfo.name}
                         </div>
                         <div className="text-[10px] text-slate-400 font-mono">
-                          {providerInfo.cnpjCpf}
+                          {providerInfo.taxId || "CNPJ/CPF não identificado na NF"}
                         </div>
                       </td>
                       <td className="px-4 py-3 max-w-xs">

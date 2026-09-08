@@ -444,10 +444,17 @@ function extractFiscalDocumentHeuristics(rawText: string): any {
     tipoDoc = "Recibo";
   }
 
-  // Provider name heuristic
+  // A identidade do prestador deve vir da evidência fiscal. O favorecido do
+  // comprovante bancário é apenas fallback para documentos sem nota fiscal.
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+  const fiscalProviderMatch =
+    text.match(/Nome\s*\/\s*Raz[ãa]o\s*Social\s*:\s*([^\r\n]+)/i) ||
+    text.match(/Raz[ãa]o\s*Social\s*(?:do\s+Prestador)?\s*:\s*([^\r\n]+)/i) ||
+    text.match(/Prestador\s+de\s+Servi[çc]os?[\s\S]{0,500}?Raz[ãa]o\s*Social\s*:\s*([^\r\n]+)/i);
   const favoredNameMatch = text.match(/Nome\s+favorecido\s+([^\r\n]+)/i);
-  let fornecedor = favoredNameMatch?.[1]?.trim() || "";
+  let fornecedor = (fiscalProviderMatch?.[1] || favoredNameMatch?.[1] || "")
+    .split(/\s{2,}(?:Inscri[çc][ãa]o|CPF|CNPJ|Endere[çc]o)/i)[0]
+    .trim();
   for (const line of lines) {
     if (fornecedor) break;
     if (/(?:Raz[ãa]o\s*Social|Prestador|Emitente|Fornecedor|Companhia|Benefici[áa]rio|Nome\s+favorecido|Nome)[\s:]*([A-Za-zÀ-ÿ0-9\s\.\-&]{4,})/i.test(line)) {
@@ -1238,6 +1245,8 @@ function extractProjectDeterministically(files: any[]): any {
         controleNumero: seqNum,
         dataEmissao: fiscalDoc?.dataEmissao || "",
         fornecedorNome: hasUsefulExtractedProvider ? extractedProvider : fornecedorName,
+        razaoSocialEmitente: hasFiscalEvidence && hasUsefulExtractedProvider ? extractedProvider : "",
+        prestadorServicoNome: hasFiscalEvidence && hasUsefulExtractedProvider ? extractedProvider : "",
         fornecedorCnpjCpf: fiscalDoc?.cnpjCpfEmitente || "",
         descricaoServico: fiscalDoc?.descricaoServico || descricao,
         valorBruto: fiscalDoc?.valorBruto || 0,
@@ -1250,7 +1259,7 @@ function extractProjectDeterministically(files: any[]): any {
         confiabilidadeIa: fiscalDoc?.confiabilidade || 0,
         evidenciaFiscalExtraida: hasFiscalEvidence,
         evidenciaBancariaExtraida: hasBankReceiptEvidence,
-        arquivoNotaNome: file.name,
+        arquivoNotaNome: hasFiscalEvidence ? file.name : "",
         arquivoComprovanteNome: hasBankReceiptEvidence ? file.name : "",
         arquivoOrigemCaminho: sourcePath,
         erroExtracaoPdf: file.pdfExtractionError || "",
