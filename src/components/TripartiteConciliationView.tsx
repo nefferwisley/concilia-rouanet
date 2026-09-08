@@ -53,6 +53,7 @@ import { resolveFiscalProvider } from "../utils/fiscalProvider";
 import { applyTripartiteRateio } from "../utils/tripartiteRateio";
 import { LangChainRagSelfCorrectionModal } from "./LangChainRagSelfCorrectionModal";
 import { AttachmentThumbnail } from "./AttachmentThumbnail";
+import { resolveBankDocumentNumber } from "../utils/bankDocumentNumber";
 
 interface TripartiteConciliationViewProps {
   project: PronacProject;
@@ -791,8 +792,11 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                     const isTripodComplete = hasFiscal && hasBank;
                     const fiscalDocument = safeDocuments.find((document) => document.id === entry.idDocFiscal);
                     const fiscalProvider = resolveFiscalProvider(fiscalDocument);
-                    const bankTransaction = safeTransactions.find((transaction) => transaction.id === entry.idTransacaoBB);
-                    const bankDocumentNumber = entry.documentoBancarioNumero || bankTransaction?.documentoBancario || bankTransaction?.documentoNumero;
+                    const transactionId = entry.idTransacaoBB || entry.idTransacao;
+                    const bankTransaction = safeTransactions.find((transaction) => transaction.id === transactionId);
+                    const bankDocumentNumber = bankTransaction
+                      ? resolveBankDocumentNumber(bankTransaction, fiscalDocument, project.id)
+                      : (entry.documentoBancarioNumero || "");
 
                     return (
                       <tr

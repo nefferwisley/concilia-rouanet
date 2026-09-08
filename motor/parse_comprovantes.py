@@ -18,10 +18,11 @@ Campos extraídos:
            data do cabeçalho do SISBB "09/08/2024 - AUTOATENDIMENTO")
     FAVORECIDO (PAGO PARA / BENEFICIARIO / NOME FAVORECIDO / Nome após "Creditado")
     CNPJ (primeiro CNPJ/CPF do texto)
+    DOCUMENTO BANCÁRIO (campo DOCUMENTO do comprovante SISBB)
     tem_sisbb
 
 Saída por arquivo:
-    {valor, data, favorecido, cnpj, tem_sisbb}
+    {valor, data, favorecido, cnpj, documento_bancario, tem_sisbb}
 """
 import re
 import unicodedata
@@ -44,6 +45,7 @@ ROTULOS_LABEL = [
     "PAGO PARA", "BENEFICIARIO", "BENEFICIARIA", "NOME FAVORECIDO",
     "FAVORECIDO", "NOME DO FAVORECIDO", "NOME", "CONVENIO",
     "CNPJ DO PAGADOR", "CPF DO PAGADOR", "CNPJ", "CPF",
+    "DOCUMENTO",
 ]
 RE_ITEM = re.compile(
     r"^\s*(?P<rotulo>" + "|".join(ROTULOS_LABEL) + r")\s*:?\s*(?P<conteudo>[^\n]+?)\s*$",
@@ -53,12 +55,13 @@ RE_ITEM = re.compile(
 # Rótulo em linha própria, valor na linha de baixo:
 #   Valor
 #   1.234,56
-ROTULOS_SOLTOS = {"VALOR", "DATA", "NOME", "NOME FAVORECIDO", "BENEFICIARIO", "CNPJ"}
+ROTULOS_SOLTOS = {"VALOR", "DATA", "NOME", "NOME FAVORECIDO", "BENEFICIARIO", "CNPJ", "DOCUMENTO"}
 
 RE_DATA_ISO = re.compile(r"(\d{2})/(\d{2})/(\d{4})")
 RE_VALOR_MONETARIO = re.compile(r"(?:R\$)?\s*([\d.]+,\d{2})")
 RE_VALOR_1CASA = re.compile(r"(?:R\$)?\s*([\d.]{1,6},\d{1,2})")
 RE_CNPJ = re.compile(r"([\d/.\-]{10,})")
+RE_DOCUMENTO_BB = re.compile(r"(?<!\d)([\d.]{5,20})(?!\d)")
 
 # Prioridade de rótulos quando o mesmo comprovante traz vários
 # (ex.: boleto traz VENCIMENTO e DATA DO PAGAMENTO; queremos a data do pagamento).
@@ -122,6 +125,20 @@ def _busca(itens, prioridade, valida=None):
                 if valida is None or valida(conteudo):
                     return conteudo
     return None
+
+
+def _normalizar_documento_bancario(conteudo: str | None) -> str | None:
+    """Normaliza o número exibido pelo BB sem confundi-lo com controle/NF."""
+    if not conteudo:
+        return None
+    match = RE_DOCUMENTO_BB.search(conteudo)
+    if not match:
+        return None
+    bruto = match.group(1).strip(".")
+    digitos = re.sub(r"\D", "", bruto)
+    if len(digitos) == 6:
+        return f"{digitos[:3]}.{digitos[3:]}"
+    return bruto
 
 
 def parse_comprovante_pdf(caminho: Path) -> dict | None:
@@ -206,11 +223,19 @@ def parse_comprovante_pdf(caminho: Path) -> dict | None:
     if cnpj is None:
         cnpj = primeiro
 
+    # ---- documento do comprovante bancário ----
+    # O rótulo exato impede que o número da NF, o CNPJ ou o controle da
+    # planilha sejam apresentados como documento do extrato BB.
+    documento_bancario = _normalizar_documento_bancario(
+        _busca(itens, ["DOCUMENTO"], valida=lambda c: RE_DOCUMENTO_BB.search(c))
+    )
+
     return {
         "valor": valor,
         "data": data,
         "favorecido": favorecido,
         "cnpj": cnpj,
+        "documento_bancario": documento_bancario,
         "tem_sisbb": "SISBB" in texto.upper() or "COMPROVANTE" in texto.upper(),
     }
 

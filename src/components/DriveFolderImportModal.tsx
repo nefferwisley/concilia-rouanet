@@ -808,7 +808,9 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
           valor: Math.abs(Number(transaction.valor_bruto || 0)),
           descricaoExtrato: transaction.fornecedor || transaction.razao_social || transaction.prestador || "Pagamento importado",
           descricaoOriginalExtrato: transaction.fornecedor || transaction.razao_social || transaction.prestador,
-          documentoBancario: transaction.documento,
+          // `transaction.documento` é o CNPJ/CPF do fornecedor no banco.
+          // O número do comprovante BB vem do campo próprio extraído do PDF.
+          documentoBancario: transaction.documento_bancario,
           favorecido: transaction.fornecedor || transaction.razao_social || transaction.prestador,
           matchedRubricId: transaction.rubrica_codigo,
           status: transaction.status === "CONCILIADO" ? "CONCILIADO" : "PENDENTE",

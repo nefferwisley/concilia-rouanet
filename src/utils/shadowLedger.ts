@@ -6,6 +6,7 @@ import {
   PronacProject,
   AuditAlert,
 } from "../types";
+import { resolveBankDocumentNumber } from "./bankDocumentNumber";
 
 export interface ShadowLedgerSyncResult {
   transactions: BankTransaction[];
@@ -305,6 +306,7 @@ export function runRealtimeTripartiteReconciliation(
       const hasRequiredEvidence = hasDocumentAttachment && hasBankReceipt;
       const isFullyReconciled = hasRequiredEvidence && (Boolean(rubricId) || isResourceReturn);
       const statusFinal = isFullyReconciled ? "CONCILIADO" : "PENDENTE";
+      const bankDocumentNumber = resolveBankDocumentNumber(tx, matchedDoc);
 
       if (isFullyReconciled) {
         matchedCount++;
@@ -321,6 +323,7 @@ export function runRealtimeTripartiteReconciliation(
         idDocumentoFiscalVinculado: matchedDoc.id,
         idRubricaVinculada: rubricId,
         favorecido: tx.favorecido || matchedDoc.fornecedorNome,
+        documentoBancario: bankDocumentNumber,
       };
       updatedTransactions.push(updatedTx);
 
@@ -366,7 +369,7 @@ export function runRealtimeTripartiteReconciliation(
           inss: Number(matchedDoc.retencaoInss) || 0,
           outras: 0,
         },
-        documentoBancarioNumero: tx.documentoBancario || tx.documentoNumero || "",
+        documentoBancarioNumero: bankDocumentNumber,
         saldoRubricaApos: Math.max(0, (rubric?.valorAprovado || 0) - (rubricExecutionMap.get(rubricId) || 0)),
         checkTripe: {
           fiscalDocAnexo: hasDocumentAttachment,
@@ -452,7 +455,7 @@ export function runRealtimeTripartiteReconciliation(
         valorLiquidoPagar: 0,
         valorLiquidoPago: txVal,
         retencoes: { iss: 0, irrf: 0, inss: 0, outras: 0 },
-        documentoBancarioNumero: tx.documentoBancario || tx.documentoNumero || "",
+        documentoBancarioNumero: resolveBankDocumentNumber(tx),
         saldoRubricaApos: 0,
         checkTripe: {
           fiscalDocAnexo: false,

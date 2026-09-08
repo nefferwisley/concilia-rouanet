@@ -338,6 +338,13 @@ function cleanAndParseJson<T>(rawText: string | undefined, fallback: T): T {
 // Deterministic Brazilian Tax & Document Extractor (for XML, text, receipts and fallback)
 function extractFiscalDocumentHeuristics(rawText: string): any {
   const text = rawText || "";
+  const bankDocumentMatch = text.match(
+    /(?:^|\n)\s*DOCUMENTO\s*:?\s*([0-9.]{5,20})(?=\s|$)/im,
+  );
+  const bankDocumentDigits = bankDocumentMatch?.[1]?.replace(/\D/g, "") || "";
+  const documentoBancarioNumero = bankDocumentDigits.length === 6
+    ? `${bankDocumentDigits.slice(0, 3)}.${bankDocumentDigits.slice(3)}`
+    : (bankDocumentMatch?.[1]?.trim() || "");
 
   // Check if it's XML (NF-e / NFS-e)
   if (text.includes("<infNFe") || text.includes("<NFe") || text.includes("<CompNfse") || text.includes("<Rps")) {
@@ -513,6 +520,7 @@ function extractFiscalDocumentHeuristics(rawText: string): any {
     confiabilidade: hasFiscalEvidence ? 88 : 0,
     hasFiscalEvidence,
     hasBankReceiptEvidence,
+    documentoBancarioNumero,
   };
 }
 
@@ -1265,6 +1273,7 @@ function extractProjectDeterministically(files: any[]): any {
         tipo: fiscalDoc?.tipoDocumento || inferredType,
         numeroDoc: fiscalDoc?.numeroDocumento || "",
         controleNumero: seqNum,
+        documentoBancarioNumero: fiscalDoc?.documentoBancarioNumero || "",
         dataEmissao: fiscalDoc?.dataEmissao || "",
         fornecedorNome: hasUsefulExtractedProvider ? extractedProvider : fornecedorName,
         razaoSocialEmitente: hasFiscalEvidence && hasUsefulExtractedProvider ? extractedProvider : "",
@@ -1316,6 +1325,7 @@ function extractProjectDeterministically(files: any[]): any {
       dataTransacao: tx.dataTransacao,
       descricaoExtrato: tx.descricaoOriginalExtrato,
       valorDebitoExtrato: tx.valor,
+      documentoBancarioNumero: doc.documentoBancarioNumero || tx.documentoBancario || "",
       favorecidoExtrato: tx.favorecido,
       idDocumentoFiscal: doc.id,
       numeroDocFiscal: doc.numeroDoc,

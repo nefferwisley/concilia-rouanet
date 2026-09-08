@@ -721,10 +721,19 @@ async def executar_importacao_pasta_bg(
                         tipo_doc = parse_tipo_doc(comp["fonte"]) or "OUTRO"
                         await conn.execute(
                             """
-                            insert into documentos_transacao (transacao_id, tipo, arquivo_ref, confianca_ocr)
-                            values ($1, $2, $3, $4)
+                            insert into documentos_transacao (
+                                transacao_id, tipo, arquivo_ref, confianca_ocr, ocr_dados
+                            )
+                            values ($1, $2, $3, $4, $5::jsonb)
                             """,
-                            t_id, tipo_doc, comp["fonte"], 1.0
+                            t_id,
+                            tipo_doc,
+                            comp["fonte"],
+                            1.0,
+                            json.dumps(
+                                {"documento_bancario": comp.get("documento_bancario")},
+                                ensure_ascii=False,
+                            ),
                         )
                         
                         descricao_despesa = item_extraido or "Serviço Prestado"

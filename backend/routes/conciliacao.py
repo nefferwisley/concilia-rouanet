@@ -400,7 +400,12 @@ async def listar_extrato_pendentes(projeto_id: str, dep=Depends(get_conn)):
                (
                    select arquivo_ref from documentos_transacao doc
                    where doc.transacao_id = t.id order by created_at desc limit 1
-               ) as old_documento
+               ) as old_documento,
+               (
+                   select nullif(doc.ocr_dados->>'documento_bancario', '')
+                   from documentos_transacao doc
+                   where doc.transacao_id = t.id order by created_at desc limit 1
+               ) as documento_bancario
         from transacoes t
         where t.projeto_id = $1
         order by t.data_pagamento nulls last, t.created_at, t.id
@@ -459,6 +464,7 @@ async def listar_extrato_pendentes(projeto_id: str, dep=Depends(get_conn)):
             "razao_social": t["razao_social"],
             "prestador": t["prestador"],
             "documento": t["fornecedor_doc"], # changed key to match original JSON payload (was aliased differently earlier, wait, it was "documento")
+            "documento_bancario": t["documento_bancario"],
             "data_pagamento": t["data_pagamento"].isoformat() if t["data_pagamento"] else None,
             "valor_bruto": float(t["valor_bruto"]) if t["valor_bruto"] is not None else None,
             "status": t["status"],

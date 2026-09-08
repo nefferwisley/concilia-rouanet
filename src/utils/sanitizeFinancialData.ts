@@ -1,7 +1,8 @@
 ﻿import { BankTransaction, FiscalDocument, TripartiteEntry } from "../types";
 import { resolveProviderAndCompany } from "./providerHelper";
+import { resolveBankDocumentNumber } from "./bankDocumentNumber";
 
-export function sanitizeTransactions(transactions: BankTransaction[]): BankTransaction[] {
+export function sanitizeTransactions(transactions: BankTransaction[], projectId?: string): BankTransaction[] {
   return (transactions || []).map((tx, idx) => {
     const isInvalidCnpjCpf =
       !tx.cnpjCpfFavorecido ||
@@ -14,15 +15,16 @@ export function sanitizeTransactions(transactions: BankTransaction[]): BankTrans
       tx.cnpjCpfFavorecido
     );
 
-    const docNum = tx.documentoNumero || tx.documentoBancario || `DOC-${idx + 1}`;
-    const fitid = tx.fitid || (tx.documentoBancario ? `BB-${tx.documentoBancario}` : `BB-FITID-${docNum}`);
+    const bankDocumentNumber = resolveBankDocumentNumber(tx, undefined, projectId);
+    const docNum = bankDocumentNumber || tx.documentoNumero || `DOC-${idx + 1}`;
+    const fitid = tx.fitid || (bankDocumentNumber ? `BB-${bankDocumentNumber}` : `BB-FITID-${docNum}`);
 
     return {
       ...tx,
       cnpjCpfFavorecido: isInvalidCnpjCpf ? resolved.cnpjCpf : tx.cnpjCpfFavorecido,
       favorecido: tx.favorecido || resolved.personName,
       fitid,
-      documentoBancario: tx.documentoBancario || docNum,
+      documentoBancario: bankDocumentNumber,
     };
   });
 }

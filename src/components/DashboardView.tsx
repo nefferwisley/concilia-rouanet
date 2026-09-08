@@ -35,6 +35,7 @@ import {
 } from "../utils/projectFinancialSummary";
 import { resolveFiscalProvider } from "../utils/fiscalProvider";
 import { getTransactionRowKey } from "../utils/transactionRowKey";
+import { resolveBankDocumentNumber } from "../utils/bankDocumentNumber";
 import {
   EXPENSE_CATEGORY_LABELS,
   EXPENSE_CATEGORY_ORDER,
@@ -1084,6 +1085,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   const expenseCategory = resolveExpenseCategory(tx, safeRubrics);
 
                   const providerInfo = resolveFiscalProvider(matchedDoc);
+                  const bankDocumentNumber = resolveBankDocumentNumber(tx, matchedDoc, project.id);
 
                   return (
                     <tr key={getTransactionRowKey(tx, idx)} className="hover:bg-slate-800/40 transition">
@@ -1097,9 +1099,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         <div className="font-semibold text-white truncate" title={tx.descricaoExtrato || tx.descricao}>
                           {tx.descricaoExtrato || tx.descricao}
                         </div>
-                        {tx.documentoNumero && (
+                        {bankDocumentNumber && (
                           <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-                            <Receipt className="w-2.5 h-2.5 text-slate-500" /> Doc: {tx.documentoNumero}
+                            <Receipt className="w-2.5 h-2.5 text-slate-500" /> Documento: {bankDocumentNumber}
                           </div>
                         )}
                       </td>

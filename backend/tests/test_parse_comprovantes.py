@@ -15,6 +15,7 @@ from motor.parse_comprovantes import (
     _busca,
     _dec,
     _extrai_itens,
+    _normalizar_documento_bancario,
     _norm,
     nome_arquivo_padronizado,
     parse_comprovante_pdf,
@@ -69,6 +70,16 @@ def test_extrai_itens_data_com_rotulo():
     texto = "DATA DO PAGAMENTO 25/10/2023"
     itens = _extrai_itens(texto)
     assert ("DATA DO PAGAMENTO", "25/10/2023", 0) in itens
+
+
+def test_extrai_documento_bancario_do_comprovante_sisbb():
+    itens = _extrai_itens("DOCUMENTO : 110401")
+    assert ("DOCUMENTO", "110401", 0) in itens
+    assert _normalizar_documento_bancario(itens[0][1]) == "110.401"
+
+
+def test_normaliza_documento_bancario_ja_pontuado():
+    assert _normalizar_documento_bancario("110.401") == "110.401"
 
 
 def test_extrai_itens_ignora_linhas_sem_rotulo():

@@ -174,4 +174,29 @@ describe("runRealtimeTripartiteReconciliation", () => {
     expect(result.transactions[0].status).toBe("CONCILIADO");
     expect(result.tripartiteEntries[0].checkTripe.rubricaValida).toBe(true);
   });
+
+  it("propagates the bank document extracted from the payment proof", () => {
+    const result = runRealtimeTripartiteReconciliation(
+      [{ id: "tx-bank-doc", tipo: "DEBITO", valor: 100, documentoNumero: "1" }],
+      [{
+        id: "doc-bank-doc",
+        tipo: "Documento importado",
+        numeroDoc: "NF-1",
+        dataEmissao: "2026-09-08",
+        fornecedorNome: "Prestador",
+        fornecedorCnpjCpf: "",
+        descricaoServico: "Serviço",
+        valorBruto: 100,
+        valorLiquido: 100,
+        controleNumero: "1",
+        documentoBancarioNumero: "110401",
+        evidenciaFiscalExtraida: true,
+        evidenciaBancariaExtraida: true,
+      }],
+      [],
+    );
+
+    expect(result.transactions[0].documentoBancario).toBe("110.401");
+    expect(result.tripartiteEntries[0].documentoBancarioNumero).toBe("110.401");
+  });
 });

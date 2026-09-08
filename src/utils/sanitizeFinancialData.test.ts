@@ -44,4 +44,15 @@ describe("sanitizeFinancialData", () => {
     expect(monicaDoc).toBeDefined();
     expect(monicaDoc?.fornecedorCnpjCpf).toBe("05.518.874/0001-41");
   });
+
+  it("restores the verified bank document instead of copying DOC-1", () => {
+    const sanitized = sanitizeTransactions([{
+      id: "tx-1961-1",
+      tipo: "DEBITO",
+      valor: 11_000,
+      documentoNumero: "DOC-1",
+    }], "proj-1961");
+
+    expect(sanitized[0].documentoBancario).toBe("110.401");
+  });
 });
