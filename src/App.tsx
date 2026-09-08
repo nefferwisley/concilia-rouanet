@@ -772,7 +772,7 @@ export default function App() {
   };
 
   // Handle New Project Creation
-  const handleCreateProject = (e: React.FormEvent) => {
+  const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     const normalizedPronac = newProjectForm.pronac.replace(/\D/g, "");
     if (!normalizedPronac || !newProjectForm.nome) {
@@ -818,7 +818,7 @@ export default function App() {
     const nextDocuments = { ...allDocuments, [newId]: [] };
     const nextAlerts = { ...allAlerts, [newId]: [] };
     const nextTripartiteEntries = { ...allTripartiteEntries, [newId]: [] };
-    const saved = persistWorkspaceSnapshot({
+    const snapshot = {
       projects: nextProjects,
       activeProjectId: newId,
       rubrics: nextRubrics,
@@ -827,9 +827,29 @@ export default function App() {
       alerts: nextAlerts,
       tripartiteEntries: nextTripartiteEntries,
       receipts: allReceipts,
-    });
-    if (!saved) {
+    };
+    const saved = persistWorkspaceSnapshot(snapshot);
+    if (IS_DEMO_MODE && !saved) {
       alert("O projeto foi criado, mas este navegador não conseguiu salvá-lo. Libere espaço de armazenamento e tente novamente.");
+    }
+    if (!IS_DEMO_MODE) {
+      try {
+        await apiClient.saveProjectSnapshot(newId, snapshot);
+      } catch (error) {
+        alert(error instanceof Error ? error.message : "Não foi possível salvar o projeto online.");
+        return;
+      }
+      localStorage.setItem(ONLINE_ACTIVE_PROJECT_STORAGE_KEY, newId);
+      setHasOnlineSnapshot(true);
+      setOnlineSession((current) => ({
+        status: "ready",
+        projects: [
+          { id: newId, pronac: fullNewProject.pronac, nome: fullNewProject.nome, transacoesCount: 0, criadoEm: new Date().toISOString() },
+          ...current.projects.filter((project) => project.id !== newId),
+        ],
+        activeProjectId: newId,
+        message: null,
+      }));
     }
 
     setProjects(nextProjects);
