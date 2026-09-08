@@ -304,6 +304,8 @@ describe("DashboardView reconciliation summary", () => {
     expect(markup).toContain("R$ 242.417,79");
     expect(markup).toContain("Falta Nota Fiscal / Bilhete / Recibo");
     expect(markup).toContain("BB 8768-8");
+    expect(markup).toContain("110.401");
+    expect(markup).not.toContain("Documento:");
     expect(markup).toContain("hidden sm:block");
   });
 });

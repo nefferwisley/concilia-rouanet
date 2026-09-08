@@ -3,7 +3,6 @@ import {
   Coins,
   AlertTriangle,
   CheckCircle2,
-  Receipt,
   ArrowLeftRight,
   ShieldCheck,
   FileSpreadsheet,
@@ -1100,8 +1099,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           {tx.descricaoExtrato || tx.descricao}
                         </div>
                         {bankDocumentNumber && (
-                          <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-                            <Receipt className="w-2.5 h-2.5 text-slate-500" /> Documento: {bankDocumentNumber}
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            {bankDocumentNumber}
                           </div>
                         )}
                       </td>
