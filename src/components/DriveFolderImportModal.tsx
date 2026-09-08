@@ -67,6 +67,40 @@ const normalizeFileName = (value: string) => value
   .trim()
   .toLowerCase();
 
+const normalizeFilePath = (value: string) => value
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/\\/g, "/")
+  .replace(/^\/+|\/+$/g, "")
+  .trim()
+  .toLowerCase();
+
+export const createFiscalDocumentMatcher = (documents: FiscalDocument[], sources: ProjectSourceFile[]) => {
+  const fileNameCounts = sources.reduce((counts, source) => {
+    const key = normalizeFileName(source.name);
+    counts.set(key, (counts.get(key) || 0) + 1);
+    return counts;
+  }, new Map<string, number>());
+
+  return (source: ProjectSourceFile) => {
+    const sourcePath = normalizeFilePath(source.relativePath || source.name);
+    const pathMatch = documents.find(
+      (document) => normalizeFilePath(document.arquivoCaminho || "") === sourcePath,
+    );
+    if (pathMatch) return pathMatch;
+
+    const fileName = normalizeFileName(source.name);
+    // Dois arquivos de subpastas diferentes podem ter o mesmo nome. Sem um
+    // caminho explícito no documento extraído, vinculá-los pelo basename faria
+    // um upload substituir o outro. Nessa situação, cada arquivo mantém seu
+    // próprio item de dossiê e seu próprio objeto no Storage.
+    if (fileNameCounts.get(fileName) !== 1) return undefined;
+    return documents.find(
+      (document) => normalizeFileName(document.arquivoNotaNome || "") === fileName,
+    );
+  };
+};
+
 const sourceDocumentId = (source: Pick<ProjectSourceFile, "id" | "relativePath" | "name">) => {
   const identity = source.relativePath || source.id || source.name;
   const slug = identity
@@ -617,9 +651,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
             mergedRubrics,
             importedProject,
           );
-          const fiscalDocumentForSource = (source: ProjectSourceFile) => synced.documents.find(
-            (document) => normalizeFileName(document.arquivoNotaNome || "") === normalizeFileName(source.name),
-          );
+          const fiscalDocumentForSource = createFiscalDocumentMatcher(synced.documents, filesForStorage);
           const sourceDocumentIdsLinkedToFiscal = new Set<string>();
           const sourceDocuments = filesForStorage
             .filter((source) => {
@@ -903,9 +935,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
         mergedRubrics,
         importedProject,
       );
-      const fiscalDocumentForSource = (source: ProjectSourceFile) => synced.documents.find(
-        (document) => normalizeFileName(document.arquivoNotaNome || "") === normalizeFileName(source.name),
-      );
+      const fiscalDocumentForSource = createFiscalDocumentMatcher(synced.documents, driveFilesForStorage);
       const sourceDocumentIdsLinkedToFiscal = new Set<string>();
       const sourceDocuments = driveFilesForStorage
         .filter((source) => {
