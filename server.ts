@@ -1101,8 +1101,9 @@ function extractProjectDeterministically(files: any[]): any {
           }
 
           const hasReconciliationColumns = rows.some((row: any[]) => {
-            const headers = row.map((cell) => String(cell || "").trim().toLowerCase());
-            return headers.includes("controle") && headers.includes("pagamento") && headers.includes("valor") && headers.includes("saldo");
+            const headers = row.map((cell) => normalizeText(cell));
+            const hasPaymentColumn = headers.includes("pagamento") || headers.includes("saida");
+            return headers.includes("controle") && hasPaymentColumn && headers.includes("valor") && headers.includes("saldo");
           });
 
           if (lowerSheet.includes("conciliação") || lowerSheet.includes("extrato") || lowerSheet.includes("banco") || hasReconciliationColumns) {
