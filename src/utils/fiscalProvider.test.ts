@@ -25,4 +25,11 @@ describe("resolveFiscalProvider", () => {
   it("never falls back to bank beneficiary text when no invoice is linked", () => {
     expect(resolveFiscalProvider(undefined).name).toBe("Prestador não identificado na NF");
   });
+
+  it("rejects SISBB metadata and uses the verified issuer for the legacy invoice", () => {
+    expect(resolveFiscalProvider({
+      fornecedorNome: "SISBB - SISTEMA DE INFORMACOES BANCO DO BRASIL",
+      fornecedorCnpjCpf: "11.400.274/0001-94",
+    } as any).name).toBe("CIRCUNSTANCIA CINEMATOGRAFICA E PRODUCOES ARTISTICAS LTDA");
+  });
 });

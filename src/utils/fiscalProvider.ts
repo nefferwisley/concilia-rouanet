@@ -12,7 +12,7 @@ function isUsefulFiscalName(value: unknown): value is string {
   if (!name) return false;
   return !(
     /^\[?\d{2}[./-]\d{2}[./-]\d{2,4}\]?/i.test(name) ||
-    /^(?:sisbb|sistema de informacoes|transferencias? entre contas|codigo controle|documento importado)$/i.test(name)
+    /^(?:sisbb\b|sistema\s+de\s+informa[cç][õo]es\b|transfer[êe]ncias?\s+entre\s+contas\b|c[oó]digo\s+controle\b|emiss[ãa]o\s+de\s+comprovantes\b|consultas?\s+-\s+emiss[ãa]o\s+de\s+comprovantes\b|danfse\s+v\d|n[uú]mero\s+da\s+nota\b|documento\s+importado\b)/i.test(name)
   );
 }
 
