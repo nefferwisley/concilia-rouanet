@@ -50,6 +50,61 @@ export interface UploadedFileItem {
 const mergeById = <T extends { id: string }>(existing: T[], imported: T[]): T[] =>
   Array.from(new Map([...existing, ...imported].map((item) => [item.id, item])).values());
 
+type ProjectSourceFile = {
+  id: string;
+  name: string;
+  relativePath: string;
+  subfolder: string;
+  mimeType: string;
+  base64?: string;
+};
+
+const normalizeFileName = (value: string) => value
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/\\/g, "/")
+  .replace(/^.*\//, "")
+  .trim()
+  .toLowerCase();
+
+const sourceDocumentId = (source: Pick<ProjectSourceFile, "id" | "relativePath" | "name">) => {
+  const identity = source.relativePath || source.id || source.name;
+  const slug = identity
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 100);
+  return `arquivo-${slug || "sem-nome"}`;
+};
+
+const textToBase64 = (content: string) => {
+  const bytes = new TextEncoder().encode(content);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+};
+
+const createSourceDocument = (source: ProjectSourceFile): FiscalDocument => ({
+  id: sourceDocumentId(source),
+  tipo: "Documento importado",
+  numeroDoc: `ARQ-${sourceDocumentId(source).replace(/^arquivo-/, "").slice(0, 32).toUpperCase()}`,
+  dataEmissao: "",
+  fornecedorNome: "Arquivo de origem",
+  fornecedorCnpjCpf: "",
+  descricaoServico: `Arquivo lido e armazenado: ${source.relativePath || source.name}`,
+  valorBruto: 0,
+  valorLiquido: 0,
+  statusComprovacao: "Arquivo armazenado - aguarda classificação",
+  validacaoSefaz: "PENDENTE",
+  arquivoNotaNome: source.name,
+  arquivoMimeType: source.mimeType,
+  arquivoCaminho: source.relativePath || source.name,
+  arquivoImportado: true,
+  arquivoArmazenado: Boolean(source.base64),
+});
+
 interface DriveFolderImportModalProps {
   isOpen: boolean;
   activeProject: PronacProject;
@@ -158,12 +213,12 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
           : "application/octet-stream");
 
       let textContent: string | undefined = undefined;
-      let base64: string | undefined = undefined;
+      // A extração pode consumir somente texto, mas o dossiê deve conservar o
+      // arquivo original de qualquer formato que tenha sido lido no ZIP.
+      const base64 = await zipEntry.async("base64");
 
       if (isSheetOrText) {
-        if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
-          base64 = await zipEntry.async("base64");
-        } else {
+        if (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xls")) {
           textContent = await zipEntry.async("string");
         }
       }
@@ -392,7 +447,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
           const extractedDocuments: FiscalDocument[] = [];
           const extractedRubrics: BudgetRubric[] = [];
           const extractedAlerts: AuditAlert[] = [];
-          const filesForStorage: Array<{ id: string; name: string; mimeType: string; base64?: string }> = [];
+          const filesForStorage: ProjectSourceFile[] = [];
           let extractedProject: Partial<PronacProject> = {};
           const maxBatchBytes = 5 * 1024 * 1024;
           let batch: any[] = [];
@@ -478,17 +533,29 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
 
           for (const [index, item] of uploadedItems.entries()) {
             setStatusMessage(`Lendo ${item.name} (${index + 1}/${uploadedItems.length})...`);
+            const base64 = item.base64 || (item.file
+              ? await fileToBase64(item.file)
+              : item.textContent !== undefined
+              ? textToBase64(item.textContent)
+              : undefined);
             const file = {
               name: item.name,
               relativePath: item.relativePath,
               subfolder: item.subfolder,
               size: item.size,
               mimeType: item.mimeType,
-              base64: item.base64 || (item.file ? await fileToBase64(item.file) : undefined),
+              base64,
               textContent: item.textContent,
             };
-            if (file.base64 && (file.mimeType === "application/pdf" || file.mimeType === "image/png" || file.mimeType === "image/jpeg")) {
-              filesForStorage.push({ id: item.id, name: item.name, mimeType: file.mimeType, base64: file.base64 });
+            if (file.base64) {
+              filesForStorage.push({
+                id: item.id,
+                name: item.name,
+                relativePath: item.relativePath,
+                subfolder: item.subfolder,
+                mimeType: item.mimeType,
+                base64: file.base64,
+              });
             }
             if (batch.length > 0 && batchBytes + item.size > maxBatchBytes) await extractBatch();
             batch.push(file);
@@ -537,7 +604,12 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
             },
           };
           const mergedTransactions = mergeById(currentTransactions, extractedTransactions);
-          const mergedDocuments = mergeById(currentDocuments, extractedDocuments);
+          // Arquivos-fonte são evidências do dossiê, não documentos fiscais:
+          // mantê-los fora do motor evita que uma planilha/OFX altere saldos ou
+          // gere uma falsa conciliação com valor zero.
+          const currentSourceDocuments = currentDocuments.filter((document) => document.arquivoImportado === true);
+          const currentFiscalDocuments = currentDocuments.filter((document) => document.arquivoImportado !== true);
+          const mergedDocuments = mergeById(currentFiscalDocuments, extractedDocuments);
           const mergedRubrics = mergeById(currentRubrics, extractedRubrics);
           const synced = runRealtimeTripartiteReconciliation(
             mergedTransactions,
@@ -545,19 +617,37 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
             mergedRubrics,
             importedProject,
           );
-          const storedSourceIds = new Set<string>();
-          const filesByName = new Map(filesForStorage.map((file) => [file.name, file]));
-          for (const document of synced.documents) {
-            const source = filesByName.get(document.arquivoNotaNome || "");
-            if (!source?.base64) continue;
-            await apiClient.uploadProjectDocument(importedProject.id, document.id, source.name, source.mimeType, source.base64);
-            storedSourceIds.add(source.id);
-          }
-          // Arquivos sem nota identificável também ficam guardados para nova
-          // conciliação; apenas não recebem miniatura até haver vínculo.
+          const fiscalDocumentForSource = (source: ProjectSourceFile) => synced.documents.find(
+            (document) => normalizeFileName(document.arquivoNotaNome || "") === normalizeFileName(source.name),
+          );
+          const sourceDocumentIdsLinkedToFiscal = new Set<string>();
+          const sourceDocuments = filesForStorage
+            .filter((source) => {
+              const fiscalDocument = fiscalDocumentForSource(source);
+              if (!fiscalDocument) return true;
+              sourceDocumentIdsLinkedToFiscal.add(sourceDocumentId(source));
+              return false;
+            })
+            .map(createSourceDocument);
+          const allDocuments = mergeById(
+            synced.documents,
+            mergeById(currentSourceDocuments, sourceDocuments)
+              .filter((document) => !sourceDocumentIdsLinkedToFiscal.has(document.id)),
+          );
+
+          // Cada arquivo lido recebe uma referência persistente: se ele gerou
+          // uma nota fiscal, fica sob a própria nota; caso contrário, ganha um
+          // item "Documento importado" visível no dossiê.
           for (const source of filesForStorage) {
-            if (!source.base64 || storedSourceIds.has(source.id)) continue;
-            await apiClient.uploadProjectDocument(importedProject.id, `fonte-${source.id}`, source.name, source.mimeType, source.base64);
+            if (!source.base64) continue;
+            const fiscalDocument = fiscalDocumentForSource(source);
+            await apiClient.uploadProjectDocument(
+              importedProject.id,
+              fiscalDocument?.id || sourceDocumentId(source),
+              source.name,
+              source.mimeType,
+              source.base64,
+            );
           }
           const mergedAlerts = mergeById(currentAlerts, [
             ...synced.alerts,
@@ -568,7 +658,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
             activeProjectId: importedProject.id,
             rubrics: { [importedProject.id]: synced.rubrics },
             transactions: { [importedProject.id]: synced.transactions },
-            documents: { [importedProject.id]: synced.documents },
+            documents: { [importedProject.id]: allDocuments },
             alerts: { [importedProject.id]: mergedAlerts },
             tripartiteEntries: { [importedProject.id]: synced.tripartiteEntries },
             receipts: {},
@@ -585,7 +675,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
             project: importedProject,
             rubrics: synced.rubrics,
             transactions: synced.transactions,
-            documents: synced.documents,
+            documents: allDocuments,
             alerts: snapshot.alerts[importedProject.id],
             tripartiteEntries: synced.tripartiteEntries,
           });
@@ -749,6 +839,9 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
       if (files.length === 0) {
         throw new Error("Nenhum arquivo encontrado na pasta especificada do Google Drive.");
       }
+      if (!apiClient.getToken()) {
+        throw new Error("Entre na sua conta antes de importar: os arquivos do Drive serão salvos no cofre privado do projeto.");
+      }
 
       setStatus("processing");
       setProgressPercent(80);
@@ -770,10 +863,6 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
         throw new Error(result.error || "Não foi possível extrair os dados da pasta.");
       }
 
-      setProgressPercent(100);
-      setStatus("done");
-      setStatusMessage(`Extração e sincronização Shadow Ledger concluídas com sucesso! ${result.data.importedFilesCount || files.length} arquivos processados.`);
-
       const importedProject: PronacProject = {
         ...activeProject,
         ...result.data.project,
@@ -783,12 +872,81 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
           ...(result.data.project.bancoInfo || {}),
         },
       };
+      const { downloadDriveFile } = await import("../services/googleDriveService");
+      const driveFilesForStorage: ProjectSourceFile[] = [];
+      for (const [index, driveFile] of files.entries()) {
+        setStatusMessage(`Armazenando arquivo do Drive ${index + 1}/${files.length}: ${driveFile.name}`);
+        const downloaded = await downloadDriveFile(driveFile.id, driveFile.mimeType, token);
+        const base64 = downloaded.base64 || (downloaded.textContent !== undefined
+          ? textToBase64(downloaded.textContent)
+          : undefined);
+        if (!base64) throw new Error(`Não foi possível guardar o arquivo ${driveFile.name}.`);
+        driveFilesForStorage.push({
+          id: `drive-${driveFile.id}`,
+          name: driveFile.name,
+          relativePath: driveFile.name,
+          subfolder: "Google Drive",
+          mimeType: downloaded.mimeType || driveFile.mimeType || "application/octet-stream",
+          base64,
+        });
+        setProgressPercent(80 + Math.round(((index + 1) / files.length) * 18));
+      }
+
+      const currentSourceDocuments = currentDocuments.filter((document) => document.arquivoImportado === true);
+      const currentFiscalDocuments = currentDocuments.filter((document) => document.arquivoImportado !== true);
+      const mergedTransactions = mergeById(currentTransactions, result.data.transactions || []);
+      const mergedDocuments = mergeById(currentFiscalDocuments, result.data.documents || []);
+      const mergedRubrics = mergeById(currentRubrics, result.data.rubrics || []);
       const synced = runRealtimeTripartiteReconciliation(
-        result.data.transactions || [],
-        result.data.documents || [],
-        result.data.rubrics || [],
-        importedProject
+        mergedTransactions,
+        mergedDocuments,
+        mergedRubrics,
+        importedProject,
       );
+      const fiscalDocumentForSource = (source: ProjectSourceFile) => synced.documents.find(
+        (document) => normalizeFileName(document.arquivoNotaNome || "") === normalizeFileName(source.name),
+      );
+      const sourceDocumentIdsLinkedToFiscal = new Set<string>();
+      const sourceDocuments = driveFilesForStorage
+        .filter((source) => {
+          const fiscalDocument = fiscalDocumentForSource(source);
+          if (!fiscalDocument) return true;
+          sourceDocumentIdsLinkedToFiscal.add(sourceDocumentId(source));
+          return false;
+        })
+        .map(createSourceDocument);
+      const allDocuments = mergeById(
+        synced.documents,
+        mergeById(currentSourceDocuments, sourceDocuments)
+          .filter((document) => !sourceDocumentIdsLinkedToFiscal.has(document.id)),
+      );
+      for (const source of driveFilesForStorage) {
+        await apiClient.uploadProjectDocument(
+          importedProject.id,
+          fiscalDocumentForSource(source)?.id || sourceDocumentId(source),
+          source.name,
+          source.mimeType,
+          source.base64!,
+        );
+      }
+      const mergedAlerts = mergeById(currentAlerts, [
+        ...synced.alerts,
+        ...(result.data.alerts || []),
+      ]);
+      const snapshot = {
+        projects: [importedProject],
+        activeProjectId: importedProject.id,
+        rubrics: { [importedProject.id]: synced.rubrics },
+        transactions: { [importedProject.id]: synced.transactions },
+        documents: { [importedProject.id]: allDocuments },
+        alerts: { [importedProject.id]: mergedAlerts },
+        tripartiteEntries: { [importedProject.id]: synced.tripartiteEntries },
+        receipts: {},
+      };
+      await apiClient.saveProjectSnapshot(importedProject.id, snapshot);
+      setProgressPercent(100);
+      setStatus("done");
+      setStatusMessage(`Extração, armazenamento e sincronização concluídos: ${driveFilesForStorage.length} arquivo(s) no dossiê.`);
 
       setTimeout(() => {
         void apiClient.iniciarProcessamento(importedProject.id, {
@@ -799,8 +957,8 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
           project: importedProject,
           rubrics: synced.rubrics,
           transactions: synced.transactions,
-          documents: synced.documents,
-          alerts: synced.alerts,
+          documents: allDocuments,
+          alerts: mergedAlerts,
           tripartiteEntries: synced.tripartiteEntries,
         });
         onClose();

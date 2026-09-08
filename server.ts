@@ -23,6 +23,22 @@ const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
   "application/pdf",
   "image/png",
   "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.ms-powerpoint",
+  "application/rtf",
+  "text/csv",
+  "text/plain",
+  "application/xml",
+  "text/xml",
+  "application/json",
+  "application/zip",
+  "application/octet-stream",
 ]);
 
 type AuthenticatedRequest = express.Request & {
@@ -172,7 +188,7 @@ app.post("/api/v1/projetos/:projectId/documentos", requireSupabaseUser, async (r
   const projectId = String(req.params.projectId || "").trim();
   const { documentId, fileName, mimeType, base64 } = req.body || {};
   if (!projectId || !documentId || !fileName || !base64 || !ALLOWED_DOCUMENT_MIME_TYPES.has(mimeType)) {
-    return res.status(400).json({ error: "Documento inválido. Aceitos: PDF, PNG ou JPEG." });
+    return res.status(400).json({ error: "Arquivo inválido ou tipo não suportado para o dossiê." });
   }
   const rawBase64 = String(base64).replace(/^data:[^;]+;base64,/, "");
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(rawBase64) || rawBase64.length % 4 !== 0) {

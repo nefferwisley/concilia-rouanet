@@ -29,6 +29,7 @@ import { analyzeDocumentWithAi } from "../services/geminiService";
 import { taxAuthorityIntegrationService } from "../services/taxAuthorityIntegrationService";
 import { linkFiscalDocumentForReview } from "../utils/autoLinkTransaction";
 import { AttachmentThumbnail } from "./AttachmentThumbnail";
+import { apiClient } from "../services/apiClient";
 
 interface DocumentsViewProps {
   documents: FiscalDocument[];
@@ -196,6 +197,8 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
       (d.numeroDoc || "").toLowerCase().includes(q) ||
       (d.fornecedorCnpjCpf || "").includes(searchQuery) ||
       (d.descricaoServico || "").toLowerCase().includes(q) ||
+      (d.arquivoNotaNome || "").toLowerCase().includes(q) ||
+      (d.arquivoCaminho || "").toLowerCase().includes(q) ||
       (d.id || "").toLowerCase().includes(q);
     return matchesType && matchesSearch;
   });
@@ -331,10 +334,21 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
   };
 
   // Commit extracted queued items directly into project documents
-  const handleApplyExtractedToDocuments = () => {
+  const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      resolve(result.includes(",") ? result.split(",")[1] : result);
+    };
+    reader.onerror = () => reject(new Error(`Não foi possível ler ${file.name}.`));
+    reader.readAsDataURL(file);
+  });
+
+  const handleApplyExtractedToDocuments = async () => {
     let addedCount = 0;
     let linkedCount = 0;
-    queuedFiles.forEach((item) => {
+    try {
+      for (const item of queuedFiles) {
       if (item.status === "success" && item.extractedData) {
         const res = item.extractedData;
         let matchedRubricId = "";
@@ -377,10 +391,26 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
           newDoc.statusComprovacao = "Completo";
           linkedCount++;
         }
+        newDoc.arquivoMimeType = item.file.type || "application/octet-stream";
+        newDoc.arquivoArmazenado = false;
+        // A leitura OCR não deve deixar o binário apenas no navegador. Salve a
+        // evidência antes de registrar a nota na tela.
+        await apiClient.uploadProjectDocument(
+          project.id,
+          newDoc.id,
+          item.name,
+          newDoc.arquivoMimeType,
+          await fileToBase64(item.file),
+        );
+        newDoc.arquivoArmazenado = true;
         onAddDocument(newDoc);
         addedCount++;
       }
-    });
+      }
+    } catch (err: any) {
+      alert(`O arquivo não foi salvo no dossiê: ${err?.message || "erro desconhecido"}`);
+      return;
+    }
 
     if (addedCount > 0) {
       setQueuedFiles([]);
@@ -997,7 +1027,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
               {filteredDocs.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="px-4 py-8 text-center text-slate-500">
-                    Nenhum documento fiscal encontrado com os filtros selecionados.
+                    Nenhum documento ou arquivo armazenado encontrado com os filtros selecionados.
                   </td>
                 </tr>
               ) : (
@@ -1017,12 +1047,17 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
                           {doc.tipo} nº {doc.numeroDoc}
                         </div>
                         <div className="text-[10px] text-slate-400">Série: {doc.serie || "1"}</div>
+                        {doc.arquivoCaminho && (
+                          <div className="mt-1 max-w-56 truncate text-[10px] text-cyan-400" title={doc.arquivoCaminho}>
+                            {doc.arquivoCaminho}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-3">
                         <AttachmentThumbnail
                           documentId={doc.id}
                           projectId={project.id}
-                          detectedType="application/pdf"
+                          detectedType={doc.arquivoMimeType}
                           fileName={doc.arquivoNotaNome || `${doc.tipo} ${doc.numeroDoc || doc.id}.pdf`}
                           compact
                         />

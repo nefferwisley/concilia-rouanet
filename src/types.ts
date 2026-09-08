@@ -196,6 +196,11 @@ export interface FiscalDocument {
   statusComprovacao?: "Completo" | "Falta Comprovante Pagto" | "Falta Recibo" | "Ressalva MinC" | string;
   arquivoNotaNome?: string;
   arquivoComprovanteNome?: string;
+  /** Metadados do arquivo-fonte guardado no dossiê do projeto. */
+  arquivoImportado?: boolean;
+  arquivoMimeType?: string;
+  arquivoCaminho?: string;
+  arquivoArmazenado?: boolean;
   confiabilidadeIa?: number;
   divergenciasDetectadas?: string[];
   justificativaSalic?: string;
