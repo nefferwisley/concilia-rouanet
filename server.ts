@@ -72,6 +72,27 @@ function storageObjectUrl(objectPath: string) {
   return `${SUPABASE_URL}/storage/v1/object/${DOCUMENT_BUCKET}/${encodedPath}`;
 }
 
+async function ensureDocumentBucket() {
+  const current = await fetch(`${SUPABASE_URL}/storage/v1/bucket/${DOCUMENT_BUCKET}`, {
+    headers: restHeaders(),
+  });
+  if (current.ok) return;
+  if (current.status !== 404) throw new Error(`storage bucket check ${current.status}`);
+
+  const created = await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
+    method: "POST",
+    headers: restHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      id: DOCUMENT_BUCKET,
+      name: DOCUMENT_BUCKET,
+      public: false,
+      file_size_limit: MAX_DOCUMENT_BYTES,
+      allowed_mime_types: Array.from(ALLOWED_DOCUMENT_MIME_TYPES),
+    }),
+  });
+  if (!created.ok && created.status !== 409) throw new Error(`storage bucket create ${created.status}`);
+}
+
 async function requireSupabaseUser(req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) {
   if (!isPersistentStorageConfigured()) {
     return res.status(503).json({ error: "Persistência de documentos ainda não foi configurada no serviço." });
@@ -201,6 +222,7 @@ app.post("/api/v1/projetos/:projectId/documentos", requireSupabaseUser, async (r
   }
   const objectPath = storagePath(projectId, String(documentId), String(fileName));
   try {
+    await ensureDocumentBucket();
     const previousResponse = await fetch(
       `${SUPABASE_URL}/rest/v1/document_assets?project_id=eq.${encodeURIComponent(projectId)}&document_id=eq.${encodeURIComponent(documentId)}&owner_id=eq.${encodeURIComponent(req.authUser!.id)}&select=object_path`,
       { headers: restHeaders() },
