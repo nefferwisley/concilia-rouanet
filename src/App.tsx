@@ -908,6 +908,58 @@ export default function App() {
     setActiveTab("dashboard");
   };
 
+  const handleRestoreOriginalData = async () => {
+    const restoredBase = initialProjects.find((project) => project.id === "proj-211623");
+    if (!restoredBase || !window.confirm("Restaurar o projeto 21.1623 — 27º É Tudo Verdade com seus dados originais?")) return;
+
+    const restoredProject = {
+      ...restoredBase,
+      cnpjCpf: restoredBase.cnpjCpf === "00.000.000/0001-00" ? "" : restoredBase.cnpjCpf,
+    };
+    const restoredProjects = [restoredProject, ...projects.filter((project) => project.id !== restoredProject.id)];
+    const snapshot = {
+      projects: restoredProjects,
+      activeProjectId: restoredProject.id,
+      rubrics: { ...allRubrics, [restoredProject.id]: initialRubrics[restoredProject.id] || [] },
+      transactions: { ...allTransactions, [restoredProject.id]: initialTransactions[restoredProject.id] || [] },
+      documents: { ...allDocuments, [restoredProject.id]: initialDocuments[restoredProject.id] || [] },
+      alerts: { ...allAlerts, [restoredProject.id]: initialAlerts[restoredProject.id] || [] },
+      tripartiteEntries: { ...allTripartiteEntries, [restoredProject.id]: initialTripartiteEntries[restoredProject.id] || [] },
+      receipts: allReceipts,
+    };
+
+    if (!IS_DEMO_MODE) {
+      try {
+        await apiClient.saveProjectSnapshot(restoredProject.id, snapshot);
+      } catch (error) {
+        alert(error instanceof Error ? error.message : "Não foi possível restaurar o projeto online.");
+        return;
+      }
+      localStorage.setItem(ONLINE_ACTIVE_PROJECT_STORAGE_KEY, restoredProject.id);
+      setHasOnlineSnapshot(true);
+      setOnlineSession((current) => ({
+        status: "ready",
+        projects: [
+          { id: restoredProject.id, pronac: restoredProject.pronac, nome: restoredProject.nome, transacoesCount: snapshot.transactions[restoredProject.id].length, criadoEm: new Date().toISOString() },
+          ...current.projects.filter((project) => project.id !== restoredProject.id),
+        ],
+        activeProjectId: restoredProject.id,
+        message: null,
+      }));
+    } else if (!persistWorkspaceSnapshot(snapshot)) {
+      alert("Não foi possível restaurar os dados neste navegador.");
+      return;
+    }
+
+    setProjects(restoredProjects);
+    setActiveProjectId(restoredProject.id);
+    setAllRubrics(snapshot.rubrics);
+    setAllTransactions(snapshot.transactions);
+    setAllDocuments(snapshot.documents);
+    setAllAlerts(snapshot.alerts);
+    setAllTripartiteEntries(snapshot.tripartiteEntries);
+  };
+
   if (!IS_DEMO_MODE && !hasAuthenticatedSession) {
     return (
       <OnlineLoginView
@@ -941,6 +993,7 @@ export default function App() {
         activeProject={currentProjectWithLiveStats}
         onSelectProject={(selected) => setActiveProjectId(selected.id)}
         onOpenNewProjectModal={() => setIsNewProjectModalOpen(true)}
+        onRestoreOriginalData={() => void handleRestoreOriginalData()}
         onDeleteActiveProject={handleDeleteActiveProject}
         canDeleteActiveProject={projects.length > 0}
         onOpenDriveImportModal={() => setIsDriveModalOpen(true)}

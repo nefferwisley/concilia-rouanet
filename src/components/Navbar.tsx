@@ -26,6 +26,7 @@ interface NavbarProps {
   activeProject: PronacProject;
   onSelectProject: (proj: PronacProject) => void;
   onOpenNewProjectModal: () => void;
+  onRestoreOriginalData: () => void;
   onDeleteActiveProject: () => void;
   canDeleteActiveProject: boolean;
   onOpenDriveImportModal: () => void;
@@ -44,6 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeProject,
   onSelectProject,
   onOpenNewProjectModal,
+  onRestoreOriginalData,
   onDeleteActiveProject,
   canDeleteActiveProject,
   onOpenDriveImportModal,
@@ -169,12 +171,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
 
             <button
-              onClick={() => {
-                if (window.confirm("Deseja redefinir os dados deste navegador para a base oficial completa (Projeto 1961 e É Tudo Verdade)?")) {
-                  localStorage.clear();
-                  window.location.reload();
-                }
-              }}
+              onClick={onRestoreOriginalData}
               title="Restaurar base oficial de projetos (1961 e É Tudo Verdade)"
               className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-2 rounded-xl flex items-center gap-1 transition font-medium"
             >
