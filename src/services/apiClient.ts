@@ -43,6 +43,13 @@ export interface BackendStatus {
   dbReachable?: boolean;
 }
 
+export interface StoredProjectDocument {
+  documentId: string;
+  fileName: string;
+  mimeType: string;
+  byteSize: number;
+}
+
 export class ApiClient {
   private static instance: ApiClient;
   private authToken: string | null = null;
@@ -130,6 +137,15 @@ export class ApiClient {
       body: JSON.stringify({ documentId, fileName, mimeType, base64 }),
     });
     if (!response.ok) throw new ApiClientError(response.status, `Não foi possível armazenar ${fileName}.`);
+  }
+
+  public async listProjectDocuments(projectId: string): Promise<StoredProjectDocument[]> {
+    const response = await fetch(`${this.apiBaseUrl}/projetos/${encodeURIComponent(projectId)}/documentos`, {
+      headers: this.authenticatedHeaders(),
+    });
+    if (!response.ok) throw new ApiClientError(response.status, "Não foi possível carregar os documentos armazenados.");
+    const payload = await response.json() as { documentos?: StoredProjectDocument[] };
+    return Array.isArray(payload.documentos) ? payload.documentos : [];
   }
 
   /**

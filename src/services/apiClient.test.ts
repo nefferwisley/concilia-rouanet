@@ -88,6 +88,27 @@ describe("API URLs", () => {
     });
   });
 
+  it("lists document assets persisted for the active project", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            documentos: [{ documentId: "doc-1", fileName: "nota.pdf", mimeType: "application/pdf", byteSize: 1200 }],
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    const { ApiClient } = await import("./apiClient");
+    const client = ApiClient.createForTesting("https://api.example.com/api/v1");
+
+    await expect(client.listProjectDocuments("1961")).resolves.toEqual([
+      { documentId: "doc-1", fileName: "nota.pdf", mimeType: "application/pdf", byteSize: 1200 },
+    ]);
+  });
+
   it("calls processing pipeline and returns job response", async () => {
     vi.stubGlobal(
       "fetch",

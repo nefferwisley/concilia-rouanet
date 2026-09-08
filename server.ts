@@ -6,6 +6,7 @@ import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import crypto from "crypto";
 import * as xlsx from "xlsx";
+import { runRealtimeTripartiteReconciliation } from "./src/utils/shadowLedger";
 
 dotenv.config();
 
@@ -225,6 +226,29 @@ app.post("/api/v1/projetos/:projectId/documentos", requireSupabaseUser, async (r
   } catch (error) {
     console.error("Falha ao armazenar documento:", error);
     return res.status(502).json({ error: "Não foi possível armazenar o documento." });
+  }
+});
+
+app.get("/api/v1/projetos/:projectId/documentos", requireSupabaseUser, async (req: AuthenticatedRequest, res) => {
+  const projectId = String(req.params.projectId || "").trim();
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/document_assets?project_id=eq.${encodeURIComponent(projectId)}&owner_id=eq.${encodeURIComponent(req.authUser!.id)}&select=document_id,file_name,mime_type,byte_size&order=created_at.asc`,
+      { headers: restHeaders() },
+    );
+    if (!response.ok) throw new Error(`document asset list ${response.status}`);
+    const documentos = await response.json() as Array<{ document_id: string; file_name: string; mime_type: string; byte_size: number }>;
+    return res.json({
+      documentos: documentos.map((documento) => ({
+        documentId: documento.document_id,
+        fileName: documento.file_name,
+        mimeType: documento.mime_type,
+        byteSize: documento.byte_size,
+      })),
+    });
+  } catch (error) {
+    console.error("Falha ao listar documentos persistidos:", error);
+    return res.status(502).json({ error: "Não foi possível recuperar os documentos armazenados." });
   }
 });
 

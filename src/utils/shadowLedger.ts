@@ -404,6 +404,11 @@ export function runRealtimeTripartiteReconciliation(
       });
     } else {
       // Transação órfã (débito bancário sem nenhum documento vinculado)
+      const linkedRubric = safeRubrics.find((rubric) =>
+        rubric.id === tx.matchedRubricId || rubric.id === tx.idRubricaVinculada
+      );
+      const linkedRubricId = linkedRubric?.id || tx.matchedRubricId || tx.idRubricaVinculada || "";
+      const linkedRubricName = linkedRubric?.nomeRubrica || linkedRubric?.nome || tx.rubricaNome || "Pendente de Vínculo";
       const orphanTx: BankTransaction = {
         ...tx,
         status: "PENDENTE",
@@ -420,12 +425,12 @@ export function runRealtimeTripartiteReconciliation(
         id: `trip-${tx.id || txIndex}`,
         idLancamento: lancamentoId,
         periodo: periodStr,
-        itemNumero: "",
-        etapa: "Não identificada nos arquivos",
-        rubricaId: "",
-        idRubrica: "",
-        rubricaNome: "Pendente de Vínculo",
-        descricaoRubrica: "Pendente de Vínculo",
+        itemNumero: linkedRubric?.itemNumero || "",
+        etapa: linkedRubric?.etapa || "Não identificada nos arquivos",
+        rubricaId: linkedRubricId,
+        idRubrica: linkedRubricId,
+        rubricaNome: linkedRubricName,
+        descricaoRubrica: linkedRubricName,
         idDocFiscal: "",
         idTransacaoBB: tx.id,
         fornecedor: tx.favorecido || "",
@@ -447,7 +452,7 @@ export function runRealtimeTripartiteReconciliation(
           fiscalDocAnexo: false,
           comprovanteBancarioAnexo: Boolean(tx.comprovanteUrl || tx.temComprovante),
           relatorioExecucaoAnexo: false,
-          rubricaValida: false,
+          rubricaValida: Boolean(linkedRubricId),
         },
         statusTripartite: "PENDENTE DE VÍNCULO",
         statusSalic: "Pendente",

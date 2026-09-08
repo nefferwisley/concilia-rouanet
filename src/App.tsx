@@ -31,7 +31,7 @@ import {
   UserRole,
 } from "./types";
 import { auditComplianceWithAi } from "./services/geminiService";
-import { apiClient } from "./services/apiClient";
+import { apiClient, type StoredProjectDocument } from "./services/apiClient";
 import { loadOnlineSession } from "./services/onlineSession";
 import { getSupabaseAuthConfiguration } from "./services/supabaseAuth";
 import type { OnlineSessionState } from "./contracts/online";
@@ -139,6 +139,34 @@ type PersistedWorkspace = {
   tripartiteEntries: Record<string, TripartiteEntry[]>;
   receipts: Record<string, Record<string, ReceiptItem>>;
 };
+
+function restoreStoredDocuments(
+  documents: Record<string, FiscalDocument[]>,
+  projectId: string,
+  storedDocuments: StoredProjectDocument[],
+): Record<string, FiscalDocument[]> {
+  const existing = documents[projectId] || [];
+  const knownIds = new Set(existing.map((document) => document.id));
+  const recovered = storedDocuments
+    .filter((document) => !knownIds.has(document.documentId))
+    .map((document): FiscalDocument => ({
+      id: document.documentId,
+      tipo: "Documento importado",
+      numeroDoc: document.fileName,
+      dataEmissao: "",
+      fornecedorNome: "",
+      fornecedorCnpjCpf: "",
+      descricaoServico: `Arquivo armazenado: ${document.fileName}`,
+      valorBruto: 0,
+      valorLiquido: 0,
+      statusComprovacao: "Pendente de revisão",
+      arquivoNotaNome: document.fileName,
+      arquivoImportado: true,
+      arquivoMimeType: document.mimeType,
+      arquivoArmazenado: true,
+    }));
+  return recovered.length ? { ...documents, [projectId]: [...existing, ...recovered] } : documents;
+}
 
 function persistWorkspaceSnapshot(snapshot: PersistedWorkspace): boolean {
   if (!IS_DEMO_MODE) return true;
@@ -415,14 +443,16 @@ export default function App() {
     if (IS_DEMO_MODE || onlineSession.status !== "ready" || !projectId || !apiClient.getToken()) return;
     let active = true;
     void apiClient.loadProjectSnapshot<PersistedWorkspace>(projectId)
-      .then((snapshot) => {
+      .then(async (snapshot) => {
         if (!active || !snapshot) return;
+        const storedDocuments = await apiClient.listProjectDocuments(projectId).catch(() => []);
+        if (!active) return;
         setHasOnlineSnapshot(true);
         setProjects(snapshot.projects?.map(removePlaceholderBankData) || []);
         setActiveProjectId(snapshot.activeProjectId || projectId);
         setAllRubrics(snapshot.rubrics || {});
         setAllTransactions(snapshot.transactions || {});
-        setAllDocuments(snapshot.documents || {});
+        setAllDocuments(restoreStoredDocuments(snapshot.documents || {}, projectId, storedDocuments));
         setAllAlerts(snapshot.alerts || {});
         setAllTripartiteEntries(snapshot.tripartiteEntries || {});
         setAllReceipts(snapshot.receipts || {});
