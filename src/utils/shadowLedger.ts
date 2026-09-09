@@ -261,14 +261,16 @@ export function runRealtimeTripartiteReconciliation(
     if (tx.matchedDocId) {
       const linkedDocument = evidenceDocuments.find((d) => d.id === tx.matchedDocId);
       const isValidatedLegacyLink = Boolean(linkedDocument && /conciliad/i.test(String(linkedDocument.status || "")));
-      if (linkedDocument && (isValidatedLegacyLink || semanticDocumentMatchScore(tx, linkedDocument) >= 35)) {
+      const linkedScore = linkedDocument ? semanticDocumentMatchScore(tx, linkedDocument) : 0;
+      if (linkedDocument && (linkedScore >= 70 || (isValidatedLegacyLink && linkedScore >= 55))) {
         matchedDoc = linkedDocument;
       }
     }
     if (!matchedDoc && tx.id) {
       const linkedDocument = evidenceDocuments.find((d) => d.idTransacao === tx.id && !usedDocIds.has(d.id));
       const isValidatedLegacyLink = Boolean(linkedDocument && /conciliad/i.test(String(linkedDocument.status || "")));
-      if (linkedDocument && (isValidatedLegacyLink || semanticDocumentMatchScore(tx, linkedDocument) >= 35)) {
+      const linkedScore = linkedDocument ? semanticDocumentMatchScore(tx, linkedDocument) : 0;
+      if (linkedDocument && (linkedScore >= 70 || (isValidatedLegacyLink && linkedScore >= 55))) {
         matchedDoc = linkedDocument;
       }
     }

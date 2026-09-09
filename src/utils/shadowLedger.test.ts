@@ -255,10 +255,23 @@ describe("runRealtimeTripartiteReconciliation", () => {
       },
     ];
 
+    transactions[0].matchedDocId = "old-julia";
+    documents.unshift({
+      ...documents[0],
+      id: "old-julia",
+      idTransacao: "tx-13",
+      numeroDoc: "",
+      valorBruto: 0,
+      valorLiquido: 0,
+      evidenciaFiscalExtraida: false,
+      arquivoNotaNome: "",
+      status: "CONCILIADO",
+    });
     const result = runRealtimeTripartiteReconciliation(transactions, documents, rubrics);
     const entries = new Map(result.tripartiteEntries.map((entry) => [entry.idTransacaoBB, entry]));
 
     expect(entries.get("tx-13")?.checkTripe).toMatchObject({ fiscalDocAnexo: true, comprovanteBancarioAnexo: true });
+    expect(entries.get("tx-13")?.idDocFiscal).toBe("doc-julia");
     expect(entries.get("tx-18")?.checkTripe).toMatchObject({ fiscalDocAnexo: false, comprovanteBancarioAnexo: true });
     expect(entries.get("tx-20")?.checkTripe).toMatchObject({ fiscalDocAnexo: false, comprovanteBancarioAnexo: false });
     expect(entries.get("tx-28")?.idDocFiscal).toBe("");
