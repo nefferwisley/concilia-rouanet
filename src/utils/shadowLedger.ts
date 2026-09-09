@@ -143,9 +143,6 @@ function rubricFilenameSimilarity(transaction: BankTransaction, document: Fiscal
 }
 
 function documentMatchScore(transaction: BankTransaction, document: FiscalDocument): number {
-  if (transaction.matchedDocId === document.id || (transaction.id && document.idTransacao === transaction.id)) return 1000;
-  if (document.evidenciaFiscalExtraida === false && document.evidenciaBancariaExtraida) return -1;
-
   const txValue = Number(transaction.valor) || 0;
   const gross = Number(document.valorBruto) || 0;
   const net = Number(document.valorLiquido) || gross;
@@ -224,15 +221,17 @@ export function runRealtimeTripartiteReconciliation(
     const controlDocuments = documentsByControl.get(control) || [];
     if (controlTransactions.length === 1 && controlDocuments.length === 1) {
       const transaction = controlTransactions[0];
+      const controlDocument = controlDocuments[0];
+      const controlSemanticScore = semanticDocumentMatchScore(transaction, controlDocument);
       const bestAlternateSemanticScore = updatedDocuments
-        .filter((document) => document.id !== controlDocuments[0].id)
+        .filter((document) => document.id !== controlDocument.id)
         .reduce((bestScore, document) => Math.max(bestScore, semanticDocumentMatchScore(transaction, document)), 0);
 
       // A number printed in both the spreadsheet and filename is useful evidence,
-      // but it must not override a stronger supplier/rubric match when a duplicated
-      // control shifts later filename numbers.
-      if (bestAlternateSemanticScore < 35) {
-        controlLinkedDocs.set(transaction.id, controlDocuments[0]);
+      // but only when amount, supplier or rubric also support the link. This avoids
+      // shifting matches after a missing/duplicated filename number.
+      if (controlSemanticScore >= 35 && bestAlternateSemanticScore <= controlSemanticScore) {
+        controlLinkedDocs.set(transaction.id, controlDocument);
       }
     }
   });
@@ -259,10 +258,18 @@ export function runRealtimeTripartiteReconciliation(
 
     // Strategy A: Exact matchedDocId or idTransacao
     if (tx.matchedDocId) {
-      matchedDoc = updatedDocuments.find((d) => d.id === tx.matchedDocId);
+      const linkedDocument = updatedDocuments.find((d) => d.id === tx.matchedDocId);
+      const isValidatedLegacyLink = Boolean(linkedDocument && /conciliad/i.test(String(linkedDocument.status || "")));
+      if (linkedDocument && (isValidatedLegacyLink || semanticDocumentMatchScore(tx, linkedDocument) >= 35)) {
+        matchedDoc = linkedDocument;
+      }
     }
     if (!matchedDoc && tx.id) {
-      matchedDoc = updatedDocuments.find((d) => d.idTransacao === tx.id && !usedDocIds.has(d.id));
+      const linkedDocument = updatedDocuments.find((d) => d.idTransacao === tx.id && !usedDocIds.has(d.id));
+      const isValidatedLegacyLink = Boolean(linkedDocument && /conciliad/i.test(String(linkedDocument.status || "")));
+      if (linkedDocument && (isValidatedLegacyLink || semanticDocumentMatchScore(tx, linkedDocument) >= 35)) {
+        matchedDoc = linkedDocument;
+      }
     }
     if (!matchedDoc && tx.id) {
       const controlLinked = controlLinkedDocs.get(tx.id);
@@ -298,9 +305,11 @@ export function runRealtimeTripartiteReconciliation(
 
       const hasLegacyValidatedDocument =
         matchedDoc.idTransacao === tx.id && /conciliad/i.test(String(matchedDoc.status || ""));
-      const hasDocumentAttachment = tx.documentoFiscalCompleto !== false && Boolean(
-        matchedDoc.arquivoNotaNome || matchedDoc.evidenciaFiscalExtraida || hasLegacyValidatedDocument
-      );
+      const hasDocumentAttachment = matchedDoc.evidenciaFiscalExtraida === false
+        ? false
+        : tx.documentoFiscalCompleto !== false && Boolean(
+            matchedDoc.evidenciaFiscalExtraida || matchedDoc.arquivoNotaNome || hasLegacyValidatedDocument
+          );
       const hasBankReceipt = Boolean(tx.comprovanteUrl || tx.temComprovante || matchedDoc.evidenciaBancariaExtraida);
       const isResourceReturn = /devolu[cç][aã]o\s+(?:de\s+)?recursos/i.test(`${tx.favorecido || ""} ${tx.descricaoOriginalExtrato || ""} ${matchedDoc.arquivoNotaNome || ""}`);
       const hasRequiredEvidence = hasDocumentAttachment && hasBankReceipt;

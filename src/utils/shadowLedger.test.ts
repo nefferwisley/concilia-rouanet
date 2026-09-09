@@ -199,4 +199,59 @@ describe("runRealtimeTripartiteReconciliation", () => {
     expect(result.transactions[0].documentoBancario).toBe("110.401");
     expect(result.tripartiteEntries[0].documentoBancarioNumero).toBe("110.401");
   });
+
+  it("classifies the real Seu Ruivaldo evidence without trusting shifted filename numbers", () => {
+    const rubrics: BudgetRubric[] = [
+      { id: "rub-pesquisa", nomeRubrica: "Pesquisa", etapa: "Produção / Execução", valorAprovado: 10_000, valorExecutado: 0 },
+      { id: "rub-combustivel", nomeRubrica: "Combustível", etapa: "Produção / Execução", valorAprovado: 10_000, valorExecutado: 0 },
+      { id: "rub-administrativo", nomeRubrica: "Administrativo", etapa: "Produção / Execução", valorAprovado: 10_000, valorExecutado: 0 },
+      { id: "rub-revisao", nomeRubrica: "Revisão", etapa: "Produção / Execução", valorAprovado: 10_000, valorExecutado: 0 },
+      { id: "rub-ilustradora", nomeRubrica: "Ilustradora", etapa: "Produção / Execução", valorAprovado: 10_000, valorExecutado: 0 },
+    ];
+    const transactions: BankTransaction[] = [
+      { id: "tx-13", tipo: "DEBITO", valor: 2_058, data: "2024-10-04", favorecido: "Julia Sousa", rubricaNome: "Pesquisa", controleNumero: "7", idRubricaVinculada: "rub-pesquisa" },
+      { id: "tx-18", tipo: "DEBITO", valor: 454.5, data: "2025-08-06", favorecido: "Posto JM Paulista", rubricaNome: "Combustível", controleNumero: "10", idRubricaVinculada: "rub-combustivel" },
+      { id: "tx-20", tipo: "DEBITO", valor: 2_500, data: "2025-10-10", favorecido: "Julia Sousa", rubricaNome: "Administrativo", controleNumero: "12", idRubricaVinculada: "rub-administrativo" },
+      { id: "tx-28", tipo: "DEBITO", valor: 696, data: "2026-05-15", favorecido: "Carol Coffield", rubricaNome: "Revisão", controleNumero: "18", idRubricaVinculada: "rub-revisao", matchedDocId: "doc-luciana" },
+      { id: "tx-31", tipo: "DEBITO", valor: 1_900, data: "2026-06-24", favorecido: "Rafaela Pascotto", rubricaNome: "Ilustradora", controleNumero: "20", idRubricaVinculada: "rub-ilustradora" },
+    ];
+    const documents: FiscalDocument[] = [
+      {
+        id: "doc-julia", tipo: "NFS-e (Serviço)", numeroDoc: "169", dataEmissao: "2024-10-04",
+        fornecedorNome: "Julia Sousa", fornecedorCnpjCpf: "", descricaoServico: "Pesquisa", valorBruto: 2_058,
+        valorLiquido: 2_058, controleNumero: "7", evidenciaFiscalExtraida: true, evidenciaBancariaExtraida: true,
+        arquivoNotaNome: "7. Julia Sousa - Pesquisa.pdf", arquivoComprovanteNome: "7. Julia Sousa - Pesquisa.pdf",
+      },
+      {
+        id: "doc-posto", tipo: "Documento importado", numeroDoc: "", dataEmissao: "2025-08-06",
+        fornecedorNome: "Posto JM Paulista", fornecedorCnpjCpf: "", descricaoServico: "Combustível", valorBruto: 454.5,
+        valorLiquido: 454.5, controleNumero: "10", evidenciaFiscalExtraida: false, evidenciaBancariaExtraida: true,
+        arquivoNotaNome: "", arquivoComprovanteNome: "10. Combustível p Barco - Combustível.pdf",
+      },
+      {
+        id: "doc-luciana", tipo: "NFS-e (Serviço)", numeroDoc: "88", dataEmissao: "2026-06-01",
+        fornecedorNome: "Luciana Facchini", fornecedorCnpjCpf: "", descricaoServico: "Designer gráfico", valorBruto: 3_000,
+        valorLiquido: 3_000, controleNumero: "18", evidenciaFiscalExtraida: true, evidenciaBancariaExtraida: true,
+        arquivoNotaNome: "18. Luciana Facchini - Designer Gráfico.pdf", arquivoComprovanteNome: "18. Luciana Facchini - Designer Gráfico.pdf",
+        idTransacao: "tx-28", status: "Documento extraído — vínculo pendente",
+      },
+      {
+        id: "doc-rafaela", tipo: "Documento importado", numeroDoc: "", dataEmissao: "2026-06-24",
+        fornecedorNome: "Rafaela Pascotto", fornecedorCnpjCpf: "", descricaoServico: "Ilustradora", valorBruto: 1_900,
+        valorLiquido: 1_900, controleNumero: "19", evidenciaFiscalExtraida: false, evidenciaBancariaExtraida: true,
+        arquivoNotaNome: "", arquivoComprovanteNome: "19. Rafaela Pascotto - ilustradora.pdf",
+      },
+    ];
+
+    const result = runRealtimeTripartiteReconciliation(transactions, documents, rubrics);
+    const entries = new Map(result.tripartiteEntries.map((entry) => [entry.idTransacaoBB, entry]));
+
+    expect(entries.get("tx-13")?.checkTripe).toMatchObject({ fiscalDocAnexo: true, comprovanteBancarioAnexo: true });
+    expect(entries.get("tx-18")?.checkTripe).toMatchObject({ fiscalDocAnexo: false, comprovanteBancarioAnexo: true });
+    expect(entries.get("tx-20")?.checkTripe).toMatchObject({ fiscalDocAnexo: false, comprovanteBancarioAnexo: false });
+    expect(entries.get("tx-28")?.idDocFiscal).toBe("");
+    expect(entries.get("tx-28")?.checkTripe).toMatchObject({ fiscalDocAnexo: false, comprovanteBancarioAnexo: false });
+    expect(entries.get("tx-31")?.idDocFiscal).toBe("doc-rafaela");
+    expect(entries.get("tx-31")?.checkTripe).toMatchObject({ fiscalDocAnexo: false, comprovanteBancarioAnexo: true });
+  });
 });

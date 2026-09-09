@@ -213,7 +213,8 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
       const totalLancamentos = periodEntries.length;
       const conciliadosComSucesso = periodEntries.filter(
         (e) =>
-          (e?.statusTripartite === "CONCILIADO LÍQUIDO/BRUTO" ||
+          (e?.statusTripartite === "CONCILIADO_PERFEITO" ||
+            e?.statusTripartite === "CONCILIADO LÍQUIDO/BRUTO" ||
             e?.statusTripartite === "CONCILIADO COM RETENÇÃO") &&
           Boolean(e?.checkTripe?.fiscalDocAnexo) &&
           Boolean(e?.checkTripe?.comprovanteBancarioAnexo)
@@ -314,7 +315,8 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
       const hasFiscalDoc = Boolean(entry.checkTripe?.fiscalDocAnexo);
       const hasBankProof = hasImportedBankStatement && Boolean(entry.checkTripe?.comprovanteBancarioAnexo);
       const isComplete =
-        (entry.statusTripartite === "CONCILIADO LÍQUIDO/BRUTO" ||
+        (entry.statusTripartite === "CONCILIADO_PERFEITO" ||
+          entry.statusTripartite === "CONCILIADO LÍQUIDO/BRUTO" ||
           entry.statusTripartite === "CONCILIADO COM RETENÇÃO") &&
         hasFiscalDoc &&
         hasBankProof;
@@ -339,7 +341,8 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
     const totalCount = filteredEntries.length;
     const completeCount = filteredEntries.filter(
       (e) =>
-        (e?.statusTripartite === "CONCILIADO LÍQUIDO/BRUTO" ||
+        (e?.statusTripartite === "CONCILIADO_PERFEITO" ||
+          e?.statusTripartite === "CONCILIADO LÍQUIDO/BRUTO" ||
           e?.statusTripartite === "CONCILIADO COM RETENÇÃO") &&
         Boolean(e?.checkTripe?.fiscalDocAnexo) &&
         hasImportedBankStatement && Boolean(e?.checkTripe?.comprovanteBancarioAnexo)
