@@ -4,6 +4,18 @@ import type { BankTransaction, BudgetRubric, FiscalDocument } from "../types";
 import { runRealtimeTripartiteReconciliation } from "./shadowLedger";
 
 describe("runRealtimeTripartiteReconciliation", () => {
+  it("does not reconcile an archive placeholder even when it has a saved link", () => {
+    const result = runRealtimeTripartiteReconciliation(
+      [{ id: "tx", tipo: "DEBITO", valor: 2058, favorecido: "Julia", matchedDocId: "archive" }],
+      [{ id: "archive", tipo: "Documento importado", numeroDoc: "ARQ-7", dataEmissao: "",
+        fornecedorNome: "Arquivo de origem", fornecedorCnpjCpf: "", descricaoServico: "",
+        valorBruto: 0, valorLiquido: 0, arquivoImportado: true, arquivoNotaNome: "7. Julia - Pesquisa.pdf" }],
+      [],
+    );
+    expect(result.transactions[0].matchedDocId).toBeUndefined();
+    expect(result.tripartiteEntries[0].checkTripe.fiscalDocAnexo).toBe(false);
+    expect(result.documents).toHaveLength(1);
+  });
   it("does not erase the 96 validated Project 1961 links when incomplete uploads are present", () => {
     const incompleteUploads: FiscalDocument[] = Array.from({ length: 28 }, (_, index) => ({
       id: `incomplete-${index}`,

@@ -477,6 +477,7 @@ function extractFiscalDocumentHeuristics(rawText: string): any {
   // comprovante bancário é apenas fallback para documentos sem nota fiscal.
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
   const fiscalProviderMatch =
+    text.match(/Raz[ãa]o\s+Social\s*\/\s*Nome\s*:?[^\S\r\n]+([^\r\n]+)/i) ||
     text.match(/Nome\s*\/\s*Raz[ãa]o\s*Social\s*:\s*([^\r\n]+)/i) ||
     text.match(/Raz[ãa]o\s*Social\s*(?:do\s+Prestador)?\s*:\s*([^\r\n]+)/i) ||
     text.match(/Prestador\s+de\s+Servi[çc]os?[\s\S]{0,500}?Raz[ãa]o\s*Social\s*:\s*([^\r\n]+)/i);
@@ -533,6 +534,26 @@ async function extractPdfText(base64Data: string): Promise<string> {
   const parser = new PDFParse({ data: Buffer.from(cleanBase64, "base64") });
   try {
     const result = await parser.getText();
+    // GINFES writes labels and values in separate PDF drawing passes. Restore
+    // reading order from coordinates before applying field extraction.
+    if (/ginfes\.com\.br/i.test(String(result?.text || "")) && parser.doc) {
+      const pages: string[] = [];
+      for (let pageNumber = 1; pageNumber <= parser.doc.numPages; pageNumber++) {
+        const page = await parser.doc.getPage(pageNumber);
+        const content = await page.getTextContent();
+        const rows: { y: number; items: any[] }[] = [];
+        const items = content.items.filter((item: any) => item.str?.trim())
+          .sort((a: any, b: any) => b.transform[5] - a.transform[5]);
+        for (const item of items) {
+          let row = rows.find((candidate) => Math.abs(candidate.y - item.transform[5]) < 3);
+          if (!row) { row = { y: item.transform[5], items: [] }; rows.push(row); }
+          row.items.push(item);
+        }
+        pages.push(rows.map((row) => row.items.sort((a, b) => a.transform[4] - b.transform[4])
+          .map((item) => item.str).join(" ")).join("\n"));
+      }
+      return pages.join("\n\n");
+    }
     return String(result?.text || "").trim();
   } finally {
     await parser.destroy();

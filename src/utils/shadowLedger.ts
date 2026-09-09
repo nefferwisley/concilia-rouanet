@@ -201,6 +201,7 @@ export function runRealtimeTripartiteReconciliation(
 
   const updatedTransactions: BankTransaction[] = [];
   const updatedDocuments: FiscalDocument[] = [...healedDocs];
+  const evidenceDocuments = updatedDocuments.filter((document) => document.arquivoImportado !== true);
   const tripartiteEntries: TripartiteEntry[] = [];
   const usedDocIds = new Set<string>();
   const controlLinkedDocs = new Map<string, FiscalDocument>();
@@ -212,7 +213,7 @@ export function runRealtimeTripartiteReconciliation(
     if (!control) return;
     transactionsByControl.set(control, [...(transactionsByControl.get(control) || []), transaction]);
   });
-  updatedDocuments.forEach((document) => {
+  evidenceDocuments.forEach((document) => {
     const control = normalizeReconciliationText(document.controleNumero);
     if (!control) return;
     documentsByControl.set(control, [...(documentsByControl.get(control) || []), document]);
@@ -223,7 +224,7 @@ export function runRealtimeTripartiteReconciliation(
       const transaction = controlTransactions[0];
       const controlDocument = controlDocuments[0];
       const controlSemanticScore = semanticDocumentMatchScore(transaction, controlDocument);
-      const bestAlternateSemanticScore = updatedDocuments
+      const bestAlternateSemanticScore = evidenceDocuments
         .filter((document) => document.id !== controlDocument.id)
         .reduce((bestScore, document) => Math.max(bestScore, semanticDocumentMatchScore(transaction, document)), 0);
 
@@ -258,14 +259,14 @@ export function runRealtimeTripartiteReconciliation(
 
     // Strategy A: Exact matchedDocId or idTransacao
     if (tx.matchedDocId) {
-      const linkedDocument = updatedDocuments.find((d) => d.id === tx.matchedDocId);
+      const linkedDocument = evidenceDocuments.find((d) => d.id === tx.matchedDocId);
       const isValidatedLegacyLink = Boolean(linkedDocument && /conciliad/i.test(String(linkedDocument.status || "")));
       if (linkedDocument && (isValidatedLegacyLink || semanticDocumentMatchScore(tx, linkedDocument) >= 35)) {
         matchedDoc = linkedDocument;
       }
     }
     if (!matchedDoc && tx.id) {
-      const linkedDocument = updatedDocuments.find((d) => d.idTransacao === tx.id && !usedDocIds.has(d.id));
+      const linkedDocument = evidenceDocuments.find((d) => d.idTransacao === tx.id && !usedDocIds.has(d.id));
       const isValidatedLegacyLink = Boolean(linkedDocument && /conciliad/i.test(String(linkedDocument.status || "")));
       if (linkedDocument && (isValidatedLegacyLink || semanticDocumentMatchScore(tx, linkedDocument) >= 35)) {
         matchedDoc = linkedDocument;
@@ -277,7 +278,7 @@ export function runRealtimeTripartiteReconciliation(
     }
 
     if (!matchedDoc) {
-      const candidates = updatedDocuments
+      const candidates = evidenceDocuments
         .filter((document) => !usedDocIds.has(document.id))
         .map((document) => ({ document, score: documentMatchScore(tx, document) }))
         .sort((left, right) => right.score - left.score);
