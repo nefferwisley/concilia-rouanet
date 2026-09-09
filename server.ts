@@ -976,17 +976,27 @@ function extractProjectDeterministically(files: any[]): any {
   let totalCaptado = 0;
   let totalExecutado = 0;
   let detectedAccount = "";
+  let detectedAgency = "";
   const rubrics: any[] = [];
   const transactions: any[] = [];
   const documents: any[] = [];
   const alerts: any[] = [];
   // A planilha de controle é uma evidência operacional. Ela nunca deve ser
-  // apresentada como se fosse um extrato OFX/CSV emitido pelo banco.
-  const hasExternalBankStatement = files.some((file) => {
+  // apresentada como se fosse um extrato emitido pelo banco.
+  const hasPdfBankStatement = files.some((file) => {
     const name = String(file?.name || "").toLowerCase();
     const text = String(file?.textContent || "").toUpperCase();
-    return name.endsWith(".ofx") || name.endsWith(".qfx") || name.endsWith(".csv") ||
-      text.includes("<OFX>");
+    return name.endsWith(".pdf") &&
+      text.includes("EXTRATO DE CONTA CORRENTE") &&
+      text.includes("CLIENTE - CONTA ATUAL") &&
+      text.includes("PERÍODO DO EXTRATO") &&
+      text.includes("LANÇAMENTOS") &&
+      text.includes("CONTA CORRENTE");
+  });
+  const hasExternalBankStatement = hasPdfBankStatement || files.some((file) => {
+    const name = String(file?.name || "").toLowerCase();
+    const text = String(file?.textContent || "").toUpperCase();
+    return name.endsWith(".ofx") || name.endsWith(".qfx") || name.endsWith(".csv") || text.includes("<OFX>");
   });
 
   // Helper to convert Excel serial date to YYYY-MM-DD
@@ -1034,6 +1044,10 @@ function extractProjectDeterministically(files: any[]): any {
       const digits = pronacMatch[1];
       pronac = digits.length === 6 ? `${digits.slice(0, 2)}.${digits.slice(2)}` : digits;
     }
+    const accountMatch = content.match(/Conta corrente\s+([\d.-]+)/i);
+    const agencyMatch = content.match(/Ag[êe]ncia\s+([\d.-]+)/i);
+    if (accountMatch) detectedAccount = accountMatch[1];
+    if (agencyMatch) detectedAgency = agencyMatch[1];
   }
 
   const extractAmountFromText = (text: string): number => {
@@ -1367,14 +1381,14 @@ function extractProjectDeterministically(files: any[]): any {
       valorExecutado: totalExecutado,
       bancoInfo: {
         banco: "",
-        agencia: "",
+        agencia: detectedAgency,
         contaCaptacao: "",
         contaMovimento: detectedAccount,
         saldoBloqueado: 0,
         saldoMovimento: 0,
         rendimentoAplicacao: 0,
         extratoBancarioImportado: hasExternalBankStatement,
-        fonteMovimentacao: hasExternalBankStatement ? "EXTRATO_OFX" : "PLANILHA_CONTROLE",
+        fonteMovimentacao: hasPdfBankStatement ? "EXTRATO_BB_PDF" : hasExternalBankStatement ? "EXTRATO_OFX" : "PLANILHA_CONTROLE",
       },
       status: hasExternalBankStatement ? "Importado — validação pendente" : "Importado — extrato bancário pendente",
       resumoProjeto: hasExternalBankStatement
