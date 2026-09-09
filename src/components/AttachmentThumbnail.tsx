@@ -27,6 +27,9 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
   useEffect(() => {
     let mounted = true;
     const fetchUrl = async () => {
+      setLoading(true);
+      setError(false);
+      setSignedUrl(null);
       const id = documentId || fileId;
       if (!id) {
         setSignedUrl(fallbackUrl && !fallbackUrl.startsWith('blob:') ? fallbackUrl : null);
@@ -74,7 +77,13 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
   if (isImage) {
     return (
       <a href={signedUrl} target="_blank" rel="noreferrer" className={`block ${sizeClass} overflow-hidden rounded-lg border border-slate-700 hover:border-emerald-500 transition`}>
-        <img src={signedUrl} alt={fileName} loading="lazy" className="w-full h-full object-cover" />
+        <img
+          src={signedUrl}
+          alt={fileName}
+          loading="lazy"
+          className="w-full h-full object-cover"
+          onError={() => setError(true)}
+        />
       </a>
     );
   }

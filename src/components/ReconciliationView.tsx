@@ -5,7 +5,6 @@ import {
   UploadCloud,
   CheckCircle2,
   AlertTriangle,
-  FileText,
   Search,
   Filter,
   Link,
@@ -58,6 +57,7 @@ import {
   getExpenseCategoryCounts,
   resolveExpenseCategory,
 } from "../utils/expenseCategory";
+import { AttachmentThumbnail } from "./AttachmentThumbnail";
 
 interface ReconciliationViewProps {
   transactions: BankTransaction[];
@@ -897,19 +897,13 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
                     <td className="px-4 py-3 max-w-xs">
                       {matchedDoc ? (
                         <div className="flex items-start gap-2">
-                          <div
-                            aria-label={`Miniatura do arquivo ${fiscalFileName}`}
-                            className="relative flex h-12 w-10 shrink-0 flex-col items-center justify-center overflow-hidden rounded border border-slate-700 bg-slate-900 text-[8px] font-bold text-slate-400"
-                            title={fiscalFileName}
-                          >
-                            <FileText className="h-4 w-4 text-emerald-400" />
-                            <span>{fiscalFileExtension}</span>
-                            <img
-                              src={`/api/v1/documentos/${matchedDoc.id}/thumbnail`}
-                              alt={`Prévia de ${fiscalFileName}`}
-                              loading="lazy"
-                              className="absolute inset-0 h-full w-full object-cover"
-                              onError={(event) => { event.currentTarget.style.display = "none"; }}
+                          <div aria-label={`Miniatura do arquivo ${fiscalFileName}`} className="shrink-0">
+                            <AttachmentThumbnail
+                              documentId={matchedDoc.id}
+                              detectedType={matchedDoc.arquivoMimeType || fiscalFileExtension}
+                              fileName={fiscalFileName}
+                              projectId={project.id}
+                              compact
                             />
                           </div>
                           <div className="min-w-0">

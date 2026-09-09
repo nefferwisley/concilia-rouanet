@@ -910,6 +910,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                                       documentId={entry.idDocFiscal}
                                       fileName={entry.anexoFiscalUrl || `NF-${entry.numeroDoc || "vinculada"}.pdf`}
                                       detectedType="application/pdf"
+                                      projectId={project.id}
                                       compact
                                     />
                                   )}
@@ -918,6 +919,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                                       documentId={entry.idDocFiscal}
                                       fileName={entry.anexoComprovanteUrl || `BB-${entry.idTransacaoBB || "vinculado"}.pdf`}
                                       detectedType="application/pdf"
+                                      projectId={project.id}
                                       compact
                                     />
                                   )}
@@ -1493,6 +1495,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                            detectedType={file.detectedType} 
                            fileName={file.nomeArquivo} 
                            fallbackUrl={file.urlOuPrevia}
+                           projectId={project.id}
                         />
                       </div>
                     </div>
