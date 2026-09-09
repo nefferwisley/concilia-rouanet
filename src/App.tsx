@@ -447,14 +447,28 @@ export default function App() {
         if (!active || !snapshot) return;
         const storedDocuments = await apiClient.listProjectDocuments(projectId).catch(() => []);
         if (!active) return;
+        const restoredDocuments = restoreStoredDocuments(snapshot.documents || {}, projectId, storedDocuments);
+        const projectTransactions = snapshot.transactions?.[projectId] || [];
+        const projectDocuments = restoredDocuments[projectId] || [];
+        const projectRubrics = snapshot.rubrics?.[projectId] || [];
+        const project = snapshot.projects?.find((item) => item.id === projectId);
+        const reconciliation = projectTransactions.length > 0 && projectDocuments.length > 0
+          ? runRealtimeTripartiteReconciliation(projectTransactions, projectDocuments, projectRubrics, project)
+          : null;
         setHasOnlineSnapshot(true);
         setProjects(snapshot.projects?.map(removePlaceholderBankData) || []);
         setActiveProjectId(snapshot.activeProjectId || projectId);
         setAllRubrics(snapshot.rubrics || {});
-        setAllTransactions(snapshot.transactions || {});
-        setAllDocuments(restoreStoredDocuments(snapshot.documents || {}, projectId, storedDocuments));
+        setAllTransactions(reconciliation
+          ? { ...(snapshot.transactions || {}), [projectId]: reconciliation.transactions }
+          : snapshot.transactions || {});
+        setAllDocuments(reconciliation
+          ? { ...restoredDocuments, [projectId]: reconciliation.documents }
+          : restoredDocuments);
         setAllAlerts(snapshot.alerts || {});
-        setAllTripartiteEntries(snapshot.tripartiteEntries || {});
+        setAllTripartiteEntries(reconciliation
+          ? { ...(snapshot.tripartiteEntries || {}), [projectId]: reconciliation.tripartiteEntries }
+          : snapshot.tripartiteEntries || {});
         setAllReceipts(snapshot.receipts || {});
       })
       .catch((error) => console.warn("Não foi possível recuperar o último estado online:", error));
