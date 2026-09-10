@@ -11,6 +11,27 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/projetos", tags=["projetos"])
 
 
+
+def _resumo_snapshot_legacy(row: asyncpg.Record) -> dict:
+    """Converte um snapshot pertencente ao usuário no formato da listagem."""
+    project_id = str(row["project_id"])
+    payload = row["payload"] if isinstance(row["payload"], dict) else {}
+    projects = payload.get("projects", [])
+    project = next(
+        (item for item in projects if isinstance(item, dict) and str(item.get("id")) == project_id),
+        payload.get("project", {}) if isinstance(payload.get("project"), dict) else {},
+    )
+    transactions = payload.get("transactions", {})
+    project_transactions = transactions.get(project_id, []) if isinstance(transactions, dict) else []
+    return {
+        "id": project_id,
+        "pronac": str(project.get("pronac") or project_id),
+        "nome": str(project.get("nome") or f"Projeto {project_id}"),
+        "transacoes_count": len(project_transactions) if isinstance(project_transactions, list) else 0,
+        "criado_em": row["updated_at"].isoformat(),
+        "source": "legacy_snapshot",
+    }
+
 async def _require_project(conn, projeto_id: str):
     project = await conn.fetchrow(
         "SELECT id, pronac, nome, proponente, banco, created_at, updated_at FROM projetos WHERE id = $1",
@@ -59,7 +80,7 @@ async def criar_projeto(body: ProjetoCreate, dep=Depends(get_conn)):
 
 @router.get("")
 async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = None, dep=Depends(get_conn)):
-    conn, _ = dep
+    conn, user_id = dep
     limit = min(max(limit, 1), 100)
     page = max(page, 1)
     offset = (page - 1) * limit
@@ -87,6 +108,33 @@ async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = N
             limit, offset,
         )
 
+    # Projetos ainda salvos no formato legado pertencem ao mesmo usuário do
+    # snapshot. Eles continuam privados e somente são usados quando não há
+    # projeto normalizado acessível para a conta atual.
+    if not rows:
+        snapshots = await conn.fetch(
+            """
+            select project_id, payload, updated_at
+            from project_snapshots
+            where owner_id = $1 and is_deleted = false
+            order by updated_at desc
+            """,
+            user_id,
+        )
+        legacy_projects = [_resumo_snapshot_legacy(row) for row in snapshots]
+        if pronac:
+            needle = pronac.lower()
+            legacy_projects = [
+                project for project in legacy_projects
+                if needle in project["pronac"].lower() or needle in project["nome"].lower()
+            ]
+        total = len(legacy_projects)
+        return {
+            "total": total,
+            "page": page,
+            "projetos": legacy_projects[offset:offset + limit],
+        }
+
     return {
         "total": total,
         "page": page,
@@ -99,6 +147,25 @@ async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = N
             for r in rows
         ],
     }
+
+
+@router.get("/{projeto_id}/snapshot")
+async def obter_snapshot_legacy(projeto_id: str, dep=Depends(get_conn)):
+    """Recupera somente o snapshot salvo pelo usuário autenticado."""
+    conn, user_id = dep
+    row = await conn.fetchrow(
+        """
+        select payload
+        from project_snapshots
+        where project_id = $1 and owner_id = $2 and is_deleted = false
+        limit 1
+        """,
+        projeto_id,
+        user_id,
+    )
+    if not row:
+        raise HTTPException(404, "Snapshot do projeto não encontrado.")
+    return {"snapshot": row["payload"]}
 
 
 @router.get("/{projeto_id}/workspace")
