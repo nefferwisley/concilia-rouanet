@@ -101,16 +101,28 @@ export class ApiClient {
     return headers;
   }
 
-  public async saveProjectSnapshot(projectId: string, snapshot: unknown): Promise<void> {
+  public async saveProjectSnapshot(projectId: string, snapshot: unknown, version?: number): Promise<void> {
+    const targetVersion = version ?? ((snapshot && typeof snapshot === "object") ? (snapshot as any)._version : undefined);
     const response = await fetch(`${this.apiBaseUrl}/projetos/${encodeURIComponent(projectId)}/snapshot`, {
       method: "PUT",
       headers: this.authenticatedHeaders(true),
-      body: JSON.stringify({ snapshot }),
+      body: JSON.stringify({ snapshot, version: targetVersion, source_system: "web_client" }),
     });
     if (!response.ok) {
-      const payload = await response.json().catch(() => null) as { error?: unknown } | null;
-      const detail = typeof payload?.error === "string" ? payload.error : "Não foi possível salvar o projeto online.";
+      const payload = await response.json().catch(() => null) as { error?: unknown; detail?: unknown } | null;
+      const detail = typeof payload?.error === "string"
+        ? payload.error
+        : (typeof payload?.detail === "string"
+          ? payload.detail
+          : (typeof (payload?.detail as any)?.error === "string"
+            ? (payload?.detail as any).error
+            : "Não foi possível salvar o projeto online."));
       throw new ApiClientError(response.status, `${detail} (HTTP ${response.status})`);
+    }
+    const result = await response.json().catch(() => null) as { version?: number; snapshot_hash?: string } | null;
+    if (result?.version && snapshot && typeof snapshot === "object") {
+      (snapshot as any)._version = result.version;
+      (snapshot as any)._snapshot_hash = result.snapshot_hash;
     }
   }
 
@@ -120,9 +132,15 @@ export class ApiClient {
     });
     if (response.status === 404) return null;
     if (!response.ok) throw new ApiClientError(response.status, "Não foi possível carregar o projeto salvo.");
-    const payload = await response.json() as { snapshot?: T };
-    return payload.snapshot ?? null;
+    const payload = await response.json() as { snapshot?: T; version?: number; snapshot_hash?: string };
+    const snapshot = payload.snapshot ?? null;
+    if (snapshot && typeof snapshot === "object") {
+      (snapshot as any)._version = payload.version;
+      (snapshot as any)._snapshot_hash = payload.snapshot_hash;
+    }
+    return snapshot;
   }
+
 
   public async uploadProjectDocument(
     projectId: string,
@@ -352,6 +370,117 @@ export class ApiClient {
     }
     return null;
   }
+
+  /**
+   * Consulta o estado e contagem real do corpus RAG indexado
+   */
+  public async getRagStatus(projectId: string): Promise<RagStatusResponse | null> {
+    try {
+      const res = await fetch(`${this.apiBaseUrl}/rag/status?projectId=${encodeURIComponent(projectId)}`, {
+        headers: this.authenticatedHeaders(),
+      });
+      if (res.ok) {
+        return (await res.json()) as RagStatusResponse;
+      }
+    } catch (e) {
+      console.warn("Falha ao consultar status RAG:", e);
+    }
+    return null;
+  }
+
+  /**
+   * Consulta telemetria agregada p50/p95 e métricas do Golden Dataset
+   */
+  public async getRagMetrics(projectId: string): Promise<RagMetricsResponse | null> {
+    try {
+      const res = await fetch(`${this.apiBaseUrl}/rag/metrics?projectId=${encodeURIComponent(projectId)}`, {
+        headers: this.authenticatedHeaders(),
+      });
+      if (res.ok) {
+        return (await res.json()) as RagMetricsResponse;
+      }
+    } catch (e) {
+      console.warn("Falha ao consultar métricas RAG:", e);
+    }
+    return null;
+  }
+
+  /**
+   * Executa busca híbrida documental (RRF) no corpus auditado
+   */
+  public async searchRag(params: {
+    projectId: string;
+    query: string;
+    filters?: Record<string, any>;
+    topK?: number;
+  }): Promise<RagSearchResponse | null> {
+    try {
+      const res = await fetch(`${this.apiBaseUrl}/rag/search`, {
+        method: "POST",
+        headers: this.authenticatedHeaders(true),
+        body: JSON.stringify(params),
+      });
+      if (res.ok) {
+        return (await res.json()) as RagSearchResponse;
+      }
+    } catch (e) {
+      console.warn("Falha ao executar busca RAG:", e);
+    }
+    return null;
+  }
+}
+
+export interface RagSource {
+  chunkId: string;
+  documentId: string;
+  fileName: string;
+  page: number;
+  section: string;
+  docType: string;
+  excerpt: string;
+  score: number;
+}
+
+export interface RagSearchResponse {
+  query: string;
+  projectId: string;
+  text: string;
+  confidence: number;
+  needsHumanReview: boolean;
+  conflictDetected?: boolean;
+  sources: RagSource[];
+  latencies: {
+    totalMs: number;
+    retrievalMs?: number;
+    generationMs?: number;
+  };
+}
+
+export interface RagStatusResponse {
+  projectId: string;
+  pronac?: string;
+  status: "pronto" | "sem_corpus" | "indexando" | "falhou";
+  indexedDocuments: number;
+  indexedChunks: number;
+  lastIndexedAt: string | null;
+  failures: string[];
+}
+
+export interface RagMetricsResponse {
+  projectId: string;
+  queriesTotal: number;
+  latencyP50Ms: number;
+  latencyP95Ms: number;
+  humanReviewRate: number;
+  goldenDataset?: {
+    version: string;
+    cases: number;
+    recallAt5: number;
+    mrrAt3: number;
+    contextPrecision: number;
+    faithfulness: number;
+    passed: boolean;
+  };
 }
 
 export interface ProcessarPayload {

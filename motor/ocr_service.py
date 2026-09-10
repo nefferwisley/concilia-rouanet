@@ -340,13 +340,20 @@ def extract_native_pdf_text(bytes_data: bytes, max_pages: int = 10) -> dict | No
         # Procura Razão Social / Nome do Prestador
         razao_social = None
         razao_match = re.search(
-            r"(?:prestador\s*de\s*servi[çc]os|nome\s*/\s*raz[aã]o\s*social|raz[aã]o\s*social)[^\n\r:]*[:\s]+([A-ZÀ-Ú\s\.\-]{4,60})",
+            r"(?:Nome\s*/\s*Raz[aã]o\s*Social|Raz[aã]o\s*Social|Nome\s*Empresarial|Nome\s*do\s*Prestador)\s*[:\-]\s*([A-ZÀ-Úa-zà-ú0-9\s\.\-]{3,70})",
             full_text,
             re.IGNORECASE
         )
+        if not razao_match:
+            razao_match = re.search(
+                r"PRESTADOR\s*DE\s*SERVI[ÇC]OS\s*[\n\r]+\s*(?:Nome\s*/\s*Raz[aã]o\s*Social)?\s*[:\-]?\s*([A-ZÀ-Úa-zà-ú0-9\s\.\-]{3,70})",
+                full_text,
+                re.IGNORECASE
+            )
         if razao_match:
             candidate_razao = razao_match.group(1).strip()
-            if not any(stop in candidate_razao.upper() for stop in ["PREFEITURA", "MUNICIPIO", "SECRETARIA"]):
+            candidate_razao = re.split(r"\b(?:CPF|CNPJ|Inscri[çc][aã]o|Endere[çc]o)\b", candidate_razao, flags=re.IGNORECASE)[0].strip()
+            if len(candidate_razao) >= 3 and not any(stop in candidate_razao.upper() for stop in ["PREFEITURA", "MUNICIPIO", "SECRETARIA", "SISTEMA GINFES"]):
                 razao_social = candidate_razao
 
         if (cnpj_cpf or numero_doc) and (valor_total is not None or data_emissao):

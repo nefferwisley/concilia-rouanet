@@ -28,6 +28,8 @@ from backend.routes import (
     websocket,
     real_imports,
     processamento,
+    snapshots,
+    rag,
 )
 # NOTA: backend/routes/conciliacao.py foi restaurado do commit c274379 — o
 # fluxo "Conciliar Pasta 1961" (001→006, POST /api/v1/conciliar, polling,
@@ -166,6 +168,8 @@ app.include_router(planilha.router)
 app.include_router(rubricas.router)
 app.include_router(orquestrador.router)
 app.include_router(processamento.router)
+app.include_router(snapshots.router)
+app.include_router(rag.router)
 # Login de demonstração SEM autenticação (rota /api/v1/dev/demo-login).
 app.include_router(dev_demo.router)
 
