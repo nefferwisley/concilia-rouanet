@@ -108,6 +108,46 @@ async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = N
             limit, offset,
         )
 
+    # Mantém os projetos normalizados e inclui snapshots privados ainda não
+    # migrados. Pelo mesmo id, o snapshot preserva nome e contagem originais
+    # até a normalização completa terminar.
+    snapshots = await conn.fetch(
+        """
+        select project_id, payload, updated_at
+        from project_snapshots
+        where owner_id = $1 and is_deleted = false
+        order by updated_at desc
+        """,
+        user_id,
+    )
+    legacy_projects = [_resumo_snapshot_legacy(row) for row in snapshots]
+    normalized_projects = [
+        {
+            "id": str(row["id"]),
+            "pronac": row["pronac"],
+            "nome": row["nome"],
+            "transacoes_count": row["transacoes_count"],
+            "criado_em": row["created_at"].isoformat(),
+            "source": "postgres",
+        }
+        for row in rows
+    ]
+    projects_by_id = {project["id"]: project for project in normalized_projects}
+    projects_by_id.update({project["id"]: project for project in legacy_projects})
+    projects = list(projects_by_id.values())
+    if pronac:
+        needle = pronac.lower()
+        projects = [
+            project for project in projects
+            if needle in project["pronac"].lower() or needle in project["nome"].lower()
+        ]
+    return {
+        "total": len(projects),
+        "page": page,
+        "projetos": projects[offset:offset + limit],
+    }
+
+
     # Projetos ainda salvos no formato legado pertencem ao mesmo usuário do
     # snapshot. Eles continuam privados e somente são usados quando não há
     # projeto normalizado acessível para a conta atual.
