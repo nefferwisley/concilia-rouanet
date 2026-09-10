@@ -842,6 +842,25 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                   </option>
                 </select>
               </div>
+
+              {/* Sorting Dropdown */}
+              <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs">
+                <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+                <select
+                  aria-label="Ordenar lançamentos"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="bg-transparent text-slate-200 font-semibold focus:outline-none cursor-pointer"
+                >
+                  <option value="default" className="bg-slate-900">Ordenação padrão</option>
+                  <option value="risco" className="bg-slate-900">Por risco (pendentes)</option>
+                  <option value="valor_desc" className="bg-slate-900">Por valor (maior)</option>
+                  <option value="valor_asc" className="bg-slate-900">Por valor (menor)</option>
+                  <option value="data_desc" className="bg-slate-900">Por data (recente)</option>
+                  <option value="data_asc" className="bg-slate-900">Por data (antigo)</option>
+                  <option value="status" className="bg-slate-900">Por status SALIC</option>
+                </select>
+              </div>
             </div>
 
             <div className="flex items-center gap-3 text-xs text-slate-400">
@@ -849,7 +868,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                 <button
                   type="button"
                   onClick={() => setDensity("comfortable")}
-                  className={`px-2 py-1 rounded text-[11px] font-medium transition ${
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition ${
                     density === "comfortable"
                       ? "bg-slate-800 text-emerald-400 shadow-sm"
                       : "text-slate-400 hover:text-slate-200"
@@ -861,7 +880,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                 <button
                   type="button"
                   onClick={() => setDensity("compact")}
-                  className={`px-2 py-1 rounded text-[11px] font-medium transition ${
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition ${
                     density === "compact"
                       ? "bg-slate-800 text-emerald-400 shadow-sm"
                       : "text-slate-400 hover:text-slate-200"
@@ -873,17 +892,83 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
               </div>
 
               <div>
-                Mostrando <strong className="text-slate-200">{filteredEntries.length}</strong> de{" "}
-                {tripartiteEntries.length} lançamentos
+                Exibindo <strong className="text-white">{sortedEntries.length}</strong> de{" "}
+                <span className="text-slate-400">{tripartiteEntries.length}</span> lançamentos
               </div>
             </div>
           </div>
 
-          {/* Tripartite Master Table */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl max-h-[750px] overflow-y-auto">
+          {/* Active Filter Chips */}
+          {(selectedPeriod !== "ALL" || filterStatus !== "ALL" || Boolean(searchQuery.trim()) || sortBy !== "default") && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
+              <span className="text-slate-500 font-medium">Filtros ativos:</span>
+              {searchQuery.trim() && (
+                <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2.5 py-1 rounded-full border border-slate-700">
+                  Busca: &ldquo;{searchQuery}&rdquo;
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="hover:text-rose-400 p-0.5 ml-1"
+                    aria-label="Remover busca"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {selectedPeriod !== "ALL" && (
+                <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2.5 py-1 rounded-full border border-slate-700">
+                  Período: {selectedPeriod}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPeriod("ALL")}
+                    className="hover:text-rose-400 p-0.5 ml-1"
+                    aria-label="Remover filtro de período"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {filterStatus !== "ALL" && (
+                <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2.5 py-1 rounded-full border border-slate-700">
+                  Status: {filterStatus === "COMPLETE" ? "100% Completo" : filterStatus === "PENDING" ? "Pendências" : "Com Retenção"}
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatus("ALL")}
+                    className="hover:text-rose-400 p-0.5 ml-1"
+                    aria-label="Remover filtro de status"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {sortBy !== "default" && (
+                <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2.5 py-1 rounded-full border border-slate-700">
+                  Ordem: {sortBy}
+                  <button
+                    type="button"
+                    onClick={() => setSortBy("default")}
+                    className="hover:text-rose-400 p-0.5 ml-1"
+                    aria-label="Remover ordenação"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="text-xs text-amber-400 hover:text-amber-300 underline font-semibold flex items-center gap-1 ml-1 cursor-pointer min-h-[32px]"
+              >
+                <RotateCcw className="w-3 h-3" /> Limpar filtros
+              </button>
+            </div>
+          )}
+
+          {/* Tripartite Master Table Desktop (>= md) */}
+          <div className="hidden md:block bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl max-h-[750px] overflow-y-auto">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-300">
-                <thead className="sticky top-0 z-10 bg-slate-950/95 backdrop-blur text-slate-400 font-semibold uppercase tracking-wider text-[10px] border-b border-slate-800">
+                <thead className="sticky top-0 z-10 bg-slate-950/95 backdrop-blur text-slate-400 font-semibold uppercase tracking-wider text-xs border-b border-slate-800">
                   <tr>
                     <th className="py-3 px-3 w-12 text-center"># Nº</th>
                     <th className="py-3.5 px-4">Lançamento / Período</th>
@@ -897,7 +982,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {filteredEntries.map((entry, idx) => {
+                  {sortedEntries.map((entry, idx) => {
                     const hasFiscal = Boolean(entry?.checkTripe?.fiscalDocAnexo);
                     const hasBank = hasImportedBankStatement && Boolean(entry?.checkTripe?.comprovanteBancarioAnexo);
                     const isTripodComplete = hasFiscal && hasBank;
@@ -1143,7 +1228,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                           <button
                             onClick={() => handleToggleSalicStatus(entry)}
                             title="Clique para alternar o status no SALIC"
-                            className={`text-[10px] px-2.5 py-1 rounded-lg font-bold border transition ${
+                            className={`text-xs px-2.5 py-1 rounded-lg font-bold border transition ${
                               entry.statusSalic === "Comprovado 100%"
                                 ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
                                 : entry.statusSalic === "Lançado no SALIC"
@@ -1189,6 +1274,37 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Tripartite Mobile Cards View (< md) */}
+          <div className="block md:hidden space-y-3">
+            {sortedEntries.length === 0 ? (
+              <div className="py-8 text-center text-slate-400 text-xs bg-slate-900 rounded-xl border border-slate-800 p-4">
+                Nenhum lançamento tripartite encontrado para os filtros selecionados.
+              </div>
+            ) : (
+              sortedEntries.map((entry, idx) => (
+                <TripartiteMobileCard
+                  key={entry.idLancamento}
+                  entry={entry}
+                  index={idx}
+                  project={project}
+                  documents={safeDocuments}
+                  transactions={safeTransactions}
+                  rubrics={safeRubrics}
+                  hasImportedBankStatement={hasImportedBankStatement}
+                  onToggleSalicStatus={handleToggleSalicStatus}
+                  onOpenPreview={(previewData) => {
+                    setPreviewDrawerData(previewData);
+                    setIsPreviewDrawerOpen(true);
+                  }}
+                  onOpenRateio={openRateioModal}
+                  onOpenGed={setViewingEntryGed}
+                  onDelete={handleDeleteEntry}
+                  onQuickCreateDoc={handleQuickCreateDocForEntry}
+                />
+              ))
+            )}
           </div>
         </div>
       )}
