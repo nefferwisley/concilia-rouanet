@@ -42,6 +42,9 @@ import {
   getExpenseCategoryCounts,
   resolveExpenseCategory,
 } from "../utils/expenseCategory";
+import { BudgetBulletChart } from "./charts/BudgetBulletChart";
+import { MonthlyReconciliationChart } from "./charts/MonthlyReconciliationChart";
+import { BalanceEvolutionChart } from "./charts/BalanceEvolutionChart";
 
 interface DashboardViewProps {
   project: PronacProject;
@@ -468,6 +471,141 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
+      {/* Matriz de Decisão Executiva (identificação em ≤ 3 segundos) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
+        <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-800">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+              Painel de Decisão Imediata (≤ 3s)
+            </h2>
+          </div>
+          <span className="text-[11px] text-slate-400">
+            Ações prioritárias para conformidade fiscal MinC / FSA
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
+          {/* 1. Pendências */}
+          <button
+            type="button"
+            onClick={showPendingTransactions}
+            className="p-3 bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800 hover:border-amber-500/40 rounded-xl text-left transition flex flex-col justify-between group"
+          >
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide flex items-center justify-between">
+              Pendências
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+            </span>
+            <div className="mt-2">
+              <span className="text-lg font-bold font-mono text-amber-400 block group-hover:translate-x-0.5 transition-transform">
+                {financialSummary.pendingDebitCount}
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                {formatCurrency(totalAConciliar)}
+              </span>
+            </div>
+            <span className="text-[10px] text-amber-300 underline font-medium mt-1">Ver itens &rarr;</span>
+          </button>
+
+          {/* 2. Valor em Risco (Glosas) */}
+          <button
+            type="button"
+            onClick={() => onNavigateTab("audit")}
+            className="p-3 bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800 hover:border-rose-500/40 rounded-xl text-left transition flex flex-col justify-between group"
+          >
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide flex items-center justify-between">
+              Valor em Risco
+              <span className="w-2 h-2 rounded-full bg-rose-400" />
+            </span>
+            <div className="mt-2">
+              <span className="text-lg font-bold font-mono text-rose-400 block group-hover:translate-x-0.5 transition-transform">
+                {formatCurrency(glosaTransactions.reduce((acc, t) => acc + (Number(t.valor) || 0), 0))}
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                {glosaTransactions.length} alerta(s) de glosa
+              </span>
+            </div>
+            <span className="text-[10px] text-rose-300 underline font-medium mt-1">Auditar &rarr;</span>
+          </button>
+
+          {/* 3. Documentos Ausentes */}
+          <button
+            type="button"
+            onClick={() => onNavigateTab("reconciliation")}
+            className="p-3 bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800 hover:border-sky-500/40 rounded-xl text-left transition flex flex-col justify-between group"
+          >
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide flex items-center justify-between">
+              Sem Nota Fiscal
+              <span className="w-2 h-2 rounded-full bg-sky-400" />
+            </span>
+            <div className="mt-2">
+              <span className="text-lg font-bold font-mono text-sky-400 block group-hover:translate-x-0.5 transition-transform">
+                {financialSummary.pendingDebitCount}
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                de {financialSummary.debitCount} débitos
+              </span>
+            </div>
+            <span className="text-[10px] text-sky-300 underline font-medium mt-1">Vincular NF &rarr;</span>
+          </button>
+
+          {/* 4. Comprovantes Bancários */}
+          <button
+            type="button"
+            onClick={() => onNavigateTab("tripartite")}
+            className="p-3 bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800 hover:border-emerald-500/40 rounded-xl text-left transition flex flex-col justify-between group"
+          >
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide flex items-center justify-between">
+              Comp. Bancários
+              <span className={`w-2 h-2 rounded-full ${hasImportedBankStatement ? "bg-emerald-400" : "bg-amber-400"}`} />
+            </span>
+            <div className="mt-2">
+              <span className={`text-lg font-bold font-mono block group-hover:translate-x-0.5 transition-transform ${hasImportedBankStatement ? "text-emerald-400" : "text-amber-400"}`}>
+                {hasImportedBankStatement ? financialSummary.reconciledDebitCount : "0"}
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                {hasImportedBankStatement ? `de ${financialSummary.debitCount} validados` : "OFX pendente"}
+              </span>
+            </div>
+            <span className="text-[10px] text-emerald-300 underline font-medium mt-1">Dossiê Tripé &rarr;</span>
+          </button>
+
+          {/* 5. Prazo SALIC */}
+          <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl text-left flex flex-col justify-between">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+              Prazo SALIC
+            </span>
+            <div className="mt-2">
+              <span className="text-sm font-bold text-slate-200 block">
+                {formatDate(project.prazoLimitePrestacao || project.dataFimVigencia)}
+              </span>
+              <span className="text-[10px] text-emerald-400 font-medium">
+                Vigência Regular
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-500 mt-1">MinC / ANCINE</span>
+          </div>
+
+          {/* 6. Saldo em Conta */}
+          <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl text-left flex flex-col justify-between">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+              Saldo Líquido
+            </span>
+            <div className="mt-2">
+              <span className="text-base font-bold font-mono text-cyan-400 block">
+                {hasImportedBankStatement
+                  ? formatCurrency(project.bancoInfo.saldoMovimento)
+                  : "Saldo não informado"}
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                Rend: +{formatCurrency(project.bancoInfo.rendimentoAplicacao)}
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-500 mt-1">Banco do Brasil</span>
+          </div>
+        </div>
+      </div>
+
       {/* KPI Cards Grid */}
       {canUseValidatedSummary && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -788,34 +926,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
           </div>
 
-          <div className="space-y-4">
-            {stages.map((stg) => {
-              const perc = stg.aprovado > 0 ? Math.round((stg.executado / stg.aprovado) * 100) : 0;
-              const saldo = stg.aprovado - stg.executado;
-              return (
-                <div key={stg.name} className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5">
-                  <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="font-semibold text-slate-200">{stg.name}</span>
-                    <span className="font-mono text-slate-300 font-medium">
-                      {formatCurrency(stg.executado)}{" "}
-                      <span className="text-slate-500 font-normal">/ {formatCurrency(stg.aprovado)}</span>
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                    <div
-                      className={`${stg.color} h-full rounded-full transition-all duration-500`}
-                      style={{ width: `${Math.min(100, perc)}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1.5">
-                    <span>
-                      Saldo Restante: <strong className="text-slate-300">{formatCurrency(saldo)}</strong>
-                    </span>
-                    <span className="font-semibold text-slate-300">{perc}% executado</span>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="space-y-3">
+            {stages.map((stg) => (
+              <BudgetBulletChart
+                key={stg.name}
+                label={stg.name}
+                approved={stg.aprovado}
+                executed={stg.executado}
+                color={stg.color}
+              />
+            ))}
           </div>
         </div>
 
@@ -903,6 +1023,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="font-semibold text-amber-400">{formatDate(project.prazoLimitePrestacao)}</span>
           </div>
         </div>
+      </div>
+
+      {/* Visual Data Exploration: Evolução Mensal de Conciliação e Linha Temporal do Saldo */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <MonthlyReconciliationChart
+          transactions={safeTransactions}
+          onSelectMonth={() => onNavigateTab("reconciliation")}
+        />
+        <BalanceEvolutionChart
+          transactions={safeTransactions}
+          project={project}
+          onSelectTransaction={() => onNavigateTab("reconciliation")}
+        />
       </div>
 
       {/* Lançamentos do Extrato Bancário e Conciliação Rápida */}

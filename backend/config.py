@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     max_upload_mb: int = 25
     ocr_max_pages_per_doc: int = 10
     batch_worker_concurrency: int = 10
+    batch_worker_interval_seconds: int = 5
 
     @model_validator(mode="after")
     def resolve_aliases(self) -> "Settings":

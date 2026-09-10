@@ -158,7 +158,10 @@ async def upload_file_content(
         logger.error("Erro ao subir arquivo %s pro storage: %s", file_id, e)
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Erro ao salvar no storage: {e}")
 
-    # 5. Atualizar tabela, criar job e evento na mesma transação
+    # 5. Atualizar tabela, criar/reaproveitar job com chave idempotente e evento
+    extractor_version = "2.0.0"
+    job_idempotency_key = hashlib.sha256(f"{file_id}:{calc_hash}:{extractor_version}".encode()).hexdigest()
+
     async with conn.transaction():
         await conn.execute("SELECT 1 FROM import_files WHERE id = $1 FOR UPDATE", file_id)
         
@@ -171,28 +174,39 @@ async def upload_file_content(
             storage_key_ret, file_id
         )
         
-        job_exists = await conn.fetchval(
-            "SELECT 1 FROM processing_jobs WHERE file_id = $1 AND job_type = 'PARSE_FILE'",
-            file_id
-        )
-        if not job_exists:
-            await conn.execute(
-                """
-                INSERT INTO processing_jobs (file_id, job_type, status, available_at)
-                VALUES ($1, 'PARSE_FILE', 'PENDING', now())
-                """,
-                file_id
+        # Cria ou reaproveita o job com chave idempotente garantida
+        await conn.execute(
+            """
+            INSERT INTO processing_jobs (
+                file_id, job_type, status, available_at, idempotency_key,
+                extractor_version, source_system, created_at, updated_at
             )
+            VALUES ($1, 'PARSE_FILE', 'PENDING', now(), $2, $3, 'pipeline_v2', now(), now())
+            ON CONFLICT (idempotency_key) DO UPDATE SET
+                status = CASE
+                    WHEN processing_jobs.status IN ('COMPLETED', 'DONE') THEN processing_jobs.status
+                    ELSE 'PENDING'
+                END,
+                available_at = now(),
+                updated_at = now()
+            """,
+            file_id, job_idempotency_key, extractor_version
+        )
             
         await conn.execute(
             """
             INSERT INTO processing_events (file_id, status, details)
-            VALUES ($1, 'FILE_UPLOADED', $2::jsonb)
+            VALUES ($1, 'RECEIVED', $2::jsonb)
             """,
-            file_id, '{"action": "upload_complete"}'
+            file_id, json.dumps({
+                "action": "upload_complete",
+                "sha256": calc_hash,
+                "size_bytes": len(conteudo),
+                "idempotency_key": job_idempotency_key
+            })
         )
 
-    return {"status": "UPLOADED", "storage_key": storage_key_ret, "file_id": file_id}
+    return {"status": "UPLOADED", "storage_key": storage_key_ret, "file_id": file_id, "idempotency_key": job_idempotency_key}
 
 
 @router.get("/importacoes/{importacao_id}/resumo-lote")
@@ -248,6 +262,14 @@ async def obter_resumo_lote(importacao_id: str, dep=Depends(get_conn)):
         "aguardando": aguardando,
         "revisao_pendente": revisao,
         "progresso_pct": int(100 * concluidos / total_arquivos) if total_arquivos > 0 else 0,
+        "estados": {
+            "RECEIVING": status_map.get("RECEIVING", 0),
+            "UPLOADED": status_map.get("UPLOADED", 0),
+            "EXTRACTING": status_map.get("EXTRACTING", 0),
+            "DONE": status_map.get("DONE", 0),
+            "REVIEW_REQUIRED": status_map.get("REVIEW_REQUIRED", 0),
+            "FAILED": status_map.get("FAILED", 0),
+        },
         "detalhe_status": status_map,
         "arquivos": [
             {

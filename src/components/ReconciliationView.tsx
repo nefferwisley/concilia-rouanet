@@ -49,7 +49,6 @@ import { runRealtimeTripartiteReconciliation } from "../utils/shadowLedger";
 import { LangChainRagSelfCorrectionModal } from "./LangChainRagSelfCorrectionModal";
 import { resolveFiscalProvider } from "../utils/fiscalProvider";
 import { isTransactionReconciled } from "../utils/projectFinancialSummary";
-import { getTransactionRowKey } from "../utils/transactionRowKey";
 import {
   EXPENSE_CATEGORY_LABELS,
   EXPENSE_CATEGORY_ORDER,
@@ -58,6 +57,18 @@ import {
   resolveExpenseCategory,
 } from "../utils/expenseCategory";
 import { AttachmentThumbnail } from "./AttachmentThumbnail";
+import { StatusBadge } from "./common/StatusBadge";
+import { DocumentPreviewDrawer, DocumentPreviewData } from "./common/DocumentPreviewDrawer";
+import { TransactionMobileCard } from "./common/TransactionMobileCard";
+import { ReconciliationFilterBar, ColumnOption } from "./common/ReconciliationFilterBar";
+import {
+  filterTransactions,
+  sortTransactionsActionOriented,
+  SortCriteria,
+  FilterPreset,
+} from "../utils/reconciliationFilters";
+import { resolveProviderAndCompany } from "../utils/providerHelper";
+import { getTransactionRowKey } from "../utils/transactionRowKey";
 
 interface ReconciliationViewProps {
   transactions: BankTransaction[];
@@ -225,6 +236,33 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<ExpenseCategory | "ALL">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [period, setPeriod] = useState<string>("ALL");
+  const [activePreset, setActivePreset] = useState<FilterPreset>("ALL");
+  const [sortBy, setSortBy] = useState<SortCriteria>("ACTION_DEFAULT");
+  const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [previewDrawerData, setPreviewDrawerData] = useState<DocumentPreviewData | null>(null);
+  const [isPreviewDrawerOpen, setIsPreviewDrawerOpen] = useState<boolean>(false);
+
+  const [columns, setColumns] = useState<ColumnOption[]>([
+    { id: "fitid", label: "FITID / Autenticação", visible: true },
+    { id: "prestador", label: "Prestador / Razão Social", visible: true },
+    { id: "categoria", label: "Categoria da Despesa", visible: true },
+    { id: "rubrica", label: "Rubrica Orçamentária", visible: true },
+  ]);
+
+  const toggleColumn = (columnId: string) => {
+    setColumns((prev) =>
+      prev.map((col) => (col.id === columnId ? { ...col, visible: !col.visible } : col))
+    );
+  };
+
+  const isColVisible = (columnId: string) => {
+    const col = columns.find((c) => c.id === columnId);
+    return col ? col.visible : true;
+  };
+
   const [isAutoReconciling, setIsAutoReconciling] = useState(false);
   const [autoReconcileResult, setAutoReconcileResult] = useState<string | null>(null);
   const [matchCandidates, setMatchCandidates] = useState<TripartiteMatchCandidate[]>([]);
@@ -316,39 +354,43 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
 
   const debitsCount = debitTransactions.length;
 
-  const filteredTransactions = safeTransactions.filter((t) => {
-    if (!t) return false;
-    const isDebit = t.tipo === "DEBITO" || t.tipo === "TARIFA" || !t.tipo || (t as any).tipoMovimento === "DEBIT";
-    const isCredit = t.tipo === "CREDITO" || t.tipo === "RENDIMENTO" || t.tipo === "RESGATE" || (t as any).tipoMovimento === "CREDIT";
+  const availablePeriods = React.useMemo(() => {
+    const set = new Set<string>();
+    safeTransactions.forEach((tx) => {
+      const d = tx.data || tx.dataTransacao;
+      if (d && d.length >= 7) {
+        set.add(d.slice(0, 7));
+      }
+    });
+    return Array.from(set).sort().reverse();
+  }, [safeTransactions]);
 
-    let matchesStatus = true;
-    if (statusFilter === "CONCILIADO") {
-      matchesStatus = isDebit && isTxReconciled(t);
-    } else if (statusFilter === "PENDENTE") {
-      matchesStatus = isDebit && !isTxReconciled(t) && t.status !== "ALERTA_GLOSA";
-    } else if (statusFilter === "PARCIAL") {
-      matchesStatus = t.status === "PARCIAL";
-    } else if (statusFilter === "ALERTA_GLOSA") {
-      matchesStatus = t.status === "ALERTA_GLOSA";
-    } else if (statusFilter === "CREDITO") {
-      matchesStatus = isCredit;
-    }
+  const filteredTransactions = React.useMemo(() => {
+    return filterTransactions(safeTransactions, safeRubrics, {
+      searchQuery,
+      period,
+      statusFilter,
+      expenseCategory: expenseCategoryFilter,
+      preset: activePreset,
+      sortBy,
+      hasImportedBankStatement,
+    });
+  }, [
+    safeTransactions,
+    safeRubrics,
+    searchQuery,
+    period,
+    statusFilter,
+    expenseCategoryFilter,
+    activePreset,
+    sortBy,
+    hasImportedBankStatement,
+  ]);
 
-    const matchesExpenseCategory =
-      expenseCategoryFilter === "ALL" ||
-      resolveExpenseCategory(t, safeRubrics) === expenseCategoryFilter;
-
-    const q = (searchQuery || "").toLowerCase();
-    const matchesSearch =
-      !searchQuery ||
-      (t.descricaoExtrato || t.descricao || "").toLowerCase().includes(q) ||
-      (t.documentoBancario || "").toLowerCase().includes(q) ||
-      (t.id || "").toLowerCase().includes(q) ||
-      (t.favorecido || "").toLowerCase().includes(q) ||
-      (t.valor || 0).toString().includes(searchQuery);
-
-    return matchesStatus && matchesExpenseCategory && matchesSearch;
-  });
+  const totalPages = Math.ceil(filteredTransactions.length / (pageSize === -1 ? filteredTransactions.length || 1 : pageSize)) || 1;
+  const paginatedTransactions = pageSize === -1
+    ? filteredTransactions
+    : filteredTransactions.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Auto reconcile using Tripartite Engine (OFX x FISCAL x SALIC) + Gemini
   const handleAutoReconcile = async () => {
@@ -714,312 +756,507 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
         </div>
       </div>
 
-      {/* Filter and Search */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row gap-3 items-center justify-between">
-        <div className="flex flex-wrap gap-1.5">
-          <button
-            onClick={() => selectStatusFilter("ALL")}
-            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
-              statusFilter === "ALL"
-                ? "bg-emerald-500 text-slate-950 font-bold"
-                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-            }`}
-          >
-            Todos ({safeTransactions.length})
-          </button>
-          <button
-            onClick={() => selectStatusFilter("CONCILIADO")}
-            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
-              statusFilter === "CONCILIADO"
-                ? "bg-emerald-500 text-slate-950 font-bold"
-                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-            }`}
-          >
-            🟢 Conciliados ({reconciledDebitsCount})
-          </button>
-          <button
-            onClick={() => selectStatusFilter("PENDENTE")}
-            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
-              statusFilter === "PENDENTE"
-                ? "bg-amber-500 text-slate-950 font-bold"
-                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-            }`}
-          >
-            🟡 Pendentes ({pendingDebitsCount})
-          </button>
-          <button
-            onClick={() => selectStatusFilter("ALERTA_GLOSA")}
-            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
-              statusFilter === "ALERTA_GLOSA"
-                ? "bg-rose-500 text-white font-bold"
-                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-            }`}
-          >
-            🔴 Alerta MinC ({glosaDebitsCount})
-          </button>
-          <button
-            onClick={() => selectStatusFilter("CREDITO")}
-            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
-              statusFilter === "CREDITO"
-                ? "bg-sky-500 text-slate-950 font-bold"
-                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-            }`}
-          >
-            🔵 Aportes / Créditos ({creditTransactions.length})
-          </button>
+      {/* Filter and Search Bar (com compatibilidade e filtros avançados) */}
+      <div className="space-y-3">
+        {/* Quick status filter buttons (mantém contratos de teste) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col md:flex-row gap-3 items-center justify-between">
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              onClick={() => {
+                selectStatusFilter("ALL");
+                setCurrentPage(1);
+              }}
+              className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
+                statusFilter === "ALL"
+                  ? "bg-emerald-500 text-slate-950 font-bold"
+                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+              }`}
+            >
+              Todos ({safeTransactions.length})
+            </button>
+            <button
+              onClick={() => {
+                selectStatusFilter("CONCILIADO");
+                setCurrentPage(1);
+              }}
+              className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
+                statusFilter === "CONCILIADO"
+                  ? "bg-emerald-500 text-slate-950 font-bold"
+                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+              }`}
+            >
+              🟢 Conciliados ({reconciledDebitsCount})
+            </button>
+            <button
+              onClick={() => {
+                selectStatusFilter("PENDENTE");
+                setCurrentPage(1);
+              }}
+              className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
+                statusFilter === "PENDENTE"
+                  ? "bg-amber-500 text-slate-950 font-bold"
+                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+              }`}
+            >
+              🟡 Pendentes ({pendingDebitsCount})
+            </button>
+            <button
+              onClick={() => {
+                selectStatusFilter("ALERTA_GLOSA");
+                setCurrentPage(1);
+              }}
+              className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
+                statusFilter === "ALERTA_GLOSA"
+                  ? "bg-rose-500 text-white font-bold"
+                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+              }`}
+            >
+              🔴 Alerta MinC ({glosaDebitsCount})
+            </button>
+            <button
+              onClick={() => {
+                selectStatusFilter("CREDITO");
+                setCurrentPage(1);
+              }}
+              className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
+                statusFilter === "CREDITO"
+                  ? "bg-sky-500 text-slate-950 font-bold"
+                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+              }`}
+            >
+              🔵 Aportes / Créditos ({creditTransactions.length})
+            </button>
+          </div>
+
+          <div className="flex w-full md:w-auto items-center gap-2">
+            <div className="relative w-full sm:w-56">
+              <Filter className="w-3.5 h-3.5 absolute left-3 top-3 text-amber-400 pointer-events-none" />
+              <select
+                aria-label="Categoria da despesa"
+                value={expenseCategoryFilter}
+                onChange={(event) => {
+                  const category = event.target.value as ExpenseCategory | "ALL";
+                  setExpenseCategoryFilter(category);
+                  if (category !== "ALL") setStatusFilter("PENDENTE");
+                  setCurrentPage(1);
+                }}
+                className="w-full appearance-none bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg pl-8 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              >
+                <option value="ALL">Categoria da despesa</option>
+                {EXPENSE_CATEGORY_ORDER.map((category) => {
+                  const count = pendingCategoryCounts.get(category) || 0;
+                  return count > 0 ? (
+                    <option key={category} value={category}>
+                      {EXPENSE_CATEGORY_LABELS[category]} ({count})
+                    </option>
+                  ) : null;
+                })}
+              </select>
+            </div>
+          </div>
         </div>
 
-        <div className="flex w-full md:w-auto flex-col sm:flex-row gap-2">
-          <div className="relative w-full sm:w-56">
-            <Filter className="w-3.5 h-3.5 absolute left-3 top-3 text-amber-400 pointer-events-none" />
-            <select
-              aria-label="Categoria da despesa"
-              value={expenseCategoryFilter}
-              onChange={(event) => {
-                const category = event.target.value as ExpenseCategory | "ALL";
-                setExpenseCategoryFilter(category);
-                if (category !== "ALL") setStatusFilter("PENDENTE");
-              }}
-              className="w-full appearance-none bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg pl-8 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-amber-500"
-            >
-              <option value="ALL">Categoria da despesa</option>
-              {EXPENSE_CATEGORY_ORDER.map((category) => {
-                const count = pendingCategoryCounts.get(category) || 0;
-                return count > 0 ? (
-                  <option key={category} value={category}>
-                    {EXPENSE_CATEGORY_LABELS[category]} ({count})
-                  </option>
-                ) : null;
-              })}
-            </select>
-          </div>
-          <div className="relative w-full md:w-64">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Buscar lançamento, favorecido ou FITID..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 text-white text-xs rounded-lg pl-8 pr-3 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            />
-          </div>
-        </div>
+        {/* Unified Advanced Filter Bar com Presets, Busca, Ordenação e Densidade */}
+        <ReconciliationFilterBar
+          searchQuery={searchQuery}
+          onSearchChange={(q) => {
+            setSearchQuery(q);
+            setCurrentPage(1);
+          }}
+          period={period}
+          onPeriodChange={(p) => {
+            setPeriod(p);
+            setCurrentPage(1);
+          }}
+          availablePeriods={availablePeriods}
+          statusFilter={statusFilter}
+          onStatusChange={(s) => {
+            selectStatusFilter(s);
+            setCurrentPage(1);
+          }}
+          expenseCategory={expenseCategoryFilter}
+          onExpenseCategoryChange={(c) => {
+            setExpenseCategoryFilter(c);
+            if (c !== "ALL") setStatusFilter("PENDENTE");
+            setCurrentPage(1);
+          }}
+          activePreset={activePreset}
+          onPresetSelect={(p) => {
+            setActivePreset(p);
+            setCurrentPage(1);
+          }}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+          density={density}
+          onDensityChange={setDensity}
+          columns={columns}
+          onToggleColumn={toggleColumn}
+          totalItemsCount={safeTransactions.length}
+          filteredItemsCount={filteredTransactions.length}
+          onClearFilters={() => {
+            setSearchQuery("");
+            setPeriod("ALL");
+            setStatusFilter("ALL");
+            setExpenseCategoryFilter("ALL");
+            setActivePreset("ALL");
+            setSortBy("ACTION_DEFAULT");
+            setCurrentPage(1);
+          }}
+        />
       </div>
 
-      {/* Transactions Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow">
-        <div className="overflow-x-auto">
+      {/* Mobile Card List (visível em telas < md) */}
+      <div className="block md:hidden space-y-3">
+        {paginatedTransactions.length === 0 ? (
+          <div className="p-8 text-center bg-slate-900 border border-slate-800 rounded-2xl text-slate-400 text-xs">
+            Nenhum lançamento encontrado para os filtros selecionados.
+          </div>
+        ) : (
+          paginatedTransactions.map((tx, idx) => {
+            const globalIdx = (currentPage - 1) * (pageSize === -1 ? 0 : pageSize) + idx;
+            const matchedDoc = safeDocuments.find((d) => d.id === tx.matchedDocId || d.id === tx.idDocumentoFiscalVinculado);
+            const matchedRubric = safeRubrics.find((r) => r.id === tx.matchedRubricId || r.id === tx.rubricaId || r.id === tx.idRubricaVinculada);
+            return (
+              <TransactionMobileCard
+                key={getTransactionRowKey(tx, globalIdx)}
+                transaction={tx}
+                index={globalIdx}
+                matchedDoc={matchedDoc}
+                matchedRubric={matchedRubric}
+                projectId={project.id}
+                isReconciled={isTxReconciled(tx)}
+                onOpenLinkModal={(txToLink) => {
+                  setSelectedTxForLink(txToLink);
+                  setSelectedDocId("");
+                  setSelectedRubricId("");
+                }}
+                onUnlink={(txToUnlink) => handleUnlink(txToUnlink.id)}
+                onOpenPreview={(doc, txContext) => {
+                  const resolved = resolveProviderAndCompany(
+                    doc.fornecedorNome || txContext.favorecido || txContext.descricaoExtrato || "",
+                    doc.fornecedorCnpjCpf || txContext.cnpjCpfFavorecido || ""
+                  );
+                  setPreviewDrawerData({
+                    documentId: doc.id,
+                    fileName: doc.arquivoNotaNome || `NF ${doc.numeroDoc}`,
+                    tipoDoc: doc.tipo,
+                    numeroDoc: doc.numeroDoc,
+                    dataEmissao: doc.dataEmissao,
+                    favorecido: resolved.personName || resolved.companyName,
+                    cnpjCpf: resolved.cnpjCpf,
+                    valorBruto: doc.valorBruto,
+                    retencoes: {
+                      iss: doc.retencaoIss,
+                      irrf: doc.retencaoIrrf,
+                      inss: doc.retencaoInss,
+                    },
+                    valorLiquido: doc.valorLiquido,
+                    rubricaNome: matchedRubric?.nomeRubrica || matchedRubric?.nome,
+                    documentoBancario: txContext.documentoNumero || txContext.documentoBancario,
+                    dataCompensacao: txContext.data || txContext.dataTransacao,
+                    observacoes: txContext.observacoes,
+                  });
+                  setIsPreviewDrawerOpen(true);
+                }}
+              />
+            );
+          })
+        )}
+      </div>
+
+      {/* Transactions Table Desktop (visível em telas >= md com Sticky Header) */}
+      <div className="hidden md:block bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow">
+        <div className="overflow-x-auto max-h-[720px] overflow-y-auto relative">
           <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+            <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800 sticky top-0 z-10 shadow-sm">
               <tr>
-                <th className="px-3 py-3.5 text-center w-12"># Nº</th>
-                <th className="px-3 py-3.5">Data</th>
-                <th className="px-3 py-3.5">Descrição no Extrato BB</th>
-                <th className="px-3 py-3.5">FITID / Autenticação</th>
-                <th className="px-3 py-3.5 text-right">Valor (R$)</th>
-                <th className="px-4 py-3.5">Prestador / Razão Social da NF</th>
-                <th className="px-4 py-3.5">Documento Fiscal & Retenções (1:N)</th>
-                <th className="px-4 py-3.5">Aba / Rubrica Orçamentária</th>
-                <th className="px-3 py-3.5 text-center">Status</th>
-                <th className="px-3 py-3.5 text-center">Ações</th>
+                <th className="px-3 py-3.5 text-center w-12 bg-slate-950"># Nº</th>
+                <th className="px-3 py-3.5 bg-slate-950">Data</th>
+                <th className="px-3 py-3.5 bg-slate-950">Descrição no Extrato BB</th>
+                {isColVisible("fitid") && (
+                  <th className="px-3 py-3.5 bg-slate-950">FITID / Autenticação</th>
+                )}
+                <th className="px-3 py-3.5 text-right bg-slate-950">Valor (R$)</th>
+                {isColVisible("prestador") && (
+                  <th className="px-4 py-3.5 bg-slate-950">Prestador / Razão Social da NF</th>
+                )}
+                <th className="px-4 py-3.5 bg-slate-950">Documento Fiscal & Retenções (1:N)</th>
+                {isColVisible("rubrica") && (
+                  <th className="px-4 py-3.5 bg-slate-950">Aba / Rubrica Orçamentária</th>
+                )}
+                <th className="px-3 py-3.5 text-center bg-slate-950">Status</th>
+                <th className="px-3 py-3.5 text-center bg-slate-950">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80">
-              {filteredTransactions.map((tx, idx) => {
-                const matchedDoc = documents.find((d) => d.id === tx.matchedDocId || d.id === tx.idDocumentoFiscalVinculado);
-                const matchedRubric = rubrics.find((r) => r.id === tx.matchedRubricId || r.id === tx.rubricaId || r.id === tx.idRubricaVinculada);
-                const isReconciled = isTxReconciled(tx);
-                const hasRetentions = matchedDoc && ((matchedDoc.retencaoIrrf || 0) > 0 || (matchedDoc.retencaoIss || 0) > 0 || (matchedDoc.retencaoInss || 0) > 0);
-                const isDebit = tx.tipo === "DEBITO" || tx.tipo === "TARIFA" || !tx.tipo || (tx as any).tipoMovimento === "DEBIT";
-                const isCredit = tx.tipo === "CREDITO" || tx.tipo === "RENDIMENTO" || tx.tipo === "RESGATE" || (tx as any).tipoMovimento === "CREDIT";
-                const expenseCategory = resolveExpenseCategory(tx, safeRubrics);
+              {paginatedTransactions.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
+                    Nenhum lançamento encontrado para os filtros selecionados.
+                  </td>
+                </tr>
+              ) : (
+                paginatedTransactions.map((tx, idx) => {
+                  const globalIdx = (currentPage - 1) * (pageSize === -1 ? 0 : pageSize) + idx;
+                  const matchedDoc = safeDocuments.find((d) => d.id === tx.matchedDocId || d.id === tx.idDocumentoFiscalVinculado);
+                  const matchedRubric = safeRubrics.find((r) => r.id === tx.matchedRubricId || r.id === tx.rubricaId || r.id === tx.idRubricaVinculada);
+                  const isReconciled = isTxReconciled(tx);
+                  const hasRetentions = matchedDoc && ((matchedDoc.retencaoIrrf || 0) > 0 || (matchedDoc.retencaoIss || 0) > 0 || (matchedDoc.retencaoInss || 0) > 0);
+                  const isDebit = tx.tipo === "DEBITO" || tx.tipo === "TARIFA" || !tx.tipo || (tx as any).tipoMovimento === "DEBIT";
+                  const isCredit = tx.tipo === "CREDITO" || tx.tipo === "RENDIMENTO" || tx.tipo === "RESGATE" || (tx as any).tipoMovimento === "CREDIT";
+                  const expenseCategory = resolveExpenseCategory(tx, safeRubrics);
 
-                const rawDate = tx.data || (tx as any).dataTransacao || (tx as any).dtposted;
-                const rawDesc = tx.descricaoExtrato || tx.descricao || (tx as any).descricaoOriginalExtrato || (tx.favorecido ? `PAGTO - ${tx.favorecido}` : "DÉBITO EM CONTA BB");
-                const rawFitid = tx.documentoBancario || tx.documentoNumero || (tx as any).fitid || `BB-${String(idx + 1).padStart(4, "0")}`;
-                const fiscalFileName = matchedDoc?.arquivoNotaNome || `${matchedDoc?.tipo || "Documento"} ${matchedDoc?.numeroDoc || ""}`.trim();
-                const fiscalFileExtension = fiscalFileName.includes(".")
-                  ? fiscalFileName.slice(fiscalFileName.lastIndexOf(".") + 1).toUpperCase()
-                  : "DOC";
+                  const rawDate = tx.data || (tx as any).dataTransacao || (tx as any).dtposted;
+                  const rawDesc = tx.descricaoExtrato || tx.descricao || (tx as any).descricaoOriginalExtrato || (tx.favorecido ? `PAGTO - ${tx.favorecido}` : "DÉBITO EM CONTA BB");
+                  const rawFitid = tx.documentoBancario || tx.documentoNumero || (tx as any).fitid || `BB-${String(globalIdx + 1).padStart(4, "0")}`;
+                  const fiscalFileName = matchedDoc?.arquivoNotaNome || `${matchedDoc?.tipo || "Documento"} ${matchedDoc?.numeroDoc || ""}`.trim();
+                  const fiscalFileExtension = fiscalFileName.includes(".")
+                    ? fiscalFileName.slice(fiscalFileName.lastIndexOf(".") + 1).toUpperCase()
+                    : "DOC";
 
-                const providerInfo = resolveFiscalProvider(matchedDoc);
+                  const providerInfo = resolveFiscalProvider(matchedDoc);
+                  const resolved = resolveProviderAndCompany(
+                    matchedDoc?.fornecedorNome || tx.favorecido || tx.descricaoExtrato || "",
+                    matchedDoc?.fornecedorCnpjCpf || tx.cnpjCpfFavorecido || ""
+                  );
 
-                return (
-                  <tr key={getTransactionRowKey(tx, idx)} className="hover:bg-slate-800/40 transition">
-                    <td className="px-3 py-3 font-mono font-bold text-slate-400 text-center text-xs">
-                      #{String(idx + 1).padStart(3, "0")}
-                    </td>
-                    <td className="px-3 py-3 font-mono text-slate-300 whitespace-nowrap">{formatDate(rawDate)}</td>
-                    <td className="px-3 py-3 max-w-[220px]">
-                      <div className="font-semibold text-white truncate" title={rawDesc}>{rawDesc}</div>
-                      {tx.alertaRisco && (
-                        <div className="text-[11px] text-rose-400 flex items-center gap-1 mt-0.5">
-                          <AlertTriangle className="w-3 h-3 shrink-0" />
-                          <span className="line-clamp-1">{tx.alertaRisco}</span>
-                        </div>
+                  const rowPadClass = density === "compact" ? "py-2" : "py-3.5";
+
+                  return (
+                    <tr key={getTransactionRowKey(tx, globalIdx)} className="hover:bg-slate-800/40 transition">
+                      <td className={`px-3 ${rowPadClass} font-mono font-bold text-slate-400 text-center text-xs`}>
+                        #{String(globalIdx + 1).padStart(3, "0")}
+                      </td>
+                      <td className={`px-3 ${rowPadClass} font-mono text-slate-300 whitespace-nowrap`}>
+                        {formatDate(rawDate)}
+                      </td>
+                      <td className={`px-3 ${rowPadClass} max-w-[220px]`}>
+                        <div className="font-semibold text-white truncate" title={rawDesc}>{rawDesc}</div>
+                        {tx.alertaRisco && (
+                          <div className="text-[11px] text-rose-400 flex items-center gap-1 mt-0.5">
+                            <AlertTriangle className="w-3 h-3 shrink-0" />
+                            <span className="line-clamp-1">{tx.alertaRisco}</span>
+                          </div>
+                        )}
+                        {tx.observacoes && !tx.alertaRisco && (
+                          <div className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">{tx.observacoes}</div>
+                        )}
+                      </td>
+                      {isColVisible("fitid") && (
+                        <td className={`px-3 ${rowPadClass} font-mono text-slate-400 text-[11px] whitespace-nowrap`}>
+                          <span className="bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 font-mono">
+                            {rawFitid}
+                          </span>
+                        </td>
                       )}
-                      {tx.observacoes && !tx.alertaRisco && (
-                        <div className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">{tx.observacoes}</div>
+                      <td
+                        className={`px-3 ${rowPadClass} text-right font-mono font-bold whitespace-nowrap ${
+                          isDebit ? "text-rose-400" : "text-emerald-400"
+                        }`}
+                      >
+                        {isDebit ? "- " : "+ "}
+                        {formatCurrency(tx.valor)}
+                      </td>
+                      {isColVisible("prestador") && (
+                        <td className={`px-4 ${rowPadClass} max-w-[240px]`}>
+                          {isCredit ? (
+                            <div>
+                              <div className="font-semibold text-sky-300 flex items-center gap-1 text-xs">
+                                🏛️ Banco do Brasil • FSA / BRDE
+                              </div>
+                              <div className="text-[10px] text-slate-400">Conta Vinculada Captação / Rendimentos</div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className={`font-semibold truncate ${providerInfo.identified ? "text-slate-100" : "text-amber-300"}`} title={resolved.personName || resolved.companyName || providerInfo.name}>
+                                {resolved.personName || resolved.companyName || providerInfo.name}
+                              </div>
+                              {resolved.companyName && resolved.companyName !== resolved.personName && (
+                                <div className="text-[10px] text-slate-400 truncate" title={resolved.companyName}>
+                                  {resolved.companyName}
+                                </div>
+                              )}
+                              <div className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 truncate" title={resolved.cnpjCpf || providerInfo.taxId}>
+                                <Building className="w-3 h-3 shrink-0" /> {resolved.cnpjCpf || providerInfo.taxId || "CNPJ/CPF não identificado"}
+                              </div>
+                            </div>
+                          )}
+                        </td>
                       )}
-                    </td>
-                    <td className="px-3 py-3 font-mono text-slate-400 text-[11px] whitespace-nowrap">
-                      <span className="bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 font-mono">
-                        {rawFitid}
-                      </span>
-                    </td>
-                    <td
-                      className={`px-3 py-3 text-right font-mono font-bold whitespace-nowrap ${
-                        isDebit ? "text-rose-400" : "text-emerald-400"
-                      }`}
-                    >
-                      {isDebit ? "- " : "+ "}
-                      {formatCurrency(tx.valor)}
-                    </td>
-                    <td className="px-4 py-3 max-w-[240px]">
-                      {isCredit ? (
-                        <div>
-                          <div className="font-semibold text-sky-300 flex items-center gap-1 text-xs">
-                            🏛️ Banco do Brasil • FSA / BRDE
-                          </div>
-                          <div className="text-[10px] text-slate-400">Conta Vinculada Captação / Rendimentos</div>
-                        </div>
-                      ) : (
-                        <div>
-                          <div className={`font-semibold truncate ${providerInfo.identified ? "text-slate-100" : "text-amber-300"}`} title={providerInfo.name}>
-                            {providerInfo.name}
-                          </div>
-                          <div className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 truncate" title={providerInfo.taxId}>
-                            <Building className="w-3 h-3 shrink-0" /> {providerInfo.taxId || "CNPJ/CPF não identificado na NF"}
-                          </div>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 max-w-xs">
-                      {matchedDoc ? (
-                        <div className="flex items-start gap-2">
-                          <div aria-label={`Miniatura do arquivo ${fiscalFileName}`} className="shrink-0">
-                            <AttachmentThumbnail
-                              documentId={matchedDoc.id}
-                              detectedType={matchedDoc.arquivoMimeType || fiscalFileExtension}
-                              fileName={fiscalFileName}
-                              projectId={project.id}
-                              compact
-                            />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-semibold text-emerald-300">
-                                {matchedDoc.tipo} nº {matchedDoc.numeroDoc}
-                              </span>
+                      <td className={`px-4 ${rowPadClass} max-w-xs`}>
+                        {matchedDoc ? (
+                          <div className="flex items-start gap-2">
+                            <div aria-label={`Miniatura do arquivo ${fiscalFileName}`} className="shrink-0">
+                              <AttachmentThumbnail
+                                documentId={matchedDoc.id}
+                                detectedType={matchedDoc.arquivoMimeType || fiscalFileExtension}
+                                fileName={fiscalFileName}
+                                projectId={project.id}
+                                compact
+                                onOpenPreview={() => {
+                                  setPreviewDrawerData({
+                                    documentId: matchedDoc.id,
+                                    fileName: fiscalFileName,
+                                    tipoDoc: matchedDoc.tipo,
+                                    numeroDoc: matchedDoc.numeroDoc,
+                                    dataEmissao: matchedDoc.dataEmissao,
+                                    favorecido: resolved.personName || resolved.companyName,
+                                    cnpjCpf: resolved.cnpjCpf,
+                                    valorBruto: matchedDoc.valorBruto,
+                                    retencoes: {
+                                      iss: matchedDoc.retencaoIss,
+                                      irrf: matchedDoc.retencaoIrrf,
+                                      inss: matchedDoc.retencaoInss,
+                                    },
+                                    valorLiquido: matchedDoc.valorLiquido,
+                                    rubricaNome: matchedRubric?.nomeRubrica || matchedRubric?.nome,
+                                    documentoBancario: rawFitid,
+                                    dataCompensacao: rawDate,
+                                    observacoes: tx.observacoes,
+                                  });
+                                  setIsPreviewDrawerOpen(true);
+                                }}
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-semibold text-emerald-300">
+                                  {matchedDoc.tipo} nº {matchedDoc.numeroDoc}
+                                </span>
+                                {hasRetentions && (
+                                  <button
+                                    onClick={() => setInspectWithholdingDoc(matchedDoc)}
+                                    className="text-[10px] bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 px-1.5 py-0.2 rounded font-mono font-semibold"
+                                    title="Ver desmembramento 1:N de retenções tributárias"
+                                  >
+                                    1:N Retenção
+                                  </button>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                Bruto: {formatCurrency(matchedDoc.valorBruto)} | Líq: {formatCurrency(matchedDoc.valorLiquido)}
+                              </div>
                               {hasRetentions && (
-                                <button
-                                  onClick={() => setInspectWithholdingDoc(matchedDoc)}
-                                  className="text-[10px] bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 px-1.5 py-0.2 rounded font-mono font-semibold"
-                                  title="Ver desmembramento 1:N de retenções tributárias"
-                                >
-                                  1:N Retenção
-                                </button>
+                                <div className="text-[9px] text-amber-400 font-mono">
+                                  Retenções: {formatCurrency((matchedDoc.retencaoIrrf || 0) + (matchedDoc.retencaoIss || 0) + (matchedDoc.retencaoInss || 0))}
+                                </div>
                               )}
                             </div>
-                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                              Bruto: {formatCurrency(matchedDoc.valorBruto)} | Líq: {formatCurrency(matchedDoc.valorLiquido)}
-                            </div>
-                            {hasRetentions && (
-                              <div className="text-[9px] text-amber-400 font-mono">
-                                Retenções na Fonte: {formatCurrency((matchedDoc.retencaoIrrf || 0) + (matchedDoc.retencaoIss || 0) + (matchedDoc.retencaoInss || 0))}
-                              </div>
-                            )}
                           </div>
-                        </div>
-                      ) : isCredit ? (
-                        <span className="text-sky-400 text-[11px] font-medium">Recurso Federal Aportado</span>
-                      ) : (
-                        <span className="text-amber-400 italic text-[11px] flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
-                          {hasImportedBankStatement ? "Pendente de NF / Anexo" : "Aguardando extrato OFX/CSV"}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 max-w-xs">
-                      {matchedRubric ? (
-                        <div>
-                          <div className="text-slate-200 font-medium truncate" title={matchedRubric.nome || matchedRubric.nomeRubrica}>
-                            {matchedRubric.nome || matchedRubric.nomeRubrica}
-                          </div>
-                          <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5 flex-wrap">
-                            <span className="bg-slate-800 px-1.5 py-0.2 rounded text-[9px] font-mono border border-slate-700 text-slate-300">
-                              {matchedRubric.etapa}
-                            </span>
-                            <span className="font-mono text-slate-400">
-                              Item {matchedRubric.itemNumero || matchedRubric.codigo || matchedRubric.id}
-                            </span>
-                          </div>
-                        </div>
-                      ) : isCredit ? (
-                        <span className="text-slate-400 text-[11px]">0.0 - Captação e Rendimentos</span>
-                      ) : (
-                        <span className="text-slate-500 italic text-[11px]">Não vinculada</span>
-                      )}
-                      {isDebit && (
-                        <div className="mt-1">
-                          <span className="inline-flex rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
-                            {EXPENSE_CATEGORY_LABELS[expenseCategory]}
+                        ) : isCredit ? (
+                          <span className="text-sky-400 text-[11px] font-medium">Recurso Federal Aportado</span>
+                        ) : (
+                          <span className="text-amber-400 italic text-[11px] flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                            {hasImportedBankStatement ? "Pendente de NF / Anexo" : "Aguardando extrato OFX/CSV"}
                           </span>
-                        </div>
+                        )}
+                      </td>
+                      {isColVisible("rubrica") && (
+                        <td className={`px-4 ${rowPadClass} max-w-xs`}>
+                          {matchedRubric ? (
+                            <div>
+                              <div className="text-slate-200 font-medium truncate" title={matchedRubric.nome || matchedRubric.nomeRubrica}>
+                                {matchedRubric.nome || matchedRubric.nomeRubrica}
+                              </div>
+                              <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5 flex-wrap">
+                                <span className="bg-slate-800 px-1.5 py-0.2 rounded text-[9px] font-mono border border-slate-700 text-slate-300">
+                                  {matchedRubric.etapa}
+                                </span>
+                                <span className="font-mono text-slate-400">
+                                  Item {matchedRubric.itemNumero || matchedRubric.codigo || matchedRubric.id}
+                                </span>
+                              </div>
+                            </div>
+                          ) : isCredit ? (
+                            <span className="text-slate-400 text-[11px]">0.0 - Captação e Rendimentos</span>
+                          ) : (
+                            <span className="text-slate-500 italic text-[11px]">Não vinculada</span>
+                          )}
+                          {isDebit && isColVisible("categoria") && (
+                            <div className="mt-1">
+                              <span className="inline-flex rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
+                                {EXPENSE_CATEGORY_LABELS[expenseCategory]}
+                              </span>
+                            </div>
+                          )}
+                        </td>
                       )}
-                    </td>
-                    <td className="px-3 py-3 text-center whitespace-nowrap">
-                      {isReconciled ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Conciliado
-                        </span>
-                      ) : tx.status === "ALERTA_GLOSA" ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded">
-                          <AlertTriangle className="w-3 h-3 text-rose-400" /> Alerta MinC
-                        </span>
-                      ) : tx.status === "PARCIAL" ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded">
-                          <Clock className="w-3 h-3 text-amber-400" /> Parcial
-                        </span>
-                      ) : isCredit ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20 px-2 py-0.5 rounded">
-                          Aporte / Rend.
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-slate-800 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded">
-                          Pendente
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-center whitespace-nowrap">
-                      {isReconciled || tx.status === "ALERTA_GLOSA" ? (
-                        <button
-                          onClick={() => handleUnlink(tx.id)}
-                          title="Desvincular documento"
-                          className="text-xs text-slate-400 hover:text-rose-400 p-1 rounded hover:bg-slate-800 transition"
-                        >
-                          <Unlink className="w-3.5 h-3.5" />
-                        </button>
-                      ) : isDebit ? (
-                        <button
-                          onClick={() => {
-                            setSelectedTxForLink(tx);
-                            setSelectedDocId("");
-                            setSelectedRubricId("");
-                          }}
-                          className="text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-lg transition flex items-center gap-1 mx-auto"
-                        >
-                          <Link className="w-3 h-3" /> Vincular
-                        </button>
-                      ) : (
-                        <span className="text-slate-600 text-[10px]">-</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+                      <td className={`px-3 ${rowPadClass} text-center whitespace-nowrap`}>
+                        <StatusBadge status={tx} size="sm" />
+                      </td>
+                      <td className={`px-3 ${rowPadClass} text-center whitespace-nowrap`}>
+                        {isReconciled || tx.status === "ALERTA_GLOSA" ? (
+                          <button
+                            onClick={() => handleUnlink(tx.id)}
+                            title="Desvincular documento"
+                            className="text-xs text-slate-400 hover:text-rose-400 p-1 rounded hover:bg-slate-800 transition"
+                          >
+                            <Unlink className="w-3.5 h-3.5" />
+                          </button>
+                        ) : isDebit ? (
+                          <button
+                            onClick={() => {
+                              setSelectedTxForLink(tx);
+                              setSelectedDocId("");
+                              setSelectedRubricId("");
+                            }}
+                            className="text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-lg transition flex items-center gap-1 mx-auto"
+                          >
+                            <Link className="w-3 h-3" /> Vincular
+                          </button>
+                        ) : (
+                          <span className="text-slate-600 text-[10px]">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
+        </div>
+
+        {/* Controles de Paginação */}
+        <div className="p-3.5 bg-slate-950/60 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+          <div className="flex items-center gap-2">
+            <span>Itens por página:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 font-mono text-xs outline-none focus:border-emerald-500"
+            >
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={-1}>Todos ({filteredTransactions.length})</option>
+            </select>
+          </div>
+
+          {pageSize !== -1 && totalPages > 1 && (
+            <div className="flex items-center gap-2 font-mono">
+              <button
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 rounded-lg text-slate-200 transition"
+              >
+                Anterior
+              </button>
+              <span className="px-2">
+                Página <strong className="text-white">{currentPage}</strong> de {totalPages}
+              </span>
+              <button
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 rounded-lg text-slate-200 transition"
+              >
+                Próxima
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1340,6 +1577,13 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
           if (onUpdateAlerts) onUpdateAlerts(updatedAlts);
           setAutoReconcileResult("Sistema LangChain: Autocorreção aplicada com 100% de consistência no Shadow Ledger.");
         }}
+      />
+
+      {/* Visualizador de Documento Comprovatório em Gaveta / Modal */}
+      <DocumentPreviewDrawer
+        isOpen={isPreviewDrawerOpen}
+        onClose={() => setIsPreviewDrawerOpen(false)}
+        data={previewDrawerData}
       />
     </div>
   );

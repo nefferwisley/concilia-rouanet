@@ -246,11 +246,53 @@ def extract_native_pdf_text(bytes_data: bytes, max_pages: int = 10) -> dict | No
             return None
         
         texto_completo = []
+        is_ginfes_or_nfse = False
+
+        # 1. Primeira passada para checar presença de texto e identificar se é GINFES / NFS-e
+        raw_text_chunks = []
         for p in range(min(doc.page_count, max_pages)):
-            texto_completo.append(doc[p].get_text())
+            raw_text_chunks.append(doc[p].get_text())
+        sample_text = "\n".join(raw_text_chunks)
+        if len(sample_text.strip()) < 30:
+            return None
+
+        if "ginfes" in sample_text.lower() or "prefeitura" in sample_text.lower() or "nfs-e" in sample_text.lower() or "nota fiscal de serviços" in sample_text.lower():
+            is_ginfes_or_nfse = True
+
+        # 2. Se for GINFES ou NFS-e com desenho em múltiplas camadas, reordena por coordenadas visuais
+        if is_ginfes_or_nfse:
+            for p in range(min(doc.page_count, max_pages)):
+                page = doc[p]
+                words = page.get_text("words")  # (x0, y0, x1, y1, word, block_no, line_no, word_no)
+                if not words:
+                    texto_completo.append(page.get_text())
+                    continue
+                # Agrupa palavras na mesma linha vertical (tolerância 3.5 pt)
+                sorted_words = sorted(words, key=lambda w: (w[1], w[0]))
+                linhas = []
+                for w in sorted_words:
+                    matched_line = None
+                    for l in linhas:
+                        if abs(l["y"] - w[1]) < 3.5:
+                            matched_line = l
+                            break
+                    if matched_line:
+                        matched_line["words"].append(w)
+                    else:
+                        linhas.append({"y": w[1], "words": [w]})
+                linhas.sort(key=lambda l: l["y"])
+                page_lines = []
+                for l in linhas:
+                    l["words"].sort(key=lambda w: w[0])
+                    line_str = " ".join(w[4] for w in l["words"]).strip()
+                    if line_str:
+                        page_lines.append(line_str)
+                texto_completo.append("\n".join(page_lines))
+        else:
+            texto_completo = raw_text_chunks
         
         full_text = "\n".join(texto_completo).strip()
-        if len(full_text) < 50:
+        if len(full_text) < 30:
             return None
         
         # Procura CNPJ ou CPF
@@ -265,8 +307,12 @@ def extract_native_pdf_text(bytes_data: bytes, max_pages: int = 10) -> dict | No
             d, m, y = data_match.groups()
             data_emissao = f"{y}-{m}-{d}"
             
-        # Procura Valor Total
-        valor_match = re.search(r"(?:valor\s*total|total\s*da\s*nota|valor\s*l[ií]quido|valor\s*pago|total\s*a\s*pagar|valor)[^\d\n\r]*R?\$?\s*([\d\.]+(?:,\d{2}))", full_text, re.IGNORECASE)
+        # Procura Valor Total / Líquido
+        valor_match = re.search(
+            r"(?:valor\s*l[ií]quido|valor\s*dos\s*servi[çc]os|total\s*da\s*nota|valor\s*total|total\s*a\s*pagar|valor\s*pago|valor)[^\d\n\r]*R?\$?\s*([\d\.]+(?:,\d{2}))",
+            full_text,
+            re.IGNORECASE
+        )
         valor_total = None
         if valor_match:
             try:
@@ -275,25 +321,54 @@ def extract_native_pdf_text(bytes_data: bytes, max_pages: int = 10) -> dict | No
             except ValueError:
                 pass
                 
-        # Procura Número da Nota
-        num_match = re.search(r"(?:n[uú]mero|n[oº]|nf-?e|nfs-?e|recibo)[^\d\n\r]*(\d{1,9})", full_text, re.IGNORECASE)
+        # Procura Número da Nota / NFS-e
+        num_match = re.search(
+            r"(?:n[uú]mero\s*da\s*nfs-?e|n[uú]mero\s*da\s*nota|nfs-?e\s*n[oº]?|nota\s*fiscal\s*n[oº]?|n[uú]mero|n[oº]|recibo)[^\d\n\r]*(\d{1,9})",
+            full_text,
+            re.IGNORECASE
+        )
         numero_doc = num_match.group(1) if num_match else None
 
-        if cnpj_cpf and (valor_total is not None or data_emissao):
+        # Procura Recibo / Código de Verificação / RPS (específico GINFES)
+        recibo_match = re.search(
+            r"(?:c[oó]digo\s*de\s*verifica[çc][aã]o|recibo\s*provis[oó]rio|rps\s*n[oº]?|recibo\s*n[oº]?)[^\w\n\r]*([A-Za-z0-9\.\-]{4,30})",
+            full_text,
+            re.IGNORECASE
+        )
+        recibo_numero = recibo_match.group(1) if recibo_match else None
+
+        # Procura Razão Social / Nome do Prestador
+        razao_social = None
+        razao_match = re.search(
+            r"(?:prestador\s*de\s*servi[çc]os|nome\s*/\s*raz[aã]o\s*social|raz[aã]o\s*social)[^\n\r:]*[:\s]+([A-ZÀ-Ú\s\.\-]{4,60})",
+            full_text,
+            re.IGNORECASE
+        )
+        if razao_match:
+            candidate_razao = razao_match.group(1).strip()
+            if not any(stop in candidate_razao.upper() for stop in ["PREFEITURA", "MUNICIPIO", "SECRETARIA"]):
+                razao_social = candidate_razao
+
+        if (cnpj_cpf or numero_doc) and (valor_total is not None or data_emissao):
             dados = {
                 "CNPJ_CPF": cnpj_cpf,
-                "Razao_Social": None,
+                "Razao_Social": razao_social,
                 "Data_Emissao": data_emissao,
                 "Valor_Total": valor_total,
                 "Subtotal": valor_total,
                 "Impostos_Retencoes": 0.0,
-                "Descricao": full_text[:150],
+                "Descricao": full_text[:200],
                 "Chave_Acesso_NFe_44_digitos": None,
                 "Numero_Nota_Recibo": numero_doc,
+                "Recibo_Numero": recibo_numero,
                 "Forma_Pagamento": "Transferência / Boleto / PIX",
-                "_fonte_extracao": "native_pdf_text"
+                "_fonte_extracao": "native_pdf_text",
+                "is_ginfes": is_ginfes_or_nfse
             }
             confianca, motivos = _calcular_confianca(dados)
+            # Bonificação para documentos com número, valor e CNPJ/recibo
+            if numero_doc and valor_total and (cnpj_cpf or recibo_numero):
+                confianca = max(confianca, 0.88)
             dados["confianca_ocr"] = confianca
             dados["_motivos_confianca"] = motivos
             if confianca >= 0.70:
@@ -303,6 +378,7 @@ def extract_native_pdf_text(bytes_data: bytes, max_pages: int = 10) -> dict | No
         log.debug("Extração de texto nativo do PDF falhou (%s). Prosseguindo para OCR via IA.", e)
         
     return None
+
 
 
 def extract_documento(

@@ -76,7 +76,28 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         log.warning("Watcher de arquivos não pôde ser iniciado: %s", e)
 
+    # Inicia o loop contínuo de consumo da fila de jobs de processamento (Fase 2)
+    worker_task = None
+    worker_stop_event = None
+    try:
+        from backend.services.batch_worker_service import start_queue_worker_loop
+        worker_task, worker_stop_event = start_queue_worker_loop()
+        log.info("Fila persistida ativa: worker em background iniciado.")
+    except Exception as e:
+        log.warning("Não foi possível iniciar o worker da fila: %s", e)
+
     yield
+
+    # Encerra o worker da fila de forma limpa
+    if worker_stop_event and worker_task:
+        worker_stop_event.set()
+        worker_task.cancel()
+        try:
+            import asyncio
+            await asyncio.wait_for(worker_task, timeout=3.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
+            pass
+        log.info("Worker da fila de processamento encerrado.")
 
     # Encerra o watcher de arquivos limpo ao desligar a aplicação
     try:

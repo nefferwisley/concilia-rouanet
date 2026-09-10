@@ -54,6 +54,8 @@ import { applyTripartiteRateio } from "../utils/tripartiteRateio";
 import { LangChainRagSelfCorrectionModal } from "./LangChainRagSelfCorrectionModal";
 import { AttachmentThumbnail } from "./AttachmentThumbnail";
 import { resolveBankDocumentNumber } from "../utils/bankDocumentNumber";
+import { DocumentPreviewDrawer, DocumentPreviewData } from "./common/DocumentPreviewDrawer";
+import { resolveProviderAndCompany } from "../utils/providerHelper";
 
 interface TripartiteConciliationViewProps {
   project: PronacProject;
@@ -98,6 +100,9 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
   const [selectedPeriod, setSelectedPeriod] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
+  const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
+  const [previewDrawerData, setPreviewDrawerData] = useState<DocumentPreviewData | null>(null);
+  const [isPreviewDrawerOpen, setIsPreviewDrawerOpen] = useState(false);
 
   // Modal for Viewing GED Attachment
   const [viewingEntryGed, setViewingEntryGed] = useState<TripartiteEntry | null>(null);
@@ -789,18 +794,48 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
               </div>
             </div>
 
-            <div className="text-xs text-slate-400">
-              Mostrando <strong className="text-slate-200">{filteredEntries.length}</strong> de{" "}
-              {tripartiteEntries.length} lançamentos
+            <div className="flex items-center gap-3 text-xs text-slate-400">
+              <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setDensity("comfortable")}
+                  className={`px-2 py-1 rounded text-[11px] font-medium transition ${
+                    density === "comfortable"
+                      ? "bg-slate-800 text-emerald-400 shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                  title="Densidade Confortável"
+                >
+                  Confortável
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDensity("compact")}
+                  className={`px-2 py-1 rounded text-[11px] font-medium transition ${
+                    density === "compact"
+                      ? "bg-slate-800 text-emerald-400 shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                  title="Densidade Compacta"
+                >
+                  Compacto
+                </button>
+              </div>
+
+              <div>
+                Mostrando <strong className="text-slate-200">{filteredEntries.length}</strong> de{" "}
+                {tripartiteEntries.length} lançamentos
+              </div>
             </div>
           </div>
 
           {/* Tripartite Master Table */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl max-h-[750px] overflow-y-auto">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950/80 text-slate-400 font-semibold uppercase tracking-wider text-[10px] border-b border-slate-800">
+                <thead className="sticky top-0 z-10 bg-slate-950/95 backdrop-blur text-slate-400 font-semibold uppercase tracking-wider text-[10px] border-b border-slate-800">
                   <tr>
+                    <th className="py-3 px-3 w-12 text-center"># Nº</th>
                     <th className="py-3.5 px-4">Lançamento / Período</th>
                     <th className="py-3.5 px-4">Rubrica SALIC</th>
                     <th className="py-3.5 px-4">Prestador / Razão Social da NF</th>
@@ -812,25 +847,35 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {filteredEntries.map((entry) => {
+                  {filteredEntries.map((entry, idx) => {
                     const hasFiscal = Boolean(entry?.checkTripe?.fiscalDocAnexo);
                     const hasBank = hasImportedBankStatement && Boolean(entry?.checkTripe?.comprovanteBancarioAnexo);
                     const isTripodComplete = hasFiscal && hasBank;
                     const fiscalDocument = safeDocuments.find((document) => document.id === entry.idDocFiscal);
                     const fiscalProvider = resolveFiscalProvider(fiscalDocument);
+                    const resolved = resolveProviderAndCompany(
+                      fiscalDocument?.fornecedorNome || entry.fornecedor || "",
+                      fiscalDocument?.fornecedorCnpjCpf || entry.cnpjCpf || ""
+                    );
                     const transactionId = entry.idTransacaoBB || entry.idTransacao;
                     const bankTransaction = safeTransactions.find((transaction) => transaction.id === transactionId);
                     const bankDocumentNumber = bankTransaction
                       ? resolveBankDocumentNumber(bankTransaction, fiscalDocument, project.id)
                       : (entry.documentoBancarioNumero || "");
+                    const rowPadClass = density === "compact" ? "py-2 px-3" : "py-3.5 px-4";
 
                     return (
                       <tr
                         key={entry.idLancamento}
                         className="hover:bg-slate-800/40 transition group"
                       >
+                        {/* Numeração sequencial */}
+                        <td className={`${rowPadClass} font-mono font-bold text-slate-500 text-center whitespace-nowrap`}>
+                          #{String(idx + 1).padStart(3, "0")}
+                        </td>
+
                         {/* ID and Period */}
-                        <td className="py-3.5 px-4">
+                        <td className={rowPadClass}>
                           <div className="font-mono font-bold text-emerald-400">
                             {entry.idLancamento}
                           </div>
@@ -841,7 +886,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                         </td>
 
                         {/* Rubric */}
-                        <td className="py-3.5 px-4 max-w-[200px]">
+                        <td className={`${rowPadClass} max-w-[200px]`}>
                           <div className="font-medium text-slate-200 line-clamp-1">
                             {entry.descricaoRubrica}
                           </div>
@@ -851,10 +896,15 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                         </td>
 
                         {/* Provider & Doc */}
-                        <td className="py-3.5 px-4 max-w-[240px]">
-                          <div className={`font-medium line-clamp-2 ${fiscalProvider.identified ? "text-slate-200" : "text-amber-300"}`} title={fiscalProvider.name}>
-                            {fiscalProvider.name}
+                        <td className={`${rowPadClass} max-w-[240px]`}>
+                          <div className={`font-medium line-clamp-1 ${resolved.personName || resolved.companyName ? "text-slate-200" : "text-amber-300"}`} title={resolved.personName || resolved.companyName || fiscalProvider.name}>
+                            {resolved.personName || resolved.companyName || fiscalProvider.name}
                           </div>
+                          {resolved.companyName && resolved.companyName !== resolved.personName && (
+                            <div className="text-[10px] text-slate-400 truncate" title={resolved.companyName}>
+                              {resolved.companyName}
+                            </div>
+                          )}
                           <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
                             {entry.tipoDoc && entry.tipoDoc.includes("Passagem") ? (
                               <Plane className="w-3 h-3 text-sky-400 shrink-0" />
@@ -864,9 +914,9 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                               <Receipt className="w-3 h-3 text-slate-500 shrink-0" />
                             )}
                             <span className="font-mono text-slate-300">{entry.numeroDoc}</span>
-                            {fiscalProvider.taxId && (
-                              <span className="text-[10px] text-slate-500 truncate">
-                                • {fiscalProvider.taxId}
+                            {(resolved.cnpjCpf || fiscalProvider.taxId) && (
+                              <span className="text-[10px] text-emerald-400 font-medium truncate flex items-center gap-0.5">
+                                • {resolved.cnpjCpf || fiscalProvider.taxId}
                               </span>
                             )}
                           </div>
@@ -876,7 +926,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                         </td>
 
                         {/* Debito BB */}
-                        <td className="py-3.5 px-4">
+                        <td className={rowPadClass}>
                           <div className="font-bold text-sky-400 font-mono">
                             {formatCurrency(entry.valorDebitoBB)}
                           </div>
@@ -886,7 +936,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                         </td>
 
                         {/* Saldo bancário após o lançamento */}
-                        <td className="py-3.5 px-4">
+                        <td className={rowPadClass}>
                           <div className="font-medium text-slate-200 font-mono">
                             {bankTransaction?.saldoAposTransacao != null && Number.isFinite(Number(bankTransaction.saldoAposTransacao))
                               ? formatCurrency(Number(bankTransaction.saldoAposTransacao))
@@ -896,7 +946,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                         </td>
 
                         {/* Tripe Comprobatorio */}
-                        <td className="py-3.5 px-4">
+                        <td className={rowPadClass}>
                           <div className="space-y-1">
                             <div className="flex items-center gap-1.5">
                               {hasFiscal ? (
@@ -935,6 +985,29 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                                       detectedType="application/pdf"
                                       projectId={project.id}
                                       compact
+                                      onOpenPreview={() => {
+                                        setPreviewDrawerData({
+                                          documentId: entry.idDocFiscal,
+                                          fileName: entry.anexoFiscalUrl || `NF-${entry.numeroDoc || "vinculada"}.pdf`,
+                                          tipoDoc: entry.tipoDoc,
+                                          numeroDoc: entry.numeroDoc,
+                                          dataEmissao: fiscalDocument?.dataEmissao || entry.dataCompensacao,
+                                          favorecido: resolved.personName || resolved.companyName,
+                                          cnpjCpf: resolved.cnpjCpf,
+                                          valorBruto: entry.valorBrutoDoc || fiscalDocument?.valorBruto,
+                                          retencoes: {
+                                            iss: fiscalDocument?.retencaoIss,
+                                            irrf: fiscalDocument?.retencaoIrrf,
+                                            inss: fiscalDocument?.retencaoInss,
+                                          },
+                                          valorLiquido: fiscalDocument?.valorLiquido || entry.valorDebitoBB,
+                                          rubricaNome: entry.descricaoRubrica,
+                                          documentoBancario: bankDocumentNumber,
+                                          dataCompensacao: entry.dataCompensacao,
+                                          observacoes: entry.observacoes,
+                                        });
+                                        setIsPreviewDrawerOpen(true);
+                                      }}
                                     />
                                   )}
                                   {hasBank && (
@@ -944,6 +1017,25 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                                       detectedType="application/pdf"
                                       projectId={project.id}
                                       compact
+                                      onOpenPreview={() => {
+                                        setPreviewDrawerData({
+                                          documentId: entry.idDocFiscal,
+                                          fileName: entry.anexoComprovanteUrl || `BB-${entry.idTransacaoBB || "vinculado"}.pdf`,
+                                          tipoDoc: "Comprovante Bancário",
+                                          numeroDoc: bankDocumentNumber || entry.idTransacaoBB,
+                                          dataEmissao: entry.dataCompensacao,
+                                          favorecido: resolved.personName || resolved.companyName,
+                                          cnpjCpf: resolved.cnpjCpf,
+                                          valorBruto: entry.valorDebitoBB,
+                                          retencoes: undefined,
+                                          valorLiquido: entry.valorDebitoBB,
+                                          rubricaNome: entry.descricaoRubrica,
+                                          documentoBancario: bankDocumentNumber || entry.idTransacaoBB,
+                                          dataCompensacao: entry.dataCompensacao,
+                                          observacoes: entry.observacoes,
+                                        });
+                                        setIsPreviewDrawerOpen(true);
+                                      }}
                                     />
                                   )}
                                 </div>
@@ -997,7 +1089,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                         </td>
 
                         {/* Status SALIC */}
-                        <td className="py-3.5 px-4">
+                        <td className={rowPadClass}>
                           <button
                             onClick={() => handleToggleSalicStatus(entry)}
                             title="Clique para alternar o status no SALIC"
@@ -1016,7 +1108,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                         </td>
 
                         {/* Actions */}
-                        <td className="py-3.5 px-4 text-right">
+                        <td className={`${rowPadClass} text-right`}>
                           <div className="flex items-center justify-end gap-1.5">
                               <button
                                 onClick={() => openRateioModal(entry)}
@@ -1817,6 +1909,13 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
           </div>
         </div>
       )}
+
+      {/* Visualizador de Documento Comprovatório em Gaveta / Modal */}
+      <DocumentPreviewDrawer
+        isOpen={isPreviewDrawerOpen}
+        onClose={() => setIsPreviewDrawerOpen(false)}
+        data={previewDrawerData}
+      />
     </div>
   );
 };

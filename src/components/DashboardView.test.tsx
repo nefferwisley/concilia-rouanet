@@ -341,4 +341,26 @@ describe("Dashboard monetary integrity", () => {
     expect(markup).not.toContain("R$ 655.341,36");
     expect(markup).not.toContain("R$ 242.417,79");
   });
+
+  it("renders 3-second decision matrix, monthly reconciliation chart, and balance evolution", () => {
+    const markup = renderToStaticMarkup(
+      <DashboardView
+        project={project}
+        rubrics={initialRubrics["proj-1961"] || []}
+        transactions={[...reconciled, ...pending]}
+        documents={initialDocuments["proj-1961"] || []}
+        alerts={[]}
+        onNavigateTab={() => undefined}
+        onRunAiAudit={() => undefined}
+        isAuditing={false}
+      />,
+    );
+
+    expect(markup).toContain("Painel de Decisão Imediata (≤ 3s)");
+    expect(markup).toContain("Valor em Risco");
+    expect(markup).toContain("Sem Nota Fiscal");
+    expect(markup).toContain("Comp. Bancários");
+    expect(markup).toContain("Evolução Mensal de Conciliação");
+    expect(markup).toContain("Linha Temporal do Saldo em Conta");
+  });
 });
