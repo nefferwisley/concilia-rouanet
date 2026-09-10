@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -9,37 +9,75 @@ import {
   Eye,
   Split,
   Calendar,
+  Folder,
+  Trash2,
+  FilePlus2,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "../../utils/formatters";
 import { resolveProviderAndCompany } from "../../utils/providerHelper";
 import { StatusBadge } from "./StatusBadge";
 import { AttachmentThumbnail } from "../AttachmentThumbnail";
-import type { TripartiteEntry, FiscalDocument, BankTransaction, BudgetRubric } from "../../types";
+import type {
+  TripartiteEntry,
+  FiscalDocument,
+  BankTransaction,
+  BudgetRubric,
+  PronacProject,
+} from "../../types";
+import type { DocumentPreviewData } from "./DocumentPreviewDrawer";
 
 interface TripartiteMobileCardProps {
   entry: TripartiteEntry;
   index: number;
-  fiscalDocument?: FiscalDocument;
-  bankTransaction?: BankTransaction;
-  rubric?: BudgetRubric;
-  projectId: string;
-  onOpenPreview?: (type: "NF" | "BB") => void;
-  onOpenRateio?: () => void;
-  onToggleSalicStatus?: () => void;
+  /** Full project object from parent */
+  project: PronacProject;
+  /** All fiscal documents for lookup */
+  documents: FiscalDocument[];
+  /** All bank transactions for lookup */
+  transactions: BankTransaction[];
+  /** All rubrics for lookup */
+  rubrics: BudgetRubric[];
+  /** Whether a bank statement OFX/CSV has been imported */
+  hasImportedBankStatement?: boolean;
+  /** Open the document preview drawer with pre-filled data */
+  onOpenPreview?: (data: DocumentPreviewData) => void;
+  /** Open the rateio (split) modal for this entry */
+  onOpenRateio?: (entry: TripartiteEntry) => void;
+  /** Toggle the SALIC status to the next state */
+  onToggleSalicStatus?: (entry: TripartiteEntry) => void;
+  /** Open the GED file viewer for this entry */
+  onOpenGed?: (entry: TripartiteEntry | null) => void;
+  /** Delete this entry */
+  onDelete?: (idLancamento: string) => void;
+  /** Quick-create a fiscal document and link it to this entry */
+  onQuickCreateDoc?: (entry: TripartiteEntry) => void;
 }
 
 export const TripartiteMobileCard: React.FC<TripartiteMobileCardProps> = ({
   entry,
   index,
-  fiscalDocument,
-  bankTransaction,
-  rubric,
-  projectId,
+  project,
+  documents,
+  transactions,
+  rubrics,
+  hasImportedBankStatement = false,
   onOpenPreview,
   onOpenRateio,
   onToggleSalicStatus,
+  onOpenGed,
+  onDelete,
+  onQuickCreateDoc,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Derive linked fiscal document, bank transaction, and rubric from arrays
+  const fiscalDocument = documents.find(
+    (d) => d.id === entry.idDocFiscal || d.numeroDoc === entry.numeroDoc
+  );
+  const bankTransaction = transactions.find(
+    (t) => t.id === entry.idTransacaoBB || t.fitid === entry.idTransacaoBB
+  );
+  const rubric = rubrics.find((r) => r.id === entry.idRubrica);
 
   const resolved = resolveProviderAndCompany(
     fiscalDocument?.fornecedorNome || entry.fornecedor || "",
@@ -51,12 +89,41 @@ export const TripartiteMobileCard: React.FC<TripartiteMobileCardProps> = ({
   const isTripodComplete = hasFiscal && hasBank;
 
   const saldoAposDebito =
-    bankTransaction?.saldoAposTransacao != null && Number.isFinite(Number(bankTransaction.saldoAposTransacao))
+    bankTransaction?.saldoAposTransacao != null &&
+    Number.isFinite(Number(bankTransaction.saldoAposTransacao))
       ? formatCurrency(Number(bankTransaction.saldoAposTransacao))
       : null;
 
-  const rubricName = entry.descricaoRubrica || rubric?.nomeRubrica || rubric?.nome || "Rubrica não vinculada";
+  const rubricName =
+    entry.descricaoRubrica || rubric?.nomeRubrica || rubric?.nome || "Rubrica não vinculada";
   const formattedDate = formatDate(entry.dataCompensacao || entry.dataEmissao);
+
+  /** Build a DocumentPreviewData object from entry + derived data for the drawer */
+  const buildPreviewData = (): DocumentPreviewData => ({
+    documentId: entry.idDocFiscal,
+    fileName:
+      fiscalDocument?.nomeArquivo ||
+      entry.anexoFiscalUrl ||
+      `NF-${entry.numeroDoc || entry.idLancamento}.pdf`,
+    tipoDoc: entry.tipoDoc,
+    numeroDoc: entry.numeroDoc,
+    dataEmissao: entry.dataEmissao,
+    favorecido: resolved.personName || resolved.companyName,
+    cnpjCpf: resolved.cnpjCpf,
+    valorBruto: entry.valorBrutoDoc,
+    retencoes: {
+      iss: entry.retencoes?.iss,
+      irrf: entry.retencoes?.irrf,
+      inss: entry.retencoes?.inss,
+    },
+    valorLiquido: entry.valorLiquidoPagar,
+    rubricaNome: rubricName,
+    documentoBancario: entry.idTransacaoBB,
+    dataCompensacao: entry.dataCompensacao,
+    observacoes: entry.observacoes,
+    comprovanteBancarioUrl: entry.anexoComprovanteUrl,
+    statusComprovacao: entry.statusSalic,
+  });
 
   return (
     <div
@@ -91,9 +158,7 @@ export const TripartiteMobileCard: React.FC<TripartiteMobileCardProps> = ({
           <p className="text-xs text-slate-400 line-clamp-1 mt-0.5">{resolved.companyName}</p>
         )}
         {resolved.cnpjCpf && (
-          <span className="text-xs font-mono text-emerald-400 mt-0.5 block">
-            {resolved.cnpjCpf}
-          </span>
+          <span className="text-xs font-mono text-emerald-400 mt-0.5 block">{resolved.cnpjCpf}</span>
         )}
       </div>
 
@@ -146,17 +211,27 @@ export const TripartiteMobileCard: React.FC<TripartiteMobileCardProps> = ({
         </span>
       </div>
 
-      {/* Linha de Ações: [ Ver documentos ] [ Rateio ] [ Mais detalhes ] */}
+      {/* Linha de Ações */}
       <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-800/80">
         {hasFiscal && onOpenPreview ? (
           <button
             type="button"
-            onClick={() => onOpenPreview("NF")}
+            onClick={() => onOpenPreview(buildPreviewData())}
             className="flex-1 min-h-[44px] px-3 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95"
             aria-label={`Ver documentos de ${resolved.personName || "lançamento"}`}
           >
             <Eye className="w-4 h-4 text-emerald-400" aria-hidden="true" />
             <span>Ver docs</span>
+          </button>
+        ) : !hasFiscal && onQuickCreateDoc ? (
+          <button
+            type="button"
+            onClick={() => onQuickCreateDoc(entry)}
+            className="flex-1 min-h-[44px] px-3 py-2 text-xs font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95"
+            aria-label={`Vincular documento ao lançamento #${String(index + 1).padStart(3, "0")}`}
+          >
+            <FilePlus2 className="w-4 h-4 text-amber-400" aria-hidden="true" />
+            <span>Vincular NF</span>
           </button>
         ) : (
           <button
@@ -169,17 +244,28 @@ export const TripartiteMobileCard: React.FC<TripartiteMobileCardProps> = ({
           </button>
         )}
 
-        {onOpenRateio ? (
+        {onOpenRateio && (
           <button
             type="button"
-            onClick={onOpenRateio}
+            onClick={() => onOpenRateio(entry)}
             className="flex-1 min-h-[44px] px-3 py-2 text-xs font-semibold bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95"
             aria-label={`Rateio do lançamento #${String(index + 1).padStart(3, "0")}`}
           >
             <Split className="w-4 h-4 text-indigo-400" aria-hidden="true" />
             <span>Rateio</span>
           </button>
-        ) : null}
+        )}
+
+        {onOpenGed && (
+          <button
+            type="button"
+            onClick={() => onOpenGed(entry)}
+            className="min-h-[44px] px-3 py-2 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl flex items-center justify-center gap-1 transition"
+            aria-label={`GED do lançamento #${String(index + 1).padStart(3, "0")}`}
+          >
+            <Folder className="w-4 h-4" aria-hidden="true" />
+          </button>
+        )}
 
         <button
           type="button"
@@ -188,8 +274,12 @@ export const TripartiteMobileCard: React.FC<TripartiteMobileCardProps> = ({
           aria-expanded={isExpanded}
           aria-label={isExpanded ? "Recolher detalhes" : "Mais detalhes do lançamento"}
         >
-          <span>{isExpanded ? "Menos" : "Mais detalhes"}</span>
-          {isExpanded ? <ChevronUp className="w-4 h-4" aria-hidden="true" /> : <ChevronDown className="w-4 h-4" aria-hidden="true" />}
+          <span>{isExpanded ? "Menos" : "Mais"}</span>
+          {isExpanded ? (
+            <ChevronUp className="w-4 h-4" aria-hidden="true" />
+          ) : (
+            <ChevronDown className="w-4 h-4" aria-hidden="true" />
+          )}
         </button>
       </div>
 
@@ -216,25 +306,37 @@ export const TripartiteMobileCard: React.FC<TripartiteMobileCardProps> = ({
               </div>
             </div>
 
-            {entry.retencoes && (entry.retencoes.irrf > 0 || entry.retencoes.iss > 0 || entry.retencoes.inss > 0) && (
-              <div className="pt-2 border-t border-slate-800 text-xs text-slate-400 flex flex-wrap gap-2">
-                {entry.retencoes.irrf > 0 && (
-                  <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                    IRRF: <strong className="text-slate-200 font-mono">{formatCurrency(entry.retencoes.irrf)}</strong>
-                  </span>
-                )}
-                {entry.retencoes.iss > 0 && (
-                  <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                    ISS: <strong className="text-slate-200 font-mono">{formatCurrency(entry.retencoes.iss)}</strong>
-                  </span>
-                )}
-                {entry.retencoes.inss > 0 && (
-                  <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                    INSS: <strong className="text-slate-200 font-mono">{formatCurrency(entry.retencoes.inss)}</strong>
-                  </span>
-                )}
-              </div>
-            )}
+            {entry.retencoes &&
+              (entry.retencoes.irrf > 0 ||
+                entry.retencoes.iss > 0 ||
+                entry.retencoes.inss > 0) && (
+                <div className="pt-2 border-t border-slate-800 text-xs text-slate-400 flex flex-wrap gap-2">
+                  {entry.retencoes.irrf > 0 && (
+                    <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                      IRRF:{" "}
+                      <strong className="text-slate-200 font-mono">
+                        {formatCurrency(entry.retencoes.irrf)}
+                      </strong>
+                    </span>
+                  )}
+                  {entry.retencoes.iss > 0 && (
+                    <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                      ISS:{" "}
+                      <strong className="text-slate-200 font-mono">
+                        {formatCurrency(entry.retencoes.iss)}
+                      </strong>
+                    </span>
+                  )}
+                  {entry.retencoes.inss > 0 && (
+                    <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                      INSS:{" "}
+                      <strong className="text-slate-200 font-mono">
+                        {formatCurrency(entry.retencoes.inss)}
+                      </strong>
+                    </span>
+                  )}
+                </div>
+              )}
           </div>
 
           {/* Status SALIC com Toggle */}
@@ -243,7 +345,7 @@ export const TripartiteMobileCard: React.FC<TripartiteMobileCardProps> = ({
             {onToggleSalicStatus ? (
               <button
                 type="button"
-                onClick={onToggleSalicStatus}
+                onClick={() => onToggleSalicStatus(entry)}
                 className="px-2.5 py-1 text-xs font-bold rounded-lg border border-slate-700 bg-slate-800 text-slate-200 hover:border-emerald-500 transition cursor-pointer"
                 title="Clique para alternar o status SALIC"
               >
@@ -253,6 +355,21 @@ export const TripartiteMobileCard: React.FC<TripartiteMobileCardProps> = ({
               <span className="text-slate-200 font-bold">{entry.statusSalic || "Pendente"}</span>
             )}
           </div>
+
+          {/* Ações de risco */}
+          {onDelete && (
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => onDelete(entry.idLancamento)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition"
+                aria-label={`Remover lançamento #${String(index + 1).padStart(3, "0")}`}
+              >
+                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Remover</span>
+              </button>
+            </div>
+          )}
 
           {/* Miniaturas de GED */}
           {(hasFiscal || hasBank) && (
@@ -267,9 +384,11 @@ export const TripartiteMobileCard: React.FC<TripartiteMobileCardProps> = ({
                     <AttachmentThumbnail
                       documentId={entry.idDocFiscal}
                       fileName={entry.anexoFiscalUrl || `NF-${entry.numeroDoc || "vinculada"}.pdf`}
-                      projectId={projectId}
+                      projectId={project.id}
                       compact={true}
-                      onOpenPreview={() => onOpenPreview && onOpenPreview("NF")}
+                      onOpenPreview={
+                        onOpenPreview ? () => onOpenPreview(buildPreviewData()) : undefined
+                      }
                     />
                   </div>
                 )}
@@ -278,10 +397,23 @@ export const TripartiteMobileCard: React.FC<TripartiteMobileCardProps> = ({
                     <span className="text-xs text-slate-400 block mb-1">Comp. BB</span>
                     <AttachmentThumbnail
                       documentId={entry.idDocFiscal}
-                      fileName={entry.anexoComprovanteUrl || `BB-${entry.idTransacaoBB || "vinculado"}.pdf`}
-                      projectId={projectId}
+                      fileName={
+                        entry.anexoComprovanteUrl ||
+                        `BB-${entry.idTransacaoBB || "vinculado"}.pdf`
+                      }
+                      projectId={project.id}
                       compact={true}
-                      onOpenPreview={() => onOpenPreview && onOpenPreview("BB")}
+                      onOpenPreview={
+                        onOpenPreview
+                          ? () =>
+                              onOpenPreview({
+                                ...buildPreviewData(),
+                                fileName:
+                                  entry.anexoComprovanteUrl ||
+                                  `BB-${entry.idTransacaoBB || "vinculado"}.pdf`,
+                              })
+                          : undefined
+                      }
                     />
                   </div>
                 )}
