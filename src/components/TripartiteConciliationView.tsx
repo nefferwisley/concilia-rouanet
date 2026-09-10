@@ -46,7 +46,9 @@ import {
   Zap,
   FileText,
   MessageSquareWarning,
-  Bot
+  Bot,
+  ArrowUpDown,
+  RotateCcw,
 } from "lucide-react";
 import { runRealtimeTripartiteReconciliation } from "../utils/shadowLedger";
 import { resolveFiscalProvider } from "../utils/fiscalProvider";
@@ -56,6 +58,7 @@ import { AttachmentThumbnail } from "./AttachmentThumbnail";
 import { resolveBankDocumentNumber } from "../utils/bankDocumentNumber";
 import { DocumentPreviewDrawer, DocumentPreviewData } from "./common/DocumentPreviewDrawer";
 import { resolveProviderAndCompany } from "../utils/providerHelper";
+import { TripartiteMobileCard } from "./common/TripartiteMobileCard";
 
 interface TripartiteConciliationViewProps {
   project: PronacProject;
@@ -100,9 +103,17 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
   const [selectedPeriod, setSelectedPeriod] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
+  const [sortBy, setSortBy] = useState<"default" | "risco" | "valor_desc" | "valor_asc" | "data_desc" | "data_asc" | "status">("default");
   const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
   const [previewDrawerData, setPreviewDrawerData] = useState<DocumentPreviewData | null>(null);
   const [isPreviewDrawerOpen, setIsPreviewDrawerOpen] = useState(false);
+
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setSelectedPeriod("ALL");
+    setFilterStatus("ALL");
+    setSortBy("default");
+  };
 
   // Modal for Viewing GED Attachment
   const [viewingEntryGed, setViewingEntryGed] = useState<TripartiteEntry | null>(null);
@@ -340,6 +351,45 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
       return matchesPeriod && matchesSearch && matchesStatus;
     });
   }, [safeTripartiteEntries, selectedPeriod, searchQuery, filterStatus, hasImportedBankStatement]);
+
+  const sortedEntries = useMemo(() => {
+    return [...filteredEntries].sort((a, b) => {
+      if (sortBy === "risco") {
+        const isPendingA = !a.checkTripe?.fiscalDocAnexo || !a.checkTripe?.comprovanteBancarioAnexo;
+        const isPendingB = !b.checkTripe?.fiscalDocAnexo || !b.checkTripe?.comprovanteBancarioAnexo;
+        if (isPendingA !== isPendingB) return isPendingA ? -1 : 1;
+        return (Number(b.valorDebitoBB) || 0) - (Number(a.valorDebitoBB) || 0);
+      }
+      if (sortBy === "valor_desc") {
+        return (
+          (Number(b.valorDebitoBB) || Number(b.valorBrutoDoc) || 0) -
+          (Number(a.valorDebitoBB) || Number(a.valorBrutoDoc) || 0)
+        );
+      }
+      if (sortBy === "valor_asc") {
+        return (
+          (Number(a.valorDebitoBB) || Number(a.valorBrutoDoc) || 0) -
+          (Number(b.valorDebitoBB) || Number(b.valorBrutoDoc) || 0)
+        );
+      }
+      if (sortBy === "data_desc") {
+        const dA = a.dataCompensacao || a.dataEmissao || "";
+        const dB = b.dataCompensacao || b.dataEmissao || "";
+        return dB.localeCompare(dA);
+      }
+      if (sortBy === "data_asc") {
+        const dA = a.dataCompensacao || a.dataEmissao || "";
+        const dB = b.dataCompensacao || b.dataEmissao || "";
+        return dA.localeCompare(dB);
+      }
+      if (sortBy === "status") {
+        const isCompA = a.statusSalic === "Comprovado 100%";
+        const isCompB = b.statusSalic === "Comprovado 100%";
+        if (isCompA !== isCompB) return isCompA ? 1 : -1;
+      }
+      return 0;
+    });
+  }, [filteredEntries, sortBy]);
 
   // Total statistics for the selected scope
   const stats = useMemo(() => {
