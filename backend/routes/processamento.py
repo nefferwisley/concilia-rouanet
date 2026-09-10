@@ -3,7 +3,7 @@ backend/routes/processamento.py — Endpoints HTTP para orquestração assíncro
 idempotente e auditável do pipeline contábil e de conciliação do Concilia Rouanet.
 """
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from backend.services.processamento_service import (
@@ -20,8 +20,15 @@ from backend.services.processamento_service import (
     STATUS_FAILED,
     STATUS_INTERRUPTED,
 )
+from backend.database import get_conn
 
 router = APIRouter(prefix="/api/v1", tags=["Processamento e Conciliação"])
+
+
+async def _require_project_access(conn, projeto_id: str) -> None:
+    exists = await conn.fetchval("SELECT id FROM projetos WHERE id = $1", projeto_id)
+    if not exists:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Projeto não encontrado (ou sem permissão).")
 
 
 class IniciarProcessamentoResponse(BaseModel):
@@ -42,11 +49,12 @@ class IniciarProcessamentoResponse(BaseModel):
     response_model=IniciarProcessamentoResponse,
     summary="Inicia o pipeline contábil e de conciliação assíncrono para o projeto",
 )
-def iniciar_processamento(
+async def iniciar_processamento(
     projeto_id: str,
     payload: ProcessarRequest,
     background_tasks: BackgroundTasks,
     request: Request,
+    dep=Depends(get_conn),
 ):
     """
     Inicia o processamento contábil e conciliação em segundo plano.
@@ -54,6 +62,8 @@ def iniciar_processamento(
     submetido repetidamente enquanto um job já existe ou está rodando, o job existente
     é retornado sem duplicar registros contábeis.
     """
+    conn, user_id = dep
+    await _require_project_access(conn, projeto_id)
     idempotency_key = calcular_chave_idempotencia(projeto_id, payload)
 
     # Se não for solicitado reprocessamento forçado, verifica se já existe
@@ -76,9 +86,7 @@ def iniciar_processamento(
     job_id = criar_job(projeto_id, payload, idempotency_key)
 
     # Obter identificador do usuário ou agente se presente
-    actor_id = getattr(request.state, "user_id", None) if hasattr(request, "state") else None
-    if not actor_id:
-        actor_id = "AI_AGENT_ENGINE"
+    actor_id = user_id
 
     # Agenda a execução em background
     background_tasks.add_task(
@@ -107,13 +115,15 @@ def iniciar_processamento(
     response_model=JobStatusResponse,
     summary="Consulta o status e o progresso do job de processamento",
 )
-def consultar_status_processamento(job_id: str):
+async def consultar_status_processamento(job_id: str, dep=Depends(get_conn)):
     job = obter_job(job_id)
     if not job:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Job de processamento {job_id} não encontrado.",
         )
+    conn, _ = dep
+    await _require_project_access(conn, str(job.get("projeto_id", "")))
     resultado = job.get("resultado") or {}
     return JobStatusResponse(
         job_id=job["id"],
@@ -140,7 +150,9 @@ def consultar_status_processamento(job_id: str):
     response_model=Optional[JobStatusResponse],
     summary="Consulta o job mais recente para o projeto",
 )
-def consultar_processamento_atual(projeto_id: str):
+async def consultar_processamento_atual(projeto_id: str, dep=Depends(get_conn)):
+    conn, _ = dep
+    await _require_project_access(conn, projeto_id)
     job = obter_processamento_atual(projeto_id)
     if not job:
         return None
@@ -171,10 +183,11 @@ def consultar_processamento_atual(projeto_id: str):
     response_model=IniciarProcessamentoResponse,
     summary="Reinicia a execução de um job que falhou ou foi interrompido",
 )
-def reprocessar_job(
+async def reprocessar_job(
     job_id: str,
     background_tasks: BackgroundTasks,
     request: Request,
+    dep=Depends(get_conn),
 ):
     job = obter_job(job_id)
     if not job:
@@ -183,14 +196,14 @@ def reprocessar_job(
             detail=f"Job {job_id} não encontrado para reprocessamento.",
         )
 
-    projeto_id = job.get("projeto_id", "1961")
+    conn, user_id = dep
+    projeto_id = job.get("projeto_id", "")
+    await _require_project_access(conn, str(projeto_id))
     raw_payload = job.get("payload") or {}
     payload = ProcessarRequest(**{k: v for k, v in raw_payload.items() if k in ProcessarRequest.model_fields})
     idempotency_key = raw_payload.get("idempotency_key") or calcular_chave_idempotencia(projeto_id, payload)
 
-    actor_id = getattr(request.state, "user_id", None) if hasattr(request, "state") else None
-    if not actor_id:
-        actor_id = "HUMAN_AUDITOR"
+    actor_id = user_id
 
     background_tasks.add_task(
         executar_pipeline,

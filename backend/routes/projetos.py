@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import asyncpg
@@ -8,6 +9,16 @@ from backend.models import ProjetoCreate, ProjetoOut, ProjetoUpdate
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/projetos", tags=["projetos"])
+
+
+async def _require_project(conn, projeto_id: str):
+    project = await conn.fetchrow(
+        "SELECT id, pronac, nome, proponente, banco, created_at, updated_at FROM projetos WHERE id = $1",
+        projeto_id,
+    )
+    if not project:
+        raise HTTPException(404, "Projeto não encontrado (ou sem permissão).")
+    return project
 
 
 @router.post("", status_code=201, response_model=ProjetoOut)
@@ -87,6 +98,116 @@ async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = N
             }
             for r in rows
         ],
+    }
+
+
+@router.get("/{projeto_id}/workspace")
+async def obter_workspace(projeto_id: str, dep=Depends(get_conn)):
+    """Workspace oficial para o React; não lê snapshot nem localStorage."""
+    conn, _ = dep
+    project = await _require_project(conn, projeto_id)
+    rubrics, transactions, documents, movements = await asyncio.gather(
+        conn.fetch(
+            "SELECT id, codigo, descricao, descricao_completa, valor_orcado FROM rubricas WHERE projeto_id = $1 ORDER BY codigo",
+            projeto_id,
+        ),
+        conn.fetch(
+            """
+            SELECT id, fornecedor, cnpj_fornecedor, data_pagamento, meio_pagamento,
+                   valor_bruto, valor_retencao, valor_liquido, tem_nf, tem_comprovante,
+                   status, score_conciliacao, salic_ref, created_at, updated_at
+            FROM transacoes WHERE projeto_id = $1 ORDER BY data_pagamento nulls last, created_at
+            """,
+            projeto_id,
+        ),
+        conn.fetch(
+            "SELECT id, origem, nome_arquivo, arquivo_ref, tamanho_bytes, status, created_at FROM documentos_projeto WHERE projeto_id = $1 ORDER BY created_at",
+            projeto_id,
+        ),
+        conn.fetch(
+            """
+            SELECT em.id, em.data, em.historico, em.documento, em.tipo, em.valor, em.saldo_apos, em.status_conciliacao
+            FROM extrato_movimentos em
+            JOIN contas_captadoras cc ON cc.id = em.conta_id
+            WHERE cc.projeto_id = $1 ORDER BY em.data, em.created_at
+            """,
+            projeto_id,
+        ),
+    )
+    return {
+        "project": dict(project),
+        "rubrics": [dict(row) for row in rubrics],
+        "transactions": [dict(row) for row in transactions],
+        "documents": [dict(row) for row in documents],
+        "bank_movements": [dict(row) for row in movements],
+        "source": "postgres",
+    }
+
+
+@router.get("/{projeto_id}/tripartite")
+async def obter_tripartite(projeto_id: str, dep=Depends(get_conn)):
+    """Estado de conciliação derivado das evidências persistidas."""
+    conn, _ = dep
+    await _require_project(conn, projeto_id)
+    rows = await conn.fetch(
+        """
+        SELECT t.id, t.fornecedor, t.cnpj_fornecedor, t.data_pagamento,
+               t.valor_bruto, t.valor_liquido, t.status, t.tem_nf, t.tem_comprovante,
+               count(el.id) filter (where el.evidence_type = 'FISCAL_DOCUMENT' and el.revoked_at is null) as fiscal_evidence,
+               count(el.id) filter (where el.evidence_type = 'BANK_PROOF' and el.revoked_at is null) as bank_proof_evidence
+        FROM transacoes t
+        LEFT JOIN evidence_links el ON el.lancamento_id = t.id
+        WHERE t.projeto_id = $1
+        GROUP BY t.id
+        ORDER BY t.data_pagamento nulls last, t.created_at
+        """,
+        projeto_id,
+    )
+    has_statement = bool(await conn.fetchval(
+        "SELECT exists(SELECT 1 FROM extrato_movimentos em JOIN contas_captadoras cc ON cc.id = em.conta_id WHERE cc.projeto_id = $1)",
+        projeto_id,
+    ))
+    entries = []
+    for row in rows:
+        item = dict(row)
+        item["documentacao_anexada"] = bool(item["fiscal_evidence"] or item["tem_nf"])
+        item["comprovante_anexado"] = bool(item["bank_proof_evidence"] or item["tem_comprovante"])
+        item["extrato_importado"] = has_statement
+        item["conciliacao_bancaria_validada"] = bool(
+            has_statement and item["documentacao_anexada"] and item["comprovante_anexado"]
+            and item["status"] == "CONCILIADO_OK"
+        )
+        entries.append(item)
+    return {"project_id": projeto_id, "has_bank_statement": has_statement, "entries": entries}
+
+
+@router.get("/{projeto_id}/observabilidade")
+async def obter_observabilidade(projeto_id: str, dep=Depends(get_conn)):
+    conn, _ = dep
+    await _require_project(conn, projeto_id)
+    counts = await conn.fetch(
+        """
+        SELECT o.status, count(*)::int AS total
+        FROM import_file_occurrences o
+        JOIN importacoes i ON i.id = o.importacao_id
+        WHERE i.projeto_id = $1 GROUP BY o.status
+        """,
+        projeto_id,
+    )
+    oldest_pending_seconds = await conn.fetchval(
+        """
+        SELECT extract(epoch from (now() - min(j.created_at)))::int
+        FROM processing_jobs j
+        JOIN import_files f ON f.id = j.file_id
+        WHERE f.projeto_id = $1 AND j.status = 'PENDING'
+        """,
+        projeto_id,
+    )
+    return {
+        "project_id": projeto_id,
+        "files_by_status": {row["status"]: row["total"] for row in counts},
+        "oldest_pending_seconds": oldest_pending_seconds,
+        "attention_required": bool(oldest_pending_seconds and oldest_pending_seconds > 600),
     }
 
 
