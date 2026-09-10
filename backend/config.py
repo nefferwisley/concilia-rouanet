@@ -1,4 +1,5 @@
 import os
+from urllib.parse import quote, urlsplit, urlunsplit
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -7,6 +8,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql://rouanet:rouanet_dev_password@localhost:5432/rouanet_concilia"
+    # Em provedores como Render, URLs com senha embutida podem ser
+    # mascaradas/regravadas pela tela de variáveis. Mantemos a senha como
+    # segredo separado e só a inserimos na URI em memória no processo.
+    database_password: str = ""
     supabase_jwt_secret: str = "dev-secret-key-min-32-chars-long-!!!"
     supabase_url: str = ""     # https://xxxx.supabase.co
     supabase_service_role_key: str = ""  # Service role key pra bypassar RLS no Storage
@@ -25,6 +30,23 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def resolve_aliases(self) -> "Settings":
+        if self.database_password:
+            parsed = urlsplit(self.database_url)
+            if parsed.scheme and parsed.hostname:
+                username = parsed.username or "postgres"
+                hostname = parsed.hostname
+                if parsed.port:
+                    hostname = f"{hostname}:{parsed.port}"
+                self.database_url = urlunsplit(
+                    (
+                        parsed.scheme,
+                        f"{quote(username, safe='')}:"
+                        f"{quote(self.database_password, safe='')}@{hostname}",
+                        parsed.path,
+                        parsed.query,
+                        parsed.fragment,
+                    )
+                )
         if not self.google_api_key:
             self.google_api_key = os.environ.get("GEMINI_API_KEY", "") or os.environ.get("GOOGLE_API_KEY", "")
         if not self.supabase_service_role_key:
