@@ -263,12 +263,12 @@ export const ReconciliationFilterBar: React.FC<ReconciliationFilterBarProps> = (
       <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-xs">
         {/* Presets Rápidos de Auditoria */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-slate-400 text-[11px] font-medium mr-1">Filtros Rápidos:</span>
+          <span className="text-slate-400 text-xs font-medium mr-1">Filtros Rápidos:</span>
 
           <button
             type="button"
             onClick={() => onPresetSelect(activePreset === "SEM_NF" ? "ALL" : "SEM_NF")}
-            className={`px-2.5 py-1 rounded-lg font-medium border text-[11px] transition flex items-center gap-1 ${
+            className={`min-h-[36px] px-2.5 py-1 rounded-lg font-medium border text-xs transition flex items-center gap-1 ${
               activePreset === "SEM_NF"
                 ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
                 : "bg-slate-950/60 text-slate-300 border-slate-800 hover:border-slate-700"
@@ -280,7 +280,7 @@ export const ReconciliationFilterBar: React.FC<ReconciliationFilterBarProps> = (
           <button
             type="button"
             onClick={() => onPresetSelect(activePreset === "SEM_COMPROVANTE" ? "ALL" : "SEM_COMPROVANTE")}
-            className={`px-2.5 py-1 rounded-lg font-medium border text-[11px] transition flex items-center gap-1 ${
+            className={`min-h-[36px] px-2.5 py-1 rounded-lg font-medium border text-xs transition flex items-center gap-1 ${
               activePreset === "SEM_COMPROVANTE"
                 ? "bg-sky-500/20 text-sky-300 border-sky-500/50"
                 : "bg-slate-950/60 text-slate-300 border-slate-800 hover:border-slate-700"
@@ -292,7 +292,7 @@ export const ReconciliationFilterBar: React.FC<ReconciliationFilterBarProps> = (
           <button
             type="button"
             onClick={() => onPresetSelect(activePreset === "MAIOR_RISCO" ? "ALL" : "MAIOR_RISCO")}
-            className={`px-2.5 py-1 rounded-lg font-medium border text-[11px] transition flex items-center gap-1 ${
+            className={`min-h-[36px] px-2.5 py-1 rounded-lg font-medium border text-xs transition flex items-center gap-1 ${
               activePreset === "MAIOR_RISCO"
                 ? "bg-rose-500/20 text-rose-300 border-rose-500/50"
                 : "bg-slate-950/60 text-slate-300 border-slate-800 hover:border-slate-700"
@@ -304,7 +304,7 @@ export const ReconciliationFilterBar: React.FC<ReconciliationFilterBarProps> = (
           <button
             type="button"
             onClick={() => onPresetSelect(activePreset === "MAIORES_VALORES" ? "ALL" : "MAIORES_VALORES")}
-            className={`px-2.5 py-1 rounded-lg font-medium border text-[11px] transition flex items-center gap-1 ${
+            className={`min-h-[36px] px-2.5 py-1 rounded-lg font-medium border text-xs transition flex items-center gap-1 ${
               activePreset === "MAIORES_VALORES"
                 ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50"
                 : "bg-slate-950/60 text-slate-300 border-slate-800 hover:border-slate-700"
@@ -316,7 +316,7 @@ export const ReconciliationFilterBar: React.FC<ReconciliationFilterBarProps> = (
           <button
             type="button"
             onClick={() => onPresetSelect(activePreset === "MAIS_ANTIGOS" ? "ALL" : "MAIS_ANTIGOS")}
-            className={`px-2.5 py-1 rounded-lg font-medium border text-[11px] transition flex items-center gap-1 ${
+            className={`min-h-[36px] px-2.5 py-1 rounded-lg font-medium border text-xs transition flex items-center gap-1 ${
               activePreset === "MAIS_ANTIGOS"
                 ? "bg-teal-500/20 text-teal-300 border-teal-500/50"
                 : "bg-slate-950/60 text-slate-300 border-slate-800 hover:border-slate-700"
@@ -328,7 +328,7 @@ export const ReconciliationFilterBar: React.FC<ReconciliationFilterBarProps> = (
 
         {/* Contador de Resultados e Botão de Limpar */}
         <div className="flex items-center gap-3">
-          <span className="text-slate-400 font-mono text-[11px]">
+          <span className="text-slate-400 font-mono text-xs">
             Exibindo <strong className="text-white">{filteredItemsCount}</strong> de{" "}
             <span className="text-slate-400">{totalItemsCount}</span> lançamentos
           </span>
@@ -337,7 +337,7 @@ export const ReconciliationFilterBar: React.FC<ReconciliationFilterBarProps> = (
             <button
               type="button"
               onClick={onClearFilters}
-              className="text-[11px] text-amber-400 hover:text-amber-300 underline font-semibold flex items-center gap-1 transition"
+              className="text-xs text-amber-400 hover:text-amber-300 underline font-semibold flex items-center gap-1 transition min-h-[36px]"
             >
               <RotateCcw className="w-3 h-3" /> Limpar filtros
             </button>
@@ -347,58 +347,58 @@ export const ReconciliationFilterBar: React.FC<ReconciliationFilterBarProps> = (
 
       {/* Linha 3: Chips Removíveis dos Filtros Ativos */}
       {hasActiveFilters && (
-        <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
+        <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
           <span className="text-slate-500">Ativos:</span>
 
           {searchQuery && (
-            <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2 py-0.5 rounded-full border border-slate-700">
+            <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2.5 py-1 rounded-full border border-slate-700">
               Busca: &ldquo;{searchQuery}&rdquo;
-              <button onClick={() => onSearchChange("")} className="hover:text-amber-400">
+              <button onClick={() => onSearchChange("")} className="hover:text-amber-400 ml-1 p-0.5" aria-label="Remover busca">
                 <X className="w-3 h-3" />
               </button>
             </span>
           )}
 
           {period !== "ALL" && (
-            <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2 py-0.5 rounded-full border border-slate-700">
+            <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2.5 py-1 rounded-full border border-slate-700">
               Mês: {period}
-              <button onClick={() => onPeriodChange("ALL")} className="hover:text-amber-400">
+              <button onClick={() => onPeriodChange("ALL")} className="hover:text-amber-400 ml-1 p-0.5" aria-label="Remover filtro de mês">
                 <X className="w-3 h-3" />
               </button>
             </span>
           )}
 
           {statusFilter !== "ALL" && (
-            <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2 py-0.5 rounded-full border border-slate-700">
+            <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2.5 py-1 rounded-full border border-slate-700">
               Status: {statusFilter}
-              <button onClick={() => onStatusChange("ALL")} className="hover:text-amber-400">
+              <button onClick={() => onStatusChange("ALL")} className="hover:text-amber-400 ml-1 p-0.5" aria-label="Remover filtro de status">
                 <X className="w-3 h-3" />
               </button>
             </span>
           )}
 
           {expenseCategory !== "ALL" && (
-            <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2 py-0.5 rounded-full border border-slate-700">
+            <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2.5 py-1 rounded-full border border-slate-700">
               {EXPENSE_CATEGORY_LABELS[expenseCategory]}
-              <button onClick={() => onExpenseCategoryChange("ALL")} className="hover:text-amber-400">
+              <button onClick={() => onExpenseCategoryChange("ALL")} className="hover:text-amber-400 ml-1 p-0.5" aria-label="Remover filtro de categoria">
                 <X className="w-3 h-3" />
               </button>
             </span>
           )}
 
           {activePreset !== "ALL" && (
-            <span className="inline-flex items-center gap-1 bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30 font-semibold">
+            <span className="inline-flex items-center gap-1 bg-amber-500/20 text-amber-300 px-2.5 py-1 rounded-full border border-amber-500/30 font-semibold">
               Preset: {activePreset}
-              <button onClick={() => onPresetSelect("ALL")} className="hover:text-amber-100">
+              <button onClick={() => onPresetSelect("ALL")} className="hover:text-amber-100 ml-1 p-0.5" aria-label="Remover preset">
                 <X className="w-3 h-3" />
               </button>
             </span>
           )}
 
           {sortBy !== "ACTION_DEFAULT" && (
-            <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2 py-0.5 rounded-full border border-slate-700">
+            <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2.5 py-1 rounded-full border border-slate-700">
               Ordem: {sortBy}
-              <button onClick={() => onSortChange("ACTION_DEFAULT")} className="hover:text-amber-400">
+              <button onClick={() => onSortChange("ACTION_DEFAULT")} className="hover:text-amber-400 ml-1 p-0.5" aria-label="Remover ordenação">
                 <X className="w-3 h-3" />
               </button>
             </span>
