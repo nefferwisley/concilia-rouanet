@@ -1,14 +1,32 @@
 import asyncio
 import logging
+from typing import Any
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 from backend.database import get_conn
 from backend.models import ProjetoCreate, ProjetoOut, ProjetoUpdate
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/projetos", tags=["projetos"])
+
+class SnapshotSave(BaseModel):
+    snapshot: dict[str, Any]
+
+
+def _has_project_evidence(snapshot: dict[str, Any], project_id: str) -> bool:
+    """Indica se o snapshot contém itens financeiros para o projeto informado."""
+    for collection in ("transactions", "documents", "rubrics", "alerts", "tripartiteEntries", "receipts"):
+        source = snapshot.get(collection)
+        if not isinstance(source, dict):
+            continue
+        value = source.get(project_id)
+        if isinstance(value, (list, dict)) and len(value) > 0:
+            return True
+    return False
+
 
 
 
@@ -205,6 +223,56 @@ async def obter_snapshot_legacy(projeto_id: str, dep=Depends(get_conn)):
     )
     if not row:
         raise HTTPException(404, "Snapshot do projeto não encontrado.")
+
+    return {"snapshot": row["payload"]}
+
+@router.put("/{projeto_id}/snapshot")
+async def salvar_snapshot_legacy(projeto_id: str, body: SnapshotSave, dep=Depends(get_conn)):
+    """Salva o estado legado com versão e sem permitir apagar evidências por engano."""
+    conn, user_id = dep
+    snapshot = body.snapshot
+    existing = await conn.fetchrow(
+        """
+        select payload, version
+        from project_snapshots
+        where project_id = $1 and owner_id = $2 and is_deleted = false
+        for update
+        """,
+        projeto_id,
+        user_id,
+    )
+    if existing:
+        current = existing["payload"] if isinstance(existing["payload"], dict) else {}
+        if _has_project_evidence(current, projeto_id) and not _has_project_evidence(snapshot, projeto_id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Proteção ativada: uma atualização vazia não pode substituir os dados existentes do projeto.",
+            )
+        row = await conn.fetchrow(
+            """
+            update project_snapshots
+            set payload = $3, version = version + 1, source_system = 'fastapi'
+            where project_id = $1 and owner_id = $2 and is_deleted = false
+            returning version
+            """,
+            projeto_id,
+            user_id,
+            snapshot,
+        )
+        return {"project_id": projeto_id, "version": row["version"]}
+
+    row = await conn.fetchrow(
+        """
+        insert into project_snapshots (project_id, owner_id, payload, version, source_system)
+        values ($1, $2, $3, 1, 'fastapi')
+        returning version
+        """,
+        projeto_id,
+        user_id,
+        snapshot,
+    )
+    return {"project_id": projeto_id, "version": row["version"]}
+
     return {"snapshot": row["payload"]}
 
 
