@@ -28,5 +28,18 @@ export function formatCnpjCpf(value: string): string {
 
 export function calculatePercent(part: number, total: number): number {
   if (!total || total === 0) return 0;
-  return Math.min(100, Math.round((part / total) * 100));
+  return Math.round((part / total) * 100);
+}
+
+/**
+ * Formata percentuais orçamentários sinalizando expressamente quando há estouro (> 100% ou limite legal)
+ * Exemplo: "125.0% — excede o limite em 25.0 p.p."
+ */
+export function formatPercentWithExcess(percent: number, limit: number = 100): string {
+  const rounded = Number(percent.toFixed(1));
+  if (rounded > limit) {
+    const excess = Number((rounded - limit).toFixed(1));
+    return `${rounded}% — excede o limite em ${excess} p.p.`;
+  }
+  return `${rounded}%`;
 }

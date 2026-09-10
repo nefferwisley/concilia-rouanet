@@ -6,11 +6,61 @@ export type StandardStatus = "Conciliado" | "Pendente" | "Em revisão" | "Alerta
 
 export interface StatusBadgeProps {
   status?: StandardStatus | string | BankTransaction | TripartiteEntry;
+  detail?: string;
+  showDetail?: boolean;
   size?: "sm" | "md" | "lg";
   showTooltip?: boolean;
   tooltipText?: string;
   className?: string;
   onClick?: () => void;
+}
+
+/**
+ * Resolve o submotivo descritivo para enriquecer a taxonomia única
+ * Exemplo: "NF ausente", "Sem comprovante BB", "Risco de glosa", "Rateio parcial"
+ */
+export function resolveStatusDetail(
+  input: {
+    status?: string;
+    hasFiscalDoc?: boolean;
+    hasBankVoucher?: boolean;
+    hasRubric?: boolean;
+    isReconciled?: boolean;
+    alertaRisco?: string;
+  } | BankTransaction | TripartiteEntry | string | undefined
+): string | undefined {
+  if (!input || typeof input === "string") return undefined;
+
+  // Se for TripartiteEntry
+  if ("statusTripartite" in input || "checkTripe" in input) {
+    const entry = input as TripartiteEntry;
+    if (entry.observacoes?.toUpperCase().includes("GLOSA") || entry.statusTripartite?.includes("DIVERG")) {
+      return "Risco de glosa";
+    }
+    const hasFiscal = Boolean(entry.idDocFiscal || entry.numeroDoc || entry.checkTripe?.fiscalDocAnexo);
+    const hasBank = Boolean(entry.idTransacaoBB || entry.checkTripe?.comprovanteBancarioAnexo);
+    if (!hasFiscal) return "NF ausente";
+    if (!hasBank) return "Comprovante ausente";
+    if (entry.statusSalic === "Em Lançamento" || entry.statusTripartite?.includes("PARCIAL")) {
+      return "Em conferência";
+    }
+    return undefined;
+  }
+
+  // Se for BankTransaction
+  const tx = input as BankTransaction;
+  const rawStatus = (tx.status || tx.statusConciliacao || "").toUpperCase();
+  if (rawStatus === "ALERTA_GLOSA" || tx.alertaRisco) {
+    return tx.alertaRisco || "Risco de glosa";
+  }
+  const hasFiscal = Boolean(tx.matchedDocId || tx.idDocumentoFiscalVinculado);
+  const hasBank = Boolean(tx.documentoNumero || tx.documentoBancario);
+  if (!hasFiscal && !hasBank) return "NF e comprovante ausentes";
+  if (!hasFiscal) return "NF ausente";
+  if (!hasBank) return "Comprovante ausente";
+  if (rawStatus === "PARCIAL") return "Rateio parcial";
+
+  return undefined;
 }
 
 /**
@@ -105,6 +155,8 @@ export function resolveStandardStatus(
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({
   status = "Pendente",
+  detail,
+  showDetail = false,
   size = "md",
   showTooltip = false,
   tooltipText,
@@ -116,10 +168,12 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       ? (status as StandardStatus)
       : resolveStandardStatus(status);
 
+  const resolvedDetail = detail !== undefined ? detail : (showDetail ? resolveStatusDetail(status) : undefined);
+
   // Configuração acessível segura para daltonismo (WCAG 2.1 AA)
   const styleConfig = {
     Conciliado: {
-      bg: "bg-emerald-950/40",
+      bg: "bg-emerald-950/60",
       text: "text-emerald-300",
       border: "border-emerald-500/50",
       icon: CheckCircle2,
@@ -128,7 +182,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       ariaLabel: "Status: Conciliado",
     },
     Pendente: {
-      bg: "bg-amber-950/40",
+      bg: "bg-amber-950/60",
       text: "text-amber-300",
       border: "border-amber-500/50",
       icon: Clock,
@@ -137,7 +191,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       ariaLabel: "Status: Pendente",
     },
     "Em revisão": {
-      bg: "bg-sky-950/40",
+      bg: "bg-sky-950/60",
       text: "text-sky-300",
       border: "border-sky-500/50",
       icon: Search,
@@ -146,7 +200,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       ariaLabel: "Status: Em revisão",
     },
     Alerta: {
-      bg: "bg-rose-950/40",
+      bg: "bg-rose-950/60",
       text: "text-rose-300",
       border: "border-rose-500/60",
       icon: AlertTriangle,
@@ -156,30 +210,33 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     },
   }[normalized];
 
+  // Fontes: piso operacional mínimo de 12px (text-xs) no tamanho sm; 14px (text-sm) no md e lg
   const sizeClasses = {
-    sm: "text-[11px] px-2 py-0.5 gap-1",
-    md: "text-xs px-2.5 py-1 gap-1.5",
-    lg: "text-sm px-3 py-1.5 gap-2",
+    sm: "text-xs px-2.5 py-1 gap-1.5",
+    md: "text-xs sm:text-sm px-3 py-1 gap-2 font-medium",
+    lg: "text-sm px-3.5 py-1.5 gap-2 font-semibold",
   }[size];
 
   const iconSizes = {
-    sm: "w-3 h-3",
-    md: "w-3.5 h-3.5",
+    sm: "w-3.5 h-3.5",
+    md: "w-4 h-4",
     lg: "w-4 h-4",
   }[size];
 
   const Icon = styleConfig.icon;
   const description = tooltipText || styleConfig.defaultTooltip;
 
+  const fullLabel = resolvedDetail ? `${normalized} — ${resolvedDetail}` : normalized;
+
   const badgeContent = (
     <span
       role="status"
-      aria-label={styleConfig.ariaLabel}
+      aria-label={`${styleConfig.ariaLabel}${resolvedDetail ? `: ${resolvedDetail}` : ""}`}
       title={showTooltip || tooltipText ? description : undefined}
       className={`inline-flex items-center font-medium rounded-lg border ${styleConfig.bg} ${styleConfig.text} ${styleConfig.border} ${sizeClasses} ${className} select-none transition-colors`}
     >
       <Icon className={`${iconSizes} ${styleConfig.iconColor} shrink-0`} aria-hidden="true" />
-      <span>{normalized}</span>
+      <span>{fullLabel}</span>
     </span>
   );
 
@@ -188,7 +245,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       <button
         type="button"
         onClick={onClick}
-        className="cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/50 rounded-lg"
+        className="cursor-pointer min-h-[44px] inline-flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
       >
         {badgeContent}
       </button>

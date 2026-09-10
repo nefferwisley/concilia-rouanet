@@ -38,8 +38,17 @@ export const BudgetBulletChart: React.FC<BudgetBulletChartProps> = ({
   const normalBarWidth = Math.min(executedPosPercent, approvedPosPercent);
   const excessBarWidth = executedPosPercent > approvedPosPercent ? executedPosPercent - approvedPosPercent : 0;
 
+  const excessPp = (percent - 100).toFixed(1);
+  const percentText = isOverBudget
+    ? `${percent.toFixed(1)}% executado — excede o limite em ${excessPp} p.p.`
+    : `${percent.toFixed(1)}% executado`;
+
+  const chartDescription = `${label}: Orçamento aprovado de ${formatCurrency(safeApproved)}, executado ${formatCurrency(safeExecuted)} (${percent.toFixed(1)}%)${isOverBudget ? ` — excede o limite em ${excessPp} pontos percentuais` : ""}.`;
+
   return (
     <div
+      role="img"
+      aria-label={chartDescription}
       className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5 transition hover:border-slate-700"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -47,11 +56,11 @@ export const BudgetBulletChart: React.FC<BudgetBulletChartProps> = ({
       <div className="flex items-center justify-between text-xs mb-1.5 gap-2">
         <div className="min-w-0">
           <span className="font-semibold text-slate-200 truncate block">{label}</span>
-          {sublabel && <span className="text-[10px] text-slate-400 block truncate">{sublabel}</span>}
+          {sublabel && <span className="text-xs text-slate-400 block truncate">{sublabel}</span>}
         </div>
         <div className="text-right shrink-0">
           <span className="font-mono text-slate-200 font-bold">{formatCurrency(safeExecuted)}</span>
-          <span className="text-slate-500 text-[11px] font-normal ml-1">/ {formatCurrency(safeApproved)}</span>
+          <span className="text-slate-400 text-xs font-normal ml-1">/ {formatCurrency(safeApproved)}</span>
         </div>
       </div>
 
@@ -102,23 +111,23 @@ export const BudgetBulletChart: React.FC<BudgetBulletChartProps> = ({
 
       {/* Detalhes e Indicadores inferiores */}
       {showDetails && (
-        <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
-          <div className="flex items-center gap-1.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-300 mt-1 gap-1">
+          <div className="flex items-center gap-2">
             <span>
               Saldo:{" "}
-              <strong className={`font-mono ${saldo < 0 ? "text-rose-400 font-bold" : "text-slate-300"}`}>
+              <strong className={`font-mono ${saldo < 0 ? "text-rose-400 font-bold" : "text-slate-200"}`}>
                 {saldo < 0 ? `- ${formatCurrency(Math.abs(saldo))}` : formatCurrency(saldo)}
               </strong>
             </span>
             {isOverBudget && (
-              <span className="text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1 rounded font-semibold">
+              <span className="text-xs bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1.5 py-0.5 rounded font-semibold">
                 Estouro Orçamentário
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
             <span className={`font-mono font-semibold ${isOverBudget ? "text-rose-400 font-bold" : "text-slate-300"}`}>
-              {percent.toFixed(1)}% executado
+              {percentText}
             </span>
           </div>
         </div>
@@ -126,10 +135,10 @@ export const BudgetBulletChart: React.FC<BudgetBulletChartProps> = ({
 
       {/* Tooltip interativo ao pairar */}
       {isHovered && (
-        <div className="mt-2 pt-2 border-t border-slate-800 text-[10px] text-slate-300 flex justify-between font-mono">
+        <div className="mt-2 pt-2 border-t border-slate-800 text-xs text-slate-300 flex justify-between font-mono">
           <span>Aprovado: {formatCurrency(safeApproved)}</span>
           <span>Executado: {formatCurrency(safeExecuted)}</span>
-          <span className={saldo < 0 ? "text-rose-400" : "text-emerald-400"}>
+          <span className={saldo < 0 ? "text-rose-400 font-bold" : "text-emerald-400"}>
             {saldo < 0 ? "Excesso: " : "Disponível: "}
             {formatCurrency(Math.abs(saldo))}
           </span>

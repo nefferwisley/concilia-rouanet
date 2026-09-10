@@ -60,6 +60,13 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
   const hasBankProof = Boolean(transaction.documentoNumero || transaction.documentoBancario);
   const isGlosa = transaction.status === "ALERTA_GLOSA" || Boolean(transaction.alertaRisco);
 
+  const rubricTitle = matchedRubric?.nomeRubrica || matchedRubric?.nome || "Rubrica pendente";
+  const formattedDate = formatDate(transaction.data || transaction.dataTransacao);
+  const saldoAposDebito =
+    transaction.saldoAposTransacao != null && Number.isFinite(Number(transaction.saldoAposTransacao))
+      ? formatCurrency(Number(transaction.saldoAposTransacao))
+      : null;
+
   return (
     <div
       className={`bg-slate-900 border rounded-2xl p-4 transition shadow-md ${
@@ -70,13 +77,13 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
           : "border-slate-800 hover:border-slate-700"
       }`}
     >
-      {/* Top row: Sequence number, Status Badge and Value */}
-      <div className="flex items-center justify-between gap-2 mb-2.5">
+      {/* Linha 1: [ STATUS ] e Valor */}
+      <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[11px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+          <span className="font-mono text-xs font-bold text-slate-400 bg-slate-800 px-2 py-1 rounded">
             #{String(index + 1).padStart(3, "0")}
           </span>
-          <StatusBadge status={transaction} size="sm" />
+          <StatusBadge status={transaction} size="sm" showDetail />
         </div>
 
         <div className="text-right">
@@ -85,151 +92,183 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
               isDebit ? "text-amber-300" : "text-emerald-400"
             }`}
           >
-            {isDebit ? "-" : "+"}
+            {isDebit ? "- " : "+ "}
             {formatCurrency(transaction.valor)}
           </span>
         </div>
       </div>
 
-      {/* Middle row: Favorecido (PF + PJ) & Data */}
-      <div className="space-y-1 mb-3">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h4 className="text-sm font-bold text-white line-clamp-1">
-              {resolved.personName || resolved.companyName || "Favorecido não identificado"}
-            </h4>
-            {resolved.companyName && resolved.companyName !== resolved.personName && (
-              <p className="text-xs text-slate-400 line-clamp-1">{resolved.companyName}</p>
-            )}
-            {resolved.cnpjCpf && (
-              <span className="text-[11px] font-mono text-emerald-400">
-                {resolved.cnpjCpf}
-              </span>
-            )}
-          </div>
-
-          <span className="text-xs text-slate-400 shrink-0 font-medium flex items-center gap-1">
-            <Calendar className="w-3 h-3 text-slate-500" />
-            {formatDate(transaction.data || transaction.dataTransacao)}
+      {/* Linha 2: Favorecido / fornecedor */}
+      <div className="mb-1.5">
+        <h4 className="text-sm font-bold text-white line-clamp-1">
+          {resolved.personName || resolved.companyName || "Favorecido não identificado"}
+        </h4>
+        {resolved.companyName && resolved.companyName !== resolved.personName && (
+          <p className="text-xs text-slate-400 line-clamp-1 mt-0.5">{resolved.companyName}</p>
+        )}
+        {resolved.cnpjCpf && (
+          <span className="text-xs font-mono text-emerald-400 mt-0.5 block">
+            {resolved.cnpjCpf}
           </span>
+        )}
+      </div>
+
+      {/* Linha 3: Data · Rubrica */}
+      <div className="text-xs text-slate-300 flex items-center gap-1.5 mb-2 flex-wrap">
+        <span className="font-medium text-slate-400 flex items-center gap-1">
+          <Calendar className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+          {formattedDate}
+        </span>
+        <span className="text-slate-600">·</span>
+        <span className="text-slate-300 truncate max-w-[220px]" title={rubricTitle}>
+          {rubricTitle}
+        </span>
+      </div>
+
+      {/* Linha 4: NF e Comprovante BB disponibilidade */}
+      <div className="grid grid-cols-2 gap-2 text-xs py-2 border-t border-slate-800/80 mb-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-slate-400">NF:</span>
+          {hasFiscalDoc ? (
+            <span className="inline-flex items-center gap-1 text-emerald-300 font-semibold">
+              <FileCheck2 className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> Disponível
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-amber-400 font-semibold">
+              <FileX className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" /> Ausente
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <span className="text-slate-400">Comp. BB:</span>
+          {hasBankProof ? (
+            <span className="inline-flex items-center gap-1 text-sky-300 font-semibold">
+              <CheckCircle2 className="w-3.5 h-3.5 text-sky-400" aria-hidden="true" /> Disponível
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-slate-400 font-medium">
+              <Clock className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" /> Ausente
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Proof indicators row (NF badge, Comprovante BB badge) */}
-      <div className="flex flex-wrap items-center gap-1.5 py-2 border-t border-slate-800/80 text-[11px]">
-        {hasFiscalDoc ? (
-          <span className="inline-flex items-center gap-1 text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-medium">
-            <FileCheck2 className="w-3 h-3 text-emerald-400" /> NF Vinculada
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 font-medium">
-            <FileX className="w-3 h-3 text-amber-400" /> Falta NF
-          </span>
-        )}
+      {/* Linha 5: Saldo após débito */}
+      <div className="flex items-center justify-between text-xs py-1.5 px-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80 mb-3">
+        <span className="text-slate-400 font-medium">Saldo após débito:</span>
+        <span className="font-mono text-xs font-semibold text-slate-200">
+          {saldoAposDebito || "Saldo não informado"}
+        </span>
+      </div>
 
-        {hasBankProof ? (
-          <span className="inline-flex items-center gap-1 text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20 font-medium">
-            <CheckCircle2 className="w-3 h-3 text-sky-400" /> Comp. BB OK
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full font-medium">
-            <Clock className="w-3 h-3 text-slate-500" /> Sem doc BB
-          </span>
-        )}
-
-        {/* Action Button on mobile card header */}
-        <div className="ml-auto flex items-center gap-1">
-          {hasFiscalDoc && matchedDoc && onOpenPreview ? (
-            <button
-              type="button"
-              onClick={() => onOpenPreview(matchedDoc, transaction)}
-              className="px-2.5 py-1 text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-lg flex items-center gap-1 transition"
-            >
-              <Eye className="w-3.5 h-3.5" /> Ver Doc
-            </button>
-          ) : isDebit && onOpenLinkModal ? (
-            <button
-              type="button"
-              onClick={() => onOpenLinkModal(transaction)}
-              className="px-2.5 py-1 text-xs font-semibold bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-lg flex items-center gap-1 transition shadow-sm"
-            >
-              <Link className="w-3.5 h-3.5" /> Vincular
-            </button>
-          ) : null}
-
+      {/* Linha de Ações Mínimas Obrigatórias: [ Ver documentos ] [ Conciliar ] [ Mais detalhes ] */}
+      <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-800/80">
+        {hasFiscalDoc && matchedDoc && onOpenPreview ? (
           <button
             type="button"
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="p-1.5 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition"
-            aria-label={isExpanded ? "Recolher detalhes" : "Expandir detalhes"}
+            onClick={() => onOpenPreview(matchedDoc, transaction)}
+            className="flex-1 min-h-[44px] px-3 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95"
+            aria-label={`Ver documentos de ${resolved.personName || "transação"}`}
           >
-            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            <Eye className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <span>Ver documentos</span>
           </button>
-        </div>
+        ) : (
+          <button
+            type="button"
+            disabled
+            className="flex-1 min-h-[44px] px-3 py-2 text-xs font-medium bg-slate-950 text-slate-600 border border-slate-800/50 rounded-xl flex items-center justify-center gap-1 cursor-not-allowed"
+          >
+            <FileX className="w-4 h-4 text-slate-600" aria-hidden="true" />
+            <span>Sem doc</span>
+          </button>
+        )}
+
+        {isDebit && !isReconciled && onOpenLinkModal ? (
+          <button
+            type="button"
+            onClick={() => onOpenLinkModal(transaction)}
+            className="flex-1 min-h-[44px] px-3 py-2 text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-xl flex items-center justify-center gap-1.5 transition shadow-sm active:scale-95"
+            aria-label={`Conciliar lançamento #${String(index + 1).padStart(3, "0")}`}
+          >
+            <Link className="w-4 h-4" aria-hidden="true" />
+            <span>Conciliar</span>
+          </button>
+        ) : isReconciled && onUnlink ? (
+          <button
+            type="button"
+            onClick={() => onUnlink(transaction)}
+            className="flex-1 min-h-[44px] px-3 py-2 text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-xl flex items-center justify-center gap-1.5 transition"
+            aria-label="Desvincular conciliação"
+          >
+            <Unlink className="w-4 h-4 text-rose-400" aria-hidden="true" />
+            <span>Desvincular</span>
+          </button>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="min-h-[44px] px-3 py-2 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl flex items-center justify-center gap-1 transition"
+          aria-expanded={isExpanded}
+          aria-label={isExpanded ? "Recolher detalhes" : "Mais detalhes do lançamento"}
+        >
+          <span>{isExpanded ? "Menos" : "Mais detalhes"}</span>
+          {isExpanded ? <ChevronUp className="w-4 h-4" aria-hidden="true" /> : <ChevronDown className="w-4 h-4" aria-hidden="true" />}
+        </button>
       </div>
 
-      {/* Expandable Section */}
+      {/* Seção de Detalhes Expansível */}
       {isExpanded && (
-        <div className="mt-3 pt-3 border-t border-slate-800 space-y-3 text-xs animate-fadeIn">
-          {/* Rubrica */}
-          <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
-              Rubrica Orçamentária
+        <div className="mt-3 pt-3 border-t border-slate-800 space-y-3 text-xs">
+          {/* Rubrica Detalhada */}
+          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
+            <span className="text-xs uppercase font-bold text-slate-400 block mb-1">
+              Rubrica Orçamentária SALIC
             </span>
-            <p className="text-slate-200 font-medium">
-              {matchedRubric?.nomeRubrica || matchedRubric?.nome || "Não vinculada"}
+            <p className="text-slate-200 font-semibold text-xs">
+              {matchedRubric?.codigo ? `${matchedRubric.codigo} - ` : ""}
+              {rubricTitle}
             </p>
             {matchedRubric?.etapa && (
-              <span className="text-[10px] text-slate-400 block mt-0.5">
+              <span className="text-xs text-slate-400 block mt-1">
                 Etapa: {matchedRubric.etapa}
               </span>
             )}
           </div>
 
-          {/* Doc Bancário / FITID */}
-          <div className="grid grid-cols-2 gap-2 text-slate-400 text-[11px]">
-            <div>
-              <span className="block text-slate-500">Doc. Bancário:</span>
-              <span className="font-mono text-slate-300">
-                {transaction.documentoNumero || transaction.documentoBancario || "N/D"}
+          {/* Doc Bancário / Descrição Extrato BB */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-300 text-xs">
+            <div className="bg-slate-950/50 p-2 rounded-lg border border-slate-800">
+              <span className="block text-slate-400 text-xs font-medium">Doc. Bancário / FITID:</span>
+              <span className="font-mono text-xs text-slate-200">
+                {transaction.documentoNumero || transaction.documentoBancario || "Não identificado"}
               </span>
             </div>
-            <div>
-              <span className="block text-slate-500">Descrição Extrato:</span>
-              <span className="text-slate-300 truncate block">
-                {transaction.descricaoExtrato || transaction.descricao || "N/D"}
+            <div className="bg-slate-950/50 p-2 rounded-lg border border-slate-800">
+              <span className="block text-slate-400 text-xs font-medium">Descrição no Extrato BB:</span>
+              <span className="text-xs text-slate-200 truncate block">
+                {transaction.descricaoExtrato || transaction.descricao || "Não informada"}
               </span>
             </div>
           </div>
 
-          {/* Miniatura do Anexo se houver documento */}
+          {/* Miniatura do Documento Vinculado */}
           {hasFiscalDoc && matchedDoc && (
-            <div className="pt-2">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1.5">
-                Comprovante Anexado
+            <div className="pt-1">
+              <span className="text-xs uppercase font-bold text-slate-400 block mb-2">
+                Prévia do Documento Fiscal
               </span>
-              <div className="w-full max-w-[140px]">
+              <div className="w-full max-w-[180px]">
                 <AttachmentThumbnail
                   documentId={matchedDoc.id}
-                  fileName={matchedDoc.arquivoNotaNome || matchedDoc.numeroDoc || "Comprovante"}
+                  fileName={matchedDoc.arquivoNotaNome || matchedDoc.numeroDoc || "Documento Fiscal"}
                   projectId={projectId}
-                  compact={true}
+                  compact={false}
                   onOpenPreview={() => onOpenPreview && onOpenPreview(matchedDoc, transaction)}
                 />
               </div>
-            </div>
-          )}
-
-          {/* Botão de desvincular se conciliado */}
-          {hasFiscalDoc && onUnlink && (
-            <div className="pt-1 flex justify-end">
-              <button
-                type="button"
-                onClick={() => onUnlink(transaction)}
-                className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 underline font-medium"
-              >
-                <Unlink className="w-3 h-3" /> Desvincular despesa
-              </button>
             </div>
           )}
         </div>

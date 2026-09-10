@@ -51,4 +51,22 @@ describe("StatusBadge", () => {
     expect(alertHtml).toContain("Alerta");
     expect(alertHtml).toContain("border-rose-500/60");
   });
+
+  it("renders subreason detail when provided", () => {
+    const html = renderToStaticMarkup(<StatusBadge status="Pendente" detail="NF ausente" />);
+    expect(html).toContain("Pendente — NF ausente");
+    expect(html).toContain('aria-label="Status: Pendente: NF ausente"');
+  });
+
+  it("automatically infers subreason detail for transactions without fiscal documents", () => {
+    const tx: BankTransaction = {
+      id: "tx-pending-nf",
+      tipo: "DEBITO",
+      valor: 3200,
+      status: "PENDENTE",
+      documentoNumero: "DOC-991",
+    };
+    const html = renderToStaticMarkup(<StatusBadge status={tx} showDetail />);
+    expect(html).toContain("Pendente — NF ausente");
+  });
 });

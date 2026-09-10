@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import {
   Coins,
   AlertTriangle,
+  AlertCircle,
   CheckCircle2,
   ArrowLeftRight,
   ShieldCheck,
@@ -21,18 +22,25 @@ import {
   Search,
   Filter,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Eye,
   Scale,
   Cpu,
   FileCheck2,
+  FileX,
+  RotateCcw,
+  X,
+  ShieldAlert,
 } from "lucide-react";
 import { PronacProject, BudgetRubric, BankTransaction, FiscalDocument, AuditAlert } from "../types";
-import { formatCurrency, formatDate } from "../utils/formatters";
+import { formatCurrency, formatDate, formatPercentWithExcess } from "../utils/formatters";
 import {
   calculateProjectFinancialSummary,
   isTransactionReconciled,
 } from "../utils/projectFinancialSummary";
 import { resolveFiscalProvider } from "../utils/fiscalProvider";
+import { resolveProviderAndCompany } from "../utils/providerHelper";
 import { getTransactionRowKey } from "../utils/transactionRowKey";
 import { resolveBankDocumentNumber } from "../utils/bankDocumentNumber";
 import {
@@ -45,6 +53,8 @@ import {
 import { BudgetBulletChart } from "./charts/BudgetBulletChart";
 import { MonthlyReconciliationChart } from "./charts/MonthlyReconciliationChart";
 import { BalanceEvolutionChart } from "./charts/BalanceEvolutionChart";
+import { StatusBadge } from "./common/StatusBadge";
+import { TransactionMobileCard } from "./common/TransactionMobileCard";
 
 interface DashboardViewProps {
   project: PronacProject;
@@ -211,7 +221,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [txSearch, setTxSearch] = useState("");
   const [txStatusFilter, setTxStatusFilter] = useState<"ALL" | "CONCILIADO" | "PENDENTE" | "DEBITO" | "CREDITO">("ALL");
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<ExpenseCategory | "ALL">("ALL");
+  const [txSort, setTxSort] = useState<"default" | "risco" | "valor_desc" | "valor_asc" | "data_desc" | "data_asc" | "status">("default");
   const [showAllPreviewTransactions, setShowAllPreviewTransactions] = useState(false);
+  const [isWorkflowGuideExpanded, setIsWorkflowGuideExpanded] = useState(true);
   const transactionsSectionRef = useRef<HTMLDivElement>(null);
   const pendingDetailMismatch =
     canUseValidatedSummary && pendingTransactions.length !== financialSummary.pendingDebitCount;
@@ -220,6 +232,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const selectTransactionStatus = (status: "ALL" | "CONCILIADO" | "PENDENTE" | "DEBITO" | "CREDITO") => {
     setTxStatusFilter(status);
     if (status !== "PENDENTE") setExpenseCategoryFilter("ALL");
+    setShowAllPreviewTransactions(false);
+  };
+
+  const clearAllTxFilters = () => {
+    setTxSearch("");
+    setTxStatusFilter("ALL");
+    setExpenseCategoryFilter("ALL");
+    setTxSort("default");
     setShowAllPreviewTransactions(false);
   };
 
@@ -255,9 +275,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
     return true;
   });
+
+  const sortedPreviewTransactions = [...filteredPreviewTransactions].sort((a, b) => {
+    if (txSort === "risco") {
+      const isGlosaA = a.status === "ALERTA_GLOSA" || Boolean(a.alertaRisco);
+      const isGlosaB = b.status === "ALERTA_GLOSA" || Boolean(b.alertaRisco);
+      if (isGlosaA !== isGlosaB) return isGlosaA ? -1 : 1;
+      const hasNfA = Boolean(a.matchedDocId || a.idDocumentoFiscalVinculado);
+      const hasNfB = Boolean(b.matchedDocId || b.idDocumentoFiscalVinculado);
+      if (!hasNfA && hasNfB) return -1;
+      if (hasNfA && !hasNfB) return 1;
+      return (Number(b.valor) || 0) - (Number(a.valor) || 0);
+    }
+    if (txSort === "valor_desc") return (Number(b.valor) || 0) - (Number(a.valor) || 0);
+    if (txSort === "valor_asc") return (Number(a.valor) || 0) - (Number(b.valor) || 0);
+    if (txSort === "data_desc") {
+      const dA = a.data || a.dataTransacao || "";
+      const dB = b.data || b.dataTransacao || "";
+      return dB.localeCompare(dA);
+    }
+    if (txSort === "data_asc") {
+      const dA = a.data || a.dataTransacao || "";
+      const dB = b.data || b.dataTransacao || "";
+      return dA.localeCompare(dB);
+    }
+    if (txSort === "status") {
+      const recA = isTransactionReconciled(a, hasImportedBankStatement);
+      const recB = isTransactionReconciled(b, hasImportedBankStatement);
+      if (recA !== recB) return recA ? 1 : -1;
+    }
+    return 0;
+  });
+
   const visiblePreviewTransactions = showAllPreviewTransactions
-    ? filteredPreviewTransactions
-    : filteredPreviewTransactions.slice(0, 10);
+    ? sortedPreviewTransactions
+    : sortedPreviewTransactions.slice(0, 10);
 
   // A later workflow step may only complete when its evidence-producing
   // prerequisites are explicitly complete. Empty arrays never prove that an
@@ -348,6 +400,56 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const completedStepsCount = workflowSteps.filter((s) => s.completed).length;
   const readinessPercent = Math.round((completedStepsCount / workflowSteps.length) * 100);
 
+  // Fila e Métricas da Seção Prioritária "Prioridades de Hoje"
+  const isDeadlinePassed = Boolean(
+    project.prazoLimitePrestacao && new Date(project.prazoLimitePrestacao) < new Date()
+  );
+  const valorEmRisco = glosaTransactions.reduce((acc, t) => acc + (Number(t.valor) || 0), 0);
+  const countSemNf = debitTransactions.filter(
+    (t) => !t.matchedDocId && !t.idDocumentoFiscalVinculado
+  ).length;
+  const countSemComprovante = debitTransactions.filter(
+    (t) => !t.documentoNumero && !t.documentoBancario
+  ).length;
+  const divergenciasCount =
+    safeAlerts.filter(
+      (a) => a.categoria === "DIVERGENCIA" || a.titulo.toLowerCase().includes("diverg")
+    ).length + (summaryDiverges ? 1 : 0);
+
+  // Ordenação da fila estrita:
+  // 1. prazo vencido; 2. alerta crítico; 3. ausência de NF ou comprovante; 4. divergência; 5. maior valor financeiro
+  const prioritiesOfToday = [...debitTransactions]
+    .filter((tx) => {
+      const isReconciled = isTransactionReconciled(tx, hasImportedBankStatement);
+      const isGlosa = tx.status === "ALERTA_GLOSA" || Boolean(tx.alertaRisco);
+      const hasNf = Boolean(tx.matchedDocId || tx.idDocumentoFiscalVinculado);
+      const hasBank = Boolean(tx.documentoNumero || tx.documentoBancario);
+      return !isReconciled || isGlosa || !hasNf || !hasBank;
+    })
+    .sort((a, b) => {
+      const isGlosaA = a.status === "ALERTA_GLOSA" || Boolean(a.alertaRisco);
+      const isGlosaB = b.status === "ALERTA_GLOSA" || Boolean(b.alertaRisco);
+      const hasNfA = Boolean(a.matchedDocId || a.idDocumentoFiscalVinculado);
+      const hasNfB = Boolean(b.matchedDocId || b.idDocumentoFiscalVinculado);
+      const hasBankA = Boolean(a.documentoNumero || a.documentoBancario);
+      const hasBankB = Boolean(b.documentoNumero || b.documentoBancario);
+      const valA = Number(a.valor) || 0;
+      const valB = Number(b.valor) || 0;
+
+      if (isDeadlinePassed) {
+        const dateA = a.data || a.dataTransacao || "";
+        const dateB = b.data || b.dataTransacao || "";
+        const cmpDate = dateA.localeCompare(dateB);
+        if (cmpDate !== 0) return cmpDate;
+      }
+      if (isGlosaA !== isGlosaB) return isGlosaA ? -1 : 1;
+      if (!hasNfA && hasNfB) return -1;
+      if (hasNfA && !hasNfB) return 1;
+      if (!hasBankA && hasBankB) return -1;
+      if (hasBankA && !hasBankB) return 1;
+      return valB - valA;
+    });
+
   return (
     <div className="space-y-6">
       {/* Top Banner / Project Meta Header */}
@@ -427,183 +529,262 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       )}
 
-      {/* Guided Workflow Tracker */}
-      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-4.5 shadow-md">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-              <ListTodo className="w-3.5 h-3.5" />
+      {/* 1. SEÇÃO PRIORITÁRIA: PRIORIDADES DE HOJE & DECISÃO IMEDIATA (≤ 3s) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Cabeçalho da Fila de Prioridades */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <ShieldAlert className="w-4 h-4" />
             </div>
-            <h2 className="text-xs font-bold text-white uppercase tracking-wider">
-              Guia Passo a Passo da Prestação de Contas SALIC
-            </h2>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400">Etapas concluídas:</span>
-            <span className="text-xs font-bold text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-              {readinessPercent}%
-            </span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-2.5">
-          {workflowSteps.map((step) => (
-            <button
-              key={step.id}
-              onClick={() => onNavigateTab(step.tab)}
-              className={`text-left p-3 rounded-xl border transition-all text-xs flex flex-col justify-between ${
-                step.completed
-                  ? "bg-emerald-500/5 border-emerald-500/30 hover:bg-emerald-500/10"
-                  : "bg-slate-950/60 border-slate-800 hover:border-slate-700"
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="font-semibold text-slate-200 truncate">{step.title}</span>
-                {step.completed ? (
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                ) : (
-                  <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
-                )}
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Prioridades de Hoje — Painel de Decisão Imediata (≤ 3s)
+                </h2>
+                <span className="text-xs font-mono font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                  {prioritiesOfToday.length} itens a resolver
+                </span>
               </div>
-              <p className="text-[11px] text-slate-400 line-clamp-1">{step.description}</p>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Matriz de Decisão Executiva (identificação em ≤ 3 segundos) */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
-        <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-              Painel de Decisão Imediata (≤ 3s)
-            </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Fila de auditoria por criticidade: prazo vencido &rarr; alertas &rarr; sem NF/comprovante &rarr; divergências &rarr; maior valor
+              </p>
+            </div>
           </div>
-          <span className="text-[11px] text-slate-400">
-            Ações prioritárias para conformidade fiscal MinC / FSA
-          </span>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={showPendingTransactions}
+              className="min-h-[44px] px-4 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl transition shadow-md flex items-center gap-1.5 active:scale-95"
+            >
+              <AlertTriangle className="w-4 h-4" />
+              Resolver pendências ({financialSummary.pendingDebitCount})
+            </button>
+          </div>
         </div>
 
+        {/* Grid de Decisão com as 6 Métricas Prioritárias (Req 6) */}
+        {/* [ Pendências críticas ] [ Valor em risco ] [ Próximo prazo ] [ Sem NF ] [ Sem comprovante ] [ Divergências ] */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
-          {/* 1. Pendências */}
+          {/* 1. Pendências críticas */}
           <button
             type="button"
             onClick={showPendingTransactions}
-            className="p-3 bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800 hover:border-amber-500/40 rounded-xl text-left transition flex flex-col justify-between group"
+            className="p-3 bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800 hover:border-amber-500/40 rounded-xl text-left transition flex flex-col justify-between group min-h-[90px]"
           >
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center justify-between">
               Pendências
-              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
             </span>
             <div className="mt-2">
               <span className="text-lg font-bold font-mono text-amber-400 block group-hover:translate-x-0.5 transition-transform">
                 {financialSummary.pendingDebitCount}
               </span>
-              <span className="text-[10px] text-slate-400 font-mono">
+              <span className="text-xs text-slate-400 font-mono">
                 {formatCurrency(totalAConciliar)}
               </span>
             </div>
-            <span className="text-[10px] text-amber-300 underline font-medium mt-1">Ver itens &rarr;</span>
+            <span className="text-xs text-amber-300 underline font-medium mt-1">Ver itens &rarr;</span>
           </button>
 
-          {/* 2. Valor em Risco (Glosas) */}
+          {/* 2. Valor em risco */}
           <button
             type="button"
             onClick={() => onNavigateTab("audit")}
-            className="p-3 bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800 hover:border-rose-500/40 rounded-xl text-left transition flex flex-col justify-between group"
+            className="p-3 bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800 hover:border-rose-500/40 rounded-xl text-left transition flex flex-col justify-between group min-h-[90px]"
           >
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center justify-between">
               Valor em Risco
-              <span className="w-2 h-2 rounded-full bg-rose-400" />
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-400" />
             </span>
             <div className="mt-2">
               <span className="text-lg font-bold font-mono text-rose-400 block group-hover:translate-x-0.5 transition-transform">
-                {formatCurrency(glosaTransactions.reduce((acc, t) => acc + (Number(t.valor) || 0), 0))}
+                {formatCurrency(valorEmRisco)}
               </span>
-              <span className="text-[10px] text-slate-400 font-mono">
+              <span className="text-xs text-slate-400 font-mono">
                 {glosaTransactions.length} alerta(s) de glosa
               </span>
             </div>
-            <span className="text-[10px] text-rose-300 underline font-medium mt-1">Auditar &rarr;</span>
+            <span className="text-xs text-rose-300 underline font-medium mt-1">Auditar &rarr;</span>
           </button>
 
-          {/* 3. Documentos Ausentes */}
+          {/* 3. Próximo prazo */}
+          <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl text-left flex flex-col justify-between min-h-[90px]">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center justify-between">
+              Próximo Prazo
+              <Calendar className="w-3.5 h-3.5 text-slate-500" />
+            </span>
+            <div className="mt-2">
+              <span className={`text-sm font-bold block ${isDeadlinePassed ? "text-rose-400" : "text-slate-200"}`}>
+                {formatDate(project.prazoLimitePrestacao || project.dataFimVigencia)}
+              </span>
+              <span className="text-xs text-slate-400">
+                {isDeadlinePassed ? "Prazo expirado" : "Prestação de contas"}
+              </span>
+            </div>
+            <span className="text-xs text-slate-500 mt-1">MinC / ANCINE</span>
+          </div>
+
+          {/* 4. Sem NF */}
           <button
             type="button"
             onClick={() => onNavigateTab("reconciliation")}
-            className="p-3 bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800 hover:border-sky-500/40 rounded-xl text-left transition flex flex-col justify-between group"
+            className="p-3 bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800 hover:border-sky-500/40 rounded-xl text-left transition flex flex-col justify-between group min-h-[90px]"
           >
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center justify-between">
               Sem Nota Fiscal
-              <span className="w-2 h-2 rounded-full bg-sky-400" />
+              <FileX className="w-3.5 h-3.5 text-sky-400" />
             </span>
             <div className="mt-2">
               <span className="text-lg font-bold font-mono text-sky-400 block group-hover:translate-x-0.5 transition-transform">
-                {financialSummary.pendingDebitCount}
+                {countSemNf}
               </span>
-              <span className="text-[10px] text-slate-400 font-mono">
-                de {financialSummary.debitCount} débitos
+              <span className="text-xs text-slate-400 font-mono">
+                de {debitTransactions.length} débitos
               </span>
             </div>
-            <span className="text-[10px] text-sky-300 underline font-medium mt-1">Vincular NF &rarr;</span>
+            <span className="text-xs text-sky-300 underline font-medium mt-1">Vincular NF &rarr;</span>
           </button>
 
-          {/* 4. Comprovantes Bancários */}
+          {/* 5. Sem comprovante */}
           <button
             type="button"
             onClick={() => onNavigateTab("tripartite")}
-            className="p-3 bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800 hover:border-emerald-500/40 rounded-xl text-left transition flex flex-col justify-between group"
+            className="p-3 bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800 hover:border-emerald-500/40 rounded-xl text-left transition flex flex-col justify-between group min-h-[90px]"
           >
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center justify-between">
               Comp. Bancários
-              <span className={`w-2 h-2 rounded-full ${hasImportedBankStatement ? "bg-emerald-400" : "bg-amber-400"}`} />
+              <Clock className="w-3.5 h-3.5 text-amber-400" />
             </span>
             <div className="mt-2">
-              <span className={`text-lg font-bold font-mono block group-hover:translate-x-0.5 transition-transform ${hasImportedBankStatement ? "text-emerald-400" : "text-amber-400"}`}>
-                {hasImportedBankStatement ? financialSummary.reconciledDebitCount : "0"}
+              <span className="text-lg font-bold font-mono text-amber-400 block group-hover:translate-x-0.5 transition-transform">
+                {countSemComprovante}
               </span>
-              <span className="text-[10px] text-slate-400 font-mono">
-                {hasImportedBankStatement ? `de ${financialSummary.debitCount} validados` : "OFX pendente"}
+              <span className="text-xs text-slate-400 font-mono">
+                sem comprovante BB ({countSemComprovante}/{debitTransactions.length})
               </span>
             </div>
-            <span className="text-[10px] text-emerald-300 underline font-medium mt-1">Dossiê Tripé &rarr;</span>
+            <span className="text-xs text-emerald-300 underline font-medium mt-1">Dossiê Tripé &rarr;</span>
           </button>
 
-          {/* 5. Prazo SALIC */}
-          <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl text-left flex flex-col justify-between">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
-              Prazo SALIC
+          {/* 6. Divergências */}
+          <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl text-left flex flex-col justify-between min-h-[90px]">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center justify-between">
+              Divergências
+              <AlertCircle className={`w-3.5 h-3.5 ${divergenciasCount > 0 ? "text-rose-400" : "text-emerald-400"}`} />
             </span>
             <div className="mt-2">
-              <span className="text-sm font-bold text-slate-200 block">
-                {formatDate(project.prazoLimitePrestacao || project.dataFimVigencia)}
+              <span className={`text-lg font-bold font-mono block ${divergenciasCount > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                {divergenciasCount}
               </span>
-              <span className="text-[10px] text-emerald-400 font-medium">
-                Vigência Regular
-              </span>
-            </div>
-            <span className="text-[10px] text-slate-500 mt-1">MinC / ANCINE</span>
-          </div>
-
-          {/* 6. Saldo em Conta */}
-          <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl text-left flex flex-col justify-between">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
-              Saldo Líquido
-            </span>
-            <div className="mt-2">
-              <span className="text-base font-bold font-mono text-cyan-400 block">
-                {hasImportedBankStatement
-                  ? formatCurrency(project.bancoInfo.saldoMovimento)
-                  : "Saldo não informado"}
-              </span>
-              <span className="text-[10px] text-slate-400 font-mono">
-                Rend: +{formatCurrency(project.bancoInfo.rendimentoAplicacao)}
+              <span className="text-xs text-slate-400">
+                {divergenciasCount > 0 ? "Requer conciliação" : "Nenhuma divergência"}
               </span>
             </div>
-            <span className="text-[10px] text-slate-500 mt-1">Banco do Brasil</span>
+            <span className="text-xs text-slate-500 mt-1">Conformidade SALIC</span>
           </div>
         </div>
+
+        {/* Top 4 Ações Urgentes da Fila "Prioridades de hoje" */}
+        {prioritiesOfToday.length > 0 && (
+          <div className="pt-2">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                Ações Mais Urgentes da Fila
+              </span>
+              <button
+                type="button"
+                onClick={showPendingTransactions}
+                className="text-xs text-amber-400 hover:text-amber-300 underline font-semibold flex items-center gap-1"
+              >
+                Ver todas as {prioritiesOfToday.length} pendências &rarr;
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {prioritiesOfToday.slice(0, 4).map((tx, pIdx) => {
+                const rubric = safeRubrics.find(
+                  (r) => r.id === tx.rubricaId || r.id === tx.matchedRubricId || r.id === tx.idRubricaVinculada
+                );
+                const resolved = resolveProviderAndCompany(
+                  tx.favorecido || tx.descricaoExtrato || "",
+                  tx.cnpjCpfFavorecido || ""
+                );
+                const hasNf = Boolean(tx.matchedDocId || tx.idDocumentoFiscalVinculado);
+                const hasBank = Boolean(tx.documentoNumero || tx.documentoBancario);
+                const isGlosa = tx.status === "ALERTA_GLOSA" || Boolean(tx.alertaRisco);
+
+                let motivo = "Pendente de conciliação";
+                let acaoLabel = "Vincular NF";
+                let acaoTab = "reconciliation";
+
+                if (isGlosa) {
+                  motivo = tx.alertaRisco || "Alerta de risco / apontamento MinC";
+                  acaoLabel = "Auditar";
+                  acaoTab = "audit";
+                } else if (!hasNf) {
+                  motivo = "Ausência de Nota Fiscal idônea";
+                  acaoLabel = "Vincular NF";
+                  acaoTab = "reconciliation";
+                } else if (!hasBank) {
+                  motivo = "Comprovante de pagamento não localizado";
+                  acaoLabel = "Dossiê Tripé";
+                  acaoTab = "tripartite";
+                }
+
+                return (
+                  <div
+                    key={`priority-${tx.id}-${pIdx}`}
+                    className="p-3 bg-slate-950/80 border border-slate-800 hover:border-slate-700 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs transition"
+                  >
+                    <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                      <StatusBadge status={tx} size="sm" showDetail />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-white text-xs sm:text-sm truncate">
+                            {resolved.personName || resolved.companyName || "Favorecido não identificado"}
+                          </span>
+                          {resolved.cnpjCpf && (
+                            <span className="text-xs font-mono text-emerald-400">
+                              {resolved.cnpjCpf}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-slate-400 flex items-center gap-1.5 mt-0.5 flex-wrap text-xs">
+                          <span>{formatDate(tx.data || tx.dataTransacao)}</span>
+                          <span>•</span>
+                          <span className="text-slate-300 truncate max-w-[200px]" title={rubric?.nome || "Rubrica pendente"}>
+                            {rubric?.nome || "Rubrica pendente"}
+                          </span>
+                          <span>•</span>
+                          <span className="text-amber-300 font-medium">{motivo}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                      <div className="text-right">
+                        <span className="text-xs sm:text-sm font-bold font-mono text-amber-300 block">
+                          - {formatCurrency(tx.valor)}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onNavigateTab(acaoTab)}
+                        className="min-h-[44px] px-3.5 py-2 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white rounded-xl border border-slate-700 transition flex items-center gap-1 active:scale-95"
+                      >
+                        {acaoLabel} &rarr;
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* KPI Cards Grid */}
@@ -786,10 +967,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
                 }`}
               >
-                {percentAdminOfTotal}% / 15%
+                {formatPercentWithExcess(percentAdminOfTotal, 15)}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 mb-3">
+            <p className="text-xs text-slate-400 mb-3">
               Total executado: {formatCurrency(totalAdminExecutado)} de {formatCurrency(totalExecutado)}
             </p>
             <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative">
@@ -800,7 +981,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 style={{ width: `${Math.min(100, (percentAdminOfTotal / 15) * 100)}%` }}
               />
             </div>
-            <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+            <div className="flex justify-between text-xs text-slate-500 mt-1">
               <span>0%</span>
               <span>Limite Legal 15% (IN 01/2023)</span>
             </div>
@@ -819,10 +1000,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
                 }`}
               >
-                {percentDivOfTotal}% / 30%
+                {formatPercentWithExcess(percentDivOfTotal, 30)}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 mb-3">
+            <p className="text-xs text-slate-400 mb-3">
               Total executado: {formatCurrency(totalDivExecutado)} de {formatCurrency(totalExecutado)}
             </p>
             <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative">
@@ -833,7 +1014,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 style={{ width: `${Math.min(100, (percentDivOfTotal / 30) * 100)}%` }}
               />
             </div>
-            <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+            <div className="flex justify-between text-xs text-slate-500 mt-1">
               <span>0%</span>
               <span>Teto Recomendado 30%</span>
             </div>
@@ -848,7 +1029,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {financialSummary.reconciledDebitCount} de {financialSummary.debitCount} Débitos
             </span>
           </div>
-          <p className="text-[11px] text-slate-400 mb-3">
+          <p className="text-xs text-slate-400 mb-3">
             {!hasImportedBankStatement
               ? usesControlSpreadsheet
                 ? "Movimentos da planilha de controle — aguardando extrato OFX/CSV para conciliação bancária"
@@ -869,7 +1050,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               }}
             />
           </div>
-          <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+          <div className="flex justify-between text-xs text-slate-500 mt-1">
             <span>{glosaTransactions.length} Alerta de Glosa</span>
             <span>{financialSummary.reconciledDebitCount} Conciliados</span>
           </div>
@@ -1038,6 +1219,62 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         />
       </div>
 
+      {/* 6. GUIA PASSO A PASSO SALIC (Secundário e Recolhível) */}
+      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-4 shadow-md">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <ListTodo className="w-3.5 h-3.5" />
+            </div>
+            <h2 className="text-xs font-bold text-white uppercase tracking-wider">
+              Guia Passo a Passo da Prestação de Contas SALIC
+            </h2>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-400 hidden sm:inline">Etapas concluídas:</span>
+            <span className="text-xs font-bold text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              {readinessPercent}%
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsWorkflowGuideExpanded(!isWorkflowGuideExpanded)}
+              className="text-xs text-slate-300 hover:text-white px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 flex items-center gap-1 transition cursor-pointer"
+              aria-expanded={isWorkflowGuideExpanded}
+              aria-label={isWorkflowGuideExpanded ? "Recolher guia" : "Ver passos do guia"}
+            >
+              <span>{isWorkflowGuideExpanded ? "Recolher passos" : "Ver passos"}</span>
+              {isWorkflowGuideExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        </div>
+
+        {isWorkflowGuideExpanded && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-2.5 mt-3 pt-3 border-t border-slate-800">
+            {workflowSteps.map((step) => (
+              <button
+                key={step.id}
+                onClick={() => onNavigateTab(step.tab)}
+                className={`text-left p-3 rounded-xl border transition-all text-xs flex flex-col justify-between min-h-[70px] ${
+                  step.completed
+                    ? "bg-emerald-500/5 border-emerald-500/30 hover:bg-emerald-500/10"
+                    : "bg-slate-950/60 border-slate-800 hover:border-slate-700"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-semibold text-slate-200 truncate">{step.title}</span>
+                  {step.completed ? (
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  ) : (
+                    <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 line-clamp-1">{step.description}</p>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Lançamentos do Extrato Bancário e Conciliação Rápida */}
       <div
         id="project-transactions"
@@ -1130,7 +1367,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
-            <div className="relative w-full sm:w-56">
+            <div className="relative w-full sm:w-48">
               <Filter className="w-3.5 h-3.5 text-amber-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <select
                 aria-label="Categoria da despesa"
@@ -1141,7 +1378,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   if (category !== "ALL") setTxStatusFilter("PENDENTE");
                   setShowAllPreviewTransactions(false);
                 }}
-                className="w-full appearance-none pl-8 pr-8 py-1.5 bg-slate-950/80 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                className="w-full appearance-none pl-8 pr-7 py-1.5 bg-slate-950/80 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
               >
                 <option value="ALL">Categoria da despesa</option>
                 {EXPENSE_CATEGORY_ORDER.map((category) => {
@@ -1154,8 +1391,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 })}
               </select>
             </div>
-            <div className="relative w-full sm:w-64">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+
+            <div className="relative w-full sm:w-48">
+              <ArrowLeftRight className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <select
+                aria-label="Ordenar lançamentos"
+                value={txSort}
+                onChange={(e) => setTxSort(e.target.value as any)}
+                className="w-full appearance-none pl-8 pr-7 py-1.5 bg-slate-950/80 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+              >
+                <option value="default">Ordenação padrão</option>
+                <option value="risco">Por risco (glosa primeiro)</option>
+                <option value="valor_desc">Por valor (maior primeiro)</option>
+                <option value="valor_asc">Por valor (menor primeiro)</option>
+                <option value="data_desc">Por data (mais recente)</option>
+                <option value="data_asc">Por data (mais antigo)</option>
+                <option value="status">Por status</option>
+              </select>
+            </div>
+
+            <div className="relative w-full sm:w-60">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Buscar por descrição, valor..."
@@ -1166,6 +1422,72 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Active Filter Chips */}
+        {(txStatusFilter !== "ALL" || expenseCategoryFilter !== "ALL" || Boolean(txSearch.trim()) || txSort !== "default") && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
+            <span className="text-slate-500 font-medium">Filtros ativos:</span>
+            {txStatusFilter !== "ALL" && (
+              <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2.5 py-1 rounded-full border border-slate-700">
+                Status: {txStatusFilter}
+                <button
+                  type="button"
+                  onClick={() => selectTransactionStatus("ALL")}
+                  className="hover:text-rose-400 p-0.5 ml-1"
+                  aria-label="Remover filtro de status"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {expenseCategoryFilter !== "ALL" && (
+              <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2.5 py-1 rounded-full border border-slate-700">
+                Categoria: {EXPENSE_CATEGORY_LABELS[expenseCategoryFilter]}
+                <button
+                  type="button"
+                  onClick={() => setExpenseCategoryFilter("ALL")}
+                  className="hover:text-rose-400 p-0.5 ml-1"
+                  aria-label="Remover filtro de categoria"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {txSearch.trim() && (
+              <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2.5 py-1 rounded-full border border-slate-700">
+                Busca: &ldquo;{txSearch}&rdquo;
+                <button
+                  type="button"
+                  onClick={() => setTxSearch("")}
+                  className="hover:text-rose-400 p-0.5 ml-1"
+                  aria-label="Remover busca"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {txSort !== "default" && (
+              <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2.5 py-1 rounded-full border border-slate-700">
+                Ordem: {txSort}
+                <button
+                  type="button"
+                  onClick={() => setTxSort("default")}
+                  className="hover:text-rose-400 p-0.5 ml-1"
+                  aria-label="Remover ordenação"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={clearAllTxFilters}
+              className="text-xs text-amber-400 hover:text-amber-300 underline font-semibold flex items-center gap-1 ml-1 cursor-pointer min-h-[32px]"
+            >
+              <RotateCcw className="w-3 h-3" /> Limpar filtros
+            </button>
+          </div>
+        )}
 
         {txStatusFilter === "PENDENTE" && pendingDetailMismatch && (
           <div
@@ -1181,10 +1503,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
 
-        {/* Transactions Table Preview */}
-        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60">
+        {/* Transactions Table Desktop View (>= md) */}
+        <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-900/90 text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
+            <thead className="bg-slate-900/90 text-slate-400 uppercase tracking-wider text-xs border-b border-slate-800">
               <tr>
                 <th className="py-2.5 px-3 text-center w-12"># Nº</th>
                 <th className="py-2.5 px-3">Data</th>
@@ -1199,7 +1521,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <tbody className="divide-y divide-slate-800/60 text-slate-300">
               {filteredPreviewTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                  <td colSpan={8} className="py-8 text-center text-slate-400 text-xs">
                     {txStatusFilter === "PENDENTE" && pendingDetailMismatch
                       ? "Os lançamentos pendentes ainda não foram identificados individualmente nesta base."
                       : "Nenhum lançamento bancário encontrado para os filtros selecionados."}
@@ -1224,15 +1546,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <td className="py-2.5 px-3 font-mono font-bold text-slate-400 text-center text-xs">
                         #{String(idx + 1).padStart(3, "0")}
                       </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap font-mono text-slate-400 text-[11px]">
+                      <td className="py-2.5 px-3 whitespace-nowrap font-mono text-slate-400 text-xs">
                         {formatDate(tx.data || (tx as any).dataTransacao)}
                       </td>
                       <td className="py-2.5 px-3 max-w-[200px]">
-                        <div className="font-semibold text-white truncate" title={tx.descricaoExtrato || tx.descricao}>
+                        <div className="font-semibold text-white truncate text-xs" title={tx.descricaoExtrato || tx.descricao}>
                           {tx.descricaoExtrato || tx.descricao}
                         </div>
                         {bankDocumentNumber && (
-                          <div className="text-[10px] text-slate-400 mt-0.5">
+                          <div className="text-xs text-slate-400 mt-0.5">
                             {bankDocumentNumber}
                           </div>
                         )}
@@ -1241,21 +1563,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {isCredit ? (
                           <div>
                             <div className="font-semibold text-sky-300 text-xs">🏛️ Banco do Brasil • FSA / BRDE</div>
-                            <div className="text-[10px] text-slate-400">Conta Captação / Rendimentos</div>
+                            <div className="text-xs text-slate-400">Conta Captação / Rendimentos</div>
                           </div>
                         ) : (
                           <div>
-                            <div className={`font-semibold truncate ${providerInfo.identified ? "text-slate-100" : "text-amber-300"}`} title={providerInfo.name}>
+                            <div className={`font-semibold truncate text-xs ${providerInfo.identified ? "text-slate-100" : "text-amber-300"}`} title={providerInfo.name}>
                               {providerInfo.name}
                             </div>
-                            <div className="text-[10px] text-emerald-400 font-medium flex items-center gap-1 truncate" title={providerInfo.taxId}>
-                              <Building2 className="w-2.5 h-2.5 shrink-0" /> {providerInfo.taxId || "CNPJ/CPF não identificado na NF"}
+                            <div className="text-xs text-emerald-400 font-medium flex items-center gap-1 truncate" title={providerInfo.taxId}>
+                              <Building2 className="w-3 h-3 shrink-0" /> {providerInfo.taxId || "CNPJ/CPF não identificado na NF"}
                             </div>
                           </div>
                         )}
                       </td>
                       <td
-                        className={`py-2.5 px-3 text-right font-mono font-bold whitespace-nowrap ${
+                        className={`py-2.5 px-3 text-right font-mono font-bold whitespace-nowrap text-xs ${
                           isDebit ? "text-rose-400" : "text-emerald-400"
                         }`}
                       >
@@ -1265,47 +1587,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <td className="py-2.5 px-3 max-w-xs">
                         {rubric ? (
                           <div>
-                            <div className="text-slate-200 text-[11px] font-medium truncate" title={rubric.nome || rubric.nomeRubrica}>
+                            <div className="text-slate-200 text-xs font-medium truncate" title={rubric.nome || rubric.nomeRubrica}>
                               {rubric.codigo || rubric.itemNumero || rubric.id} - {rubric.nome || rubric.nomeRubrica}
                             </div>
-                            <span className="text-[9px] bg-slate-800 text-slate-400 px-1 py-0.2 rounded font-mono">
+                            <span className="text-xs bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">
                               {rubric.etapa}
                             </span>
                           </div>
                         ) : (
-                          <span className="text-slate-500 italic text-[11px]">Não vinculada</span>
+                          <span className="text-slate-500 italic text-xs">Não vinculada</span>
                         )}
                         {isDebit && (
                           <div className="mt-1">
-                            <span className="inline-flex rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
+                            <span className="inline-flex rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-xs font-semibold text-amber-300">
                               {EXPENSE_CATEGORY_LABELS[expenseCategory]}
                             </span>
                           </div>
                         )}
                       </td>
                       <td className="py-2.5 px-3 whitespace-nowrap text-center">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded inline-flex items-center gap-1 ${
-                            isReconciled
-                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                              : tx.status === "ALERTA_GLOSA"
-                              ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                              : tx.status === "PARCIAL"
-                              ? "bg-sky-500/10 text-sky-400 border border-sky-500/20"
-                              : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                          }`}
-                        >
-                          {isReconciled && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
-                          {!isReconciled && <AlertTriangle className="w-3 h-3 text-amber-400" />}
-                          {isReconciled ? "CONCILIADO" : tx.status || tx.statusConciliacao || "PENDENTE"}
-                        </span>
+                        <StatusBadge status={tx} size="sm" showDetail />
                       </td>
                       <td className="py-2.5 px-3 text-right whitespace-nowrap">
                         <button
                           onClick={() => onNavigateTab("reconciliation")}
-                          className="text-xs text-sky-400 hover:text-sky-300 font-semibold inline-flex items-center gap-1 hover:underline"
+                          className="min-h-[44px] px-2 text-xs text-sky-400 hover:text-sky-300 font-semibold inline-flex items-center gap-1 hover:underline"
                         >
-                          Conciliar <ChevronRight className="w-3 h-3" />
+                          Conciliar <ChevronRight className="w-3.5 h-3.5" />
                         </button>
                       </td>
                     </tr>
@@ -1314,6 +1622,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Transactions Mobile Cards View (< md) */}
+        <div className="block md:hidden space-y-3">
+          {filteredPreviewTransactions.length === 0 ? (
+            <div className="py-8 text-center text-slate-400 text-xs bg-slate-950/60 rounded-xl border border-slate-800 p-4">
+              {txStatusFilter === "PENDENTE" && pendingDetailMismatch
+                ? "Os lançamentos pendentes ainda não foram identificados individualmente nesta base."
+                : "Nenhum lançamento bancário encontrado para os filtros selecionados."}
+            </div>
+          ) : (
+            visiblePreviewTransactions.map((tx, idx) => {
+              const rubric = safeRubrics.find(
+                (r) => r.id === tx.rubricaId || r.id === tx.matchedRubricId || r.id === tx.idRubricaVinculada
+              );
+              const matchedDoc = safeDocuments.find((d) => d.id === tx.matchedDocId || d.id === tx.idDocumentoFiscalVinculado);
+              const isReconciled = isTransactionReconciled(tx, hasImportedBankStatement);
+              return (
+                <TransactionMobileCard
+                  key={getTransactionRowKey(tx, idx)}
+                  transaction={tx}
+                  index={idx}
+                  matchedDoc={matchedDoc}
+                  matchedRubric={rubric}
+                  projectId={project.id}
+                  isReconciled={isReconciled}
+                  onOpenLinkModal={() => onNavigateTab("reconciliation")}
+                  onOpenPreview={() => onNavigateTab("documents")}
+                />
+              );
+            })
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 text-xs text-slate-400">
