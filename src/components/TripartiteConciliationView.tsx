@@ -339,11 +339,23 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
   // Total statistics for the selected scope
   const stats = useMemo(() => {
     const totalCount = filteredEntries.length;
+    const isReconciled = (entry: TripartiteEntry) =>
+      entry?.statusTripartite === "CONCILIADO_PERFEITO" ||
+      entry?.statusTripartite === "CONCILIADO LÍQUIDO/BRUTO" ||
+      entry?.statusTripartite === "CONCILIADO COM RETENÇÃO";
+
+    // Documento fiscal e comprovante podem estar anexados antes da validação
+    // pelo extrato OFX/CSV. Mantemos as duas situações separadas para não
+    // apresentar documentação completa como se fosse conciliação bancária.
+    const documentaryCount = filteredEntries.filter(
+      (e) =>
+        isReconciled(e) &&
+        Boolean(e?.checkTripe?.fiscalDocAnexo) &&
+        Boolean(e?.checkTripe?.comprovanteBancarioAnexo)
+    ).length;
     const completeCount = filteredEntries.filter(
       (e) =>
-        (e?.statusTripartite === "CONCILIADO_PERFEITO" ||
-          e?.statusTripartite === "CONCILIADO LÍQUIDO/BRUTO" ||
-          e?.statusTripartite === "CONCILIADO COM RETENÇÃO") &&
+        isReconciled(e) &&
         Boolean(e?.checkTripe?.fiscalDocAnexo) &&
         hasImportedBankStatement && Boolean(e?.checkTripe?.comprovanteBancarioAnexo)
     ).length;
@@ -364,16 +376,24 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
     const pendingBankProofCount = filteredEntries.filter(
       (e) => !(hasImportedBankStatement && e?.checkTripe?.comprovanteBancarioAnexo)
     ).length;
+    const pendingEntryCount = filteredEntries.filter(
+      (e) =>
+        !e?.checkTripe?.fiscalDocAnexo ||
+        !(hasImportedBankStatement && e?.checkTripe?.comprovanteBancarioAnexo)
+    ).length;
 
     return {
       totalCount,
+      documentaryCount,
       completeCount,
       percentComplete: totalCount > 0 ? Math.round((completeCount / totalCount) * 100) : 0,
       totalDebitoBB,
       totalBrutoDoc,
+      grossDebitDifference: totalBrutoDoc - totalDebitoBB,
       totalRetencoes,
       pendingDocsCount,
       pendingBankProofCount,
+      pendingEntryCount,
     };
   }, [filteredEntries, hasImportedBankStatement]);
 
@@ -644,7 +664,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-400 font-medium">Conformidade do Tripé</span>
+                <span className="text-xs text-slate-400 font-medium">Conciliação bancária do Tripé</span>
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full font-bold ${
                     stats.percentComplete === 100
@@ -652,7 +672,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                       : "bg-amber-500/20 text-amber-400"
                   }`}
                 >
-                  {stats.percentComplete}% Completo
+                  {stats.percentComplete}% Validado
                 </span>
               </div>
               <div className="mt-2 text-2xl font-bold text-slate-100">
@@ -667,6 +687,9 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                   style={{ width: `${stats.percentComplete}%` }}
                 />
               </div>
+              <p className="text-[11px] text-slate-500 mt-2">
+                Documentação anexada: {stats.documentaryCount} de {stats.totalCount}
+              </p>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
@@ -680,23 +703,23 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
             </div>
 
             <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
-              <span className="text-xs text-slate-400 font-medium">Valor Bruto Comprovado</span>
+              <span className="text-xs text-slate-400 font-medium">Valor Bruto dos Documentos</span>
               <div className="mt-2 text-2xl font-bold text-emerald-400">
                 {formatCurrency(stats.totalBrutoDoc)}
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                Retenções na fonte: {formatCurrency(stats.totalRetencoes)}
+                Diferença para débitos: {formatCurrency(stats.grossDebitDifference)} · Retenções: {formatCurrency(stats.totalRetencoes)}
               </p>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
-              <span className="text-xs text-slate-400 font-medium">Pendências de Dossiê</span>
+              <span className="text-xs text-slate-400 font-medium">Pendências de validação</span>
               <div className="mt-2 text-2xl font-bold text-amber-400">
-                {stats.pendingDocsCount + stats.pendingBankProofCount}
+                {stats.pendingEntryCount}
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
                 {hasImportedBankStatement
-                  ? `${stats.pendingDocsCount} sem NF | ${stats.pendingBankProofCount} sem comp. bancário`
+                  ? `${stats.pendingDocsCount} sem NF | ${stats.pendingBankProofCount} sem comp. bancário (categorias podem coincidir)`
                   : `Aguardando extrato OFX/CSV. A conciliação bancária permanece indisponível.`}
               </p>
             </div>
