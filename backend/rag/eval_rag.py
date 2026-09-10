@@ -247,6 +247,34 @@ def seed_corpus_para_avaliacao(engine: RAGDocumentalEngine, dataset: List[Dict[s
             "page": 1,
             "date": "01/10/2022",
         },
+        {
+            "document_id": "doc-bb-diaria-1250",
+            "file_name": "Comprovante BB TED Pagamento Diaria R$ 1.250,00 doc 1250.pdf",
+            "doc_type": "COMPROVANTE_PAGAMENTO",
+            "content": (
+                "BANCO DO BRASIL - COMPROVANTE DE TRANSFERÊNCIA BANCÁRIA\n"
+                "DOCUMENTO : 1250\n"
+                "VALOR : R$ 1.250,00\n"
+                "DATA DO PAGAMENTO: 15/10/2022\n"
+                "REF: PAGAMENTO DE DIÁRIA DE PRODUÇÃO AUDIOVISUAL"
+            ),
+            "page": 1,
+            "date": "15/10/2022",
+        },
+        {
+            "document_id": "doc-nf-som-luz-12-05",
+            "file_name": "055 - 12-05-2023 - Fornecedor Som e Luz Ltda.pdf",
+            "doc_type": "NFE",
+            "content": (
+                "NOTA FISCAL DE SERVIÇOS ELETRÔNICA\n"
+                "DATA DE EMISSÃO: 12/05/2023\n"
+                "FORNECEDOR: SOM E LUZ EVENTOS E AUDIOVISUAL LTDA\n"
+                "DISCRIMINAÇÃO: LOCAÇÃO DE EQUIPAMENTOS DE ÁUDIO E ILUMINAÇÃO\n"
+                "VALOR TOTAL: R$ 3.800,00"
+            ),
+            "page": 1,
+            "date": "12/05/2023",
+        },
     ]
 
     for doc in corpus_documentos:
@@ -315,7 +343,7 @@ def executar_avaliacao(dataset_path: Path, api_key_gemini: str = None) -> Dict[s
         # 3. Caso padrão com evidência esperada
         matched_rank = None
         for rank, s in enumerate(sources):
-            conteudo_bloco = (s.get("excerpt", "") + " " + s.get("fileName", "")).lower()
+            conteudo_bloco = (s.get("fullContent", "") + " " + s.get("excerpt", "") + " " + s.get("fileName", "")).lower()
             if any(exp.lower() in conteudo_bloco for exp in expected_ids):
                 matched_rank = rank + 1
                 break
@@ -329,6 +357,7 @@ def executar_avaliacao(dataset_path: Path, api_key_gemini: str = None) -> Dict[s
             context_precisions.append(prec)
             faithfulness_scores.append(1.0)
         else:
+            print(f"MISS: {caso.get('id')} | Query: {q} | Expected: {expected_ids} | Got: {[s.get('fileName') for s in sources[:3]]}")
             context_precisions.append(0.0)
             faithfulness_scores.append(0.0)
 

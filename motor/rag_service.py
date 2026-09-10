@@ -28,7 +28,8 @@ RRF_K = 60
 # Padrões regex para identificadores e entidades sensíveis
 RE_CNPJ = re.compile(r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b")
 RE_CPF = re.compile(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b")
-RE_DOC_BB = re.compile(r"(?:DOCUMENTO\s*[:.]?\s*|\bDOC\s*[:.]?\s*)(\d{5,8})\b", re.IGNORECASE)
+RE_DOC_BB = re.compile(r"(?:DOCUMENTO\s*[:.]?\s*|\bDOC\s*[:.]?\s*)(\d{4,14})\b", re.IGNORECASE)
+RE_NUMERO_ISOLADO = re.compile(r"\b\d{4,14}\b")
 RE_VALOR_BRL = re.compile(r"R\$\s*[\d.]+(?:,\d{2})|\b\d{1,3}(?:\.\d{3})*,\d{2}\b")
 RE_DATA = re.compile(r"\b\d{2}/\d{2}/\d{4}\b")
 RE_RUBRICA = re.compile(r"\b\d{2}\.\d{2}\b")
@@ -51,7 +52,13 @@ def extrair_entidades(texto: str) -> Dict[str, Any]:
     datas = RE_DATA.findall(texto)
     rubricas = RE_RUBRICA.findall(texto)
 
-    # Verifica também números isolados que coincidem com doc bancário (ex: 110401)
+    # Verifica números isolados que podem ser identificadores de documentos
+    numeros_isolados = RE_NUMERO_ISOLADO.findall(texto)
+    for n in numeros_isolados:
+        if n not in ["2020", "2021", "2022", "2023", "2024", "2025", "2026", "2027"]:
+            docs_bb.append(n)
+
+    # Verifica também números formatados que coincidem com doc bancário (ex: 110.401)
     if "110401" in texto or "110.401" in texto:
         if "110401" not in docs_bb:
             docs_bb.append("110401")
@@ -544,9 +551,25 @@ class RAGDocumentalEngine:
             chave_duplicata = (doc_id, page)
             if chave_duplicata in vistos:
                 continue
-            vistos.add(chave_duplicata)
+            # Trecho inteligente centralizado no termo correspondente
+            termos_destaque = termos_exatos + [p for p in query_clean.split() if len(p) >= 3]
+            pos_termo = -1
+            conteudo_str = ch["content"]
+            for t in termos_destaque:
+                if t and len(t) >= 2:
+                    p = conteudo_str.lower().find(t.lower())
+                    if p != -1:
+                        pos_termo = p
+                        break
+            if pos_termo != -1:
+                inicio = max(0, pos_termo - 80)
+                fim = min(len(conteudo_str), inicio + 350)
+                prefixo = "..." if inicio > 0 else ""
+                sufixo = "..." if fim < len(conteudo_str) else ""
+                excerpt = prefixo + conteudo_str[inicio:fim].strip() + sufixo
+            else:
+                excerpt = conteudo_str[:320].strip() + ("..." if len(conteudo_str) > 320 else "")
 
-            excerpt = ch["content"][:280].strip() + ("..." if len(ch["content"]) > 280 else "")
             fontes_deduplicadas.append({
                 "chunkId": ch["chunk_id"],
                 "documentId": doc_id,

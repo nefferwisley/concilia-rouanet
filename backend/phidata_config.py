@@ -94,7 +94,7 @@ def criar_modelo():
 # e em toda a cadeia de chamada (routes/orquestrador.py incluído).
 # ============================================================================
 
-_LIMITE_LINHAS_TOOL = 20  # nº de linhas por consulta — prompt pequeno, hardware fraco
+_LIMITE_LINHAS_TOOL = int(os.getenv("LIMITE_LINHAS_TOOL", "250"))  # Permite auditar as 178 despesas reais do Projeto 1961
 
 
 def _conectar_db():
@@ -127,44 +127,55 @@ def buscar_projeto(projeto_id: str) -> str:
     )
 
 
-def buscar_transacoes(projeto_id: str) -> str:
+def buscar_transacoes(projeto_id: str, limite: int = _LIMITE_LINHAS_TOOL) -> str:
     """Busca as transações (pagamentos) do projeto: fornecedor, documento, valores, status de conciliação."""
     return _query_json(
         "select fornecedor, documento, data_pagamento, valor_bruto, valor_liquido, "
         "tem_nf, tem_comprovante, status, score_conciliacao "
         "from transacoes where projeto_id = %s order by data_pagamento desc limit %s",
-        (projeto_id, _LIMITE_LINHAS_TOOL),
+        (projeto_id, min(limite, 500)),
     )
 
 
-def buscar_rubricas(projeto_id: str) -> str:
+def buscar_rubricas(projeto_id: str, limite: int = _LIMITE_LINHAS_TOOL) -> str:
     """Busca as rubricas orçamentárias do projeto: código, descrição, valor orçado."""
     return _query_json(
         "select codigo, descricao, valor_orcado from rubricas where projeto_id = %s order by codigo limit %s",
-        (projeto_id, _LIMITE_LINHAS_TOOL),
+        (projeto_id, min(limite, 500)),
     )
 
 
-def buscar_extrato_movimentos(projeto_id: str) -> str:
+def buscar_extrato_movimentos(projeto_id: str, limite: int = _LIMITE_LINHAS_TOOL) -> str:
     """Busca os movimentos do extrato bancário do projeto (via conta captadora): data, histórico, valor, status."""
     return _query_json(
         "select m.data, m.historico, m.tipo, m.valor, m.status_conciliacao "
         "from extrato_movimentos m "
         "join contas_captadoras c on c.id = m.conta_id "
         "where c.projeto_id = %s order by m.data desc limit %s",
-        (projeto_id, _LIMITE_LINHAS_TOOL),
+        (projeto_id, min(limite, 500)),
     )
 
 
-def buscar_campos_revisao(projeto_id: str) -> str:
+def buscar_campos_revisao(projeto_id: str, limite: int = _LIMITE_LINHAS_TOOL) -> str:
     """Busca campos incertos pendentes de revisão manual (baixa confiança de matching) do projeto."""
     return _query_json(
         "select cr.campo, cr.valor_extraido, cr.confianca, cr.status_revisao "
         "from campos_revisao cr "
         "join transacoes t on t.id = cr.transacao_id "
         "where t.projeto_id = %s and cr.status_revisao = 'PENDENTE' limit %s",
-        (projeto_id, _LIMITE_LINHAS_TOOL),
+        (projeto_id, min(limite, 500)),
     )
+
+
+def buscar_documentos_rag(projeto_id: str, query: str, top_k: int = 5) -> str:
+    """Busca evidências documentais auditáveis no corpus RAG do projeto (notas fiscais, recibos, comprovantes bancários)."""
+    try:
+        from motor.rag_service import RAGDocumentalEngine
+        engine = RAGDocumentalEngine(api_key_gemini=os.getenv("GOOGLE_API_KEY", ""))
+        resultado = engine.busca_hibrida(project_id=projeto_id, query=query, top_k=top_k)
+        return json.dumps(resultado, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"erro": f"Falha na busca RAG: {str(e)}"}, ensure_ascii=False)
 
 
 # ============================================================================

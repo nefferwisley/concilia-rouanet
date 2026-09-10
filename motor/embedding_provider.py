@@ -21,11 +21,25 @@ DIMENSAO_PADRAO = 768
 MODELO_PADRAO = "nomic-embed-text"
 
 
+import socket
+
+_OLLAMA_AVAILABLE = None
+
+
 def embeddings_ollama_disponiveis() -> bool:
+    global _OLLAMA_AVAILABLE
+    if _OLLAMA_AVAILABLE is not None:
+        return _OLLAMA_AVAILABLE
     try:
         import ollama  # noqa: PLC0415
-        return True
-    except ImportError:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.05)
+        res = s.connect_ex(("127.0.0.1", 11434))
+        s.close()
+        _OLLAMA_AVAILABLE = (res == 0)
+        return _OLLAMA_AVAILABLE
+    except Exception:
+        _OLLAMA_AVAILABLE = False
         return False
 
 
