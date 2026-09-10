@@ -56,6 +56,7 @@ import { AttachmentThumbnail } from "./AttachmentThumbnail";
 import { resolveBankDocumentNumber } from "../utils/bankDocumentNumber";
 import { DocumentPreviewDrawer, DocumentPreviewData } from "./common/DocumentPreviewDrawer";
 import { resolveProviderAndCompany } from "../utils/providerHelper";
+import { StatusBadge } from "./common/StatusBadge";
 
 interface TripartiteConciliationViewProps {
   project: PronacProject;
@@ -77,6 +78,62 @@ type TripartiteSubTab =
   | "01_orcamento"
   | "02_extrato"
   | "03_docs";
+
+interface TripartiteMobileCardProps {
+  entry: TripartiteEntry;
+  index: number;
+  hasImportedBankStatement: boolean;
+  onOpenRateio: (entry: TripartiteEntry) => void;
+  onOpenGed: (entry: TripartiteEntry) => void;
+  onGenerateDocument: (entry: TripartiteEntry) => void;
+}
+
+/** Mobile-first counterpart of the master table: no horizontal scrolling is required. */
+const TripartiteMobileCard: React.FC<TripartiteMobileCardProps> = ({
+  entry,
+  index,
+  hasImportedBankStatement,
+  onOpenRateio,
+  onOpenGed,
+  onGenerateDocument,
+}) => {
+  const hasFiscal = Boolean(entry.checkTripe?.fiscalDocAnexo);
+  const hasBank = hasImportedBankStatement && Boolean(entry.checkTripe?.comprovanteBancarioAnexo);
+  const detail = entry.statusTripartite?.includes("DIVERG")
+    ? "Divergência de valor ou data"
+    : !hasFiscal
+      ? "NF ou documento fiscal ausente"
+      : !hasBank
+        ? hasImportedBankStatement ? "Comprovante bancário ausente" : "Aguardando extrato OFX/CSV"
+        : "NF, comprovante e rubrica vinculados";
+
+  return (
+    <article className="rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-lg space-y-3" aria-label={`Lançamento ${entry.idLancamento || index + 1}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-xs font-bold text-emerald-400">#{String(index + 1).padStart(3, "0")} · {entry.idLancamento || "Sem identificação"}</p>
+          <h3 className="mt-1 text-sm font-semibold text-white truncate">{entry.fornecedor || "Prestador não identificado"}</h3>
+          <p className="mt-1 text-xs text-slate-400">{formatDate(entry.dataCompensacao || "")} · {entry.descricaoRubrica || "Rubrica não identificada"}</p>
+        </div>
+        <strong className="shrink-0 font-mono text-sm text-sky-300">{formatCurrency(Number(entry.valorDebitoBB) || 0)}</strong>
+      </div>
+      <StatusBadge status={entry} detail={detail} size="sm" />
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className={`rounded-xl border p-2 ${hasFiscal ? "border-emerald-500/30 bg-emerald-950/20 text-emerald-300" : "border-amber-500/30 bg-amber-950/20 text-amber-300"}`}>
+          <span className="block font-semibold">Documento fiscal</span><span>{hasFiscal ? entry.numeroDoc || "Vinculado" : "Ausente"}</span>
+        </div>
+        <div className={`rounded-xl border p-2 ${hasBank ? "border-emerald-500/30 bg-emerald-950/20 text-emerald-300" : "border-amber-500/30 bg-amber-950/20 text-amber-300"}`}>
+          <span className="block font-semibold">Comprovante BB</span><span>{hasBank ? "Vinculado" : hasImportedBankStatement ? "Ausente" : "Sem extrato"}</span>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2 border-t border-slate-800 pt-3">
+        {!hasFiscal && <button type="button" onClick={() => onGenerateDocument(entry)} className="min-h-[44px] px-3 rounded-xl bg-sky-500/10 border border-sky-500/30 text-xs font-semibold text-sky-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400">Gerar NF</button>}
+        <button type="button" onClick={() => onOpenGed(entry)} className="min-h-[44px] px-3 rounded-xl border border-slate-700 text-xs font-semibold text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">Ver dossiê</button>
+        <button type="button" onClick={() => onOpenRateio(entry)} className="min-h-[44px] px-3 rounded-xl border border-slate-700 text-xs font-semibold text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">Ratear</button>
+      </div>
+    </article>
+  );
+};
 
 export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProps> = ({
   project,
@@ -830,7 +887,21 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
           </div>
 
           {/* Tripartite Master Table */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl max-h-[750px] overflow-y-auto">
+          <div className="space-y-3 md:hidden" aria-label="Lançamentos tripartites em cartões">
+            {filteredEntries.map((entry, index) => (
+              <TripartiteMobileCard
+                key={entry.idLancamento || entry.id || index}
+                entry={entry}
+                index={index}
+                hasImportedBankStatement={hasImportedBankStatement}
+                onOpenRateio={openRateioModal}
+                onOpenGed={setViewingEntryGed}
+                onGenerateDocument={handleQuickCreateDocForEntry}
+              />
+            ))}
+            {!filteredEntries.length && <p className="rounded-xl border border-slate-800 p-4 text-sm text-slate-400">Nenhum lançamento corresponde aos filtros selecionados.</p>}
+          </div>
+          <div className="hidden md:block bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl max-h-[750px] overflow-y-auto">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-300">
                 <thead className="sticky top-0 z-10 bg-slate-950/95 backdrop-blur text-slate-400 font-semibold uppercase tracking-wider text-[10px] border-b border-slate-800">

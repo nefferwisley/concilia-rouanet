@@ -36,10 +36,11 @@ describe("StatusBadge", () => {
   });
 
   it("renders with appropriate ARIA label and accessible role", () => {
-    const html = renderToStaticMarkup(<StatusBadge status="Conciliado" />);
+    const html = renderToStaticMarkup(<StatusBadge status="Conciliado" detail="NF e comprovante confirmados" />);
     expect(html).toContain('role="status"');
-    expect(html).toContain('aria-label="Status: Conciliado"');
+    expect(html).toContain('aria-label="Status: Conciliado. NF e comprovante confirmados"');
     expect(html).toContain("Conciliado");
+    expect(html).toContain("NF e comprovante confirmados");
   });
 
   it("renders with distinct styling for Pendente and Alerta", () => {

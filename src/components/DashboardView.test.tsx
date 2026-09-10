@@ -363,4 +363,24 @@ describe("Dashboard monetary integrity", () => {
     expect(markup).toContain("Evolução Mensal de Conciliação");
     expect(markup).toContain("Linha Temporal do Saldo em Conta");
   });
+
+  it("puts operational priorities before the collapsible workflow guide", () => {
+    const markup = renderToStaticMarkup(
+      <DashboardView
+        project={project}
+        rubrics={[]}
+        transactions={[...reconciled, ...pending]}
+        documents={[]}
+        alerts={[]}
+        onNavigateTab={() => undefined}
+        onRunAiAudit={() => undefined}
+        isAuditing={false}
+      />,
+    );
+
+    expect(markup).toContain("Prioridades de Hoje");
+    expect(markup).toContain("Resolver pendências");
+    expect(markup).toContain("<details");
+    expect(markup.indexOf("Prioridades de Hoje")).toBeLessThan(markup.indexOf("Guia Passo a Passo da Prestação de Contas SALIC"));
+  });
 });

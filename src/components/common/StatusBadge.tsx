@@ -9,6 +9,8 @@ export interface StatusBadgeProps {
   size?: "sm" | "md" | "lg";
   showTooltip?: boolean;
   tooltipText?: string;
+  /** Submotivo legível, como "NF ausente" ou "Risco de glosa". */
+  detail?: string;
   className?: string;
   onClick?: () => void;
 }
@@ -108,6 +110,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   size = "md",
   showTooltip = false,
   tooltipText,
+  detail,
   className = "",
   onClick,
 }) => {
@@ -157,7 +160,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   }[normalized];
 
   const sizeClasses = {
-    sm: "text-[11px] px-2 py-0.5 gap-1",
+    sm: "text-xs px-2 py-1 gap-1 min-h-[28px]",
     md: "text-xs px-2.5 py-1 gap-1.5",
     lg: "text-sm px-3 py-1.5 gap-2",
   }[size];
@@ -174,12 +177,13 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   const badgeContent = (
     <span
       role="status"
-      aria-label={styleConfig.ariaLabel}
+      aria-label={detail ? `${styleConfig.ariaLabel}. ${detail}` : styleConfig.ariaLabel}
       title={showTooltip || tooltipText ? description : undefined}
       className={`inline-flex items-center font-medium rounded-lg border ${styleConfig.bg} ${styleConfig.text} ${styleConfig.border} ${sizeClasses} ${className} select-none transition-colors`}
     >
       <Icon className={`${iconSizes} ${styleConfig.iconColor} shrink-0`} aria-hidden="true" />
       <span>{normalized}</span>
+      {detail && <span className="font-normal text-current/90">— {detail}</span>}
     </span>
   );
 
@@ -188,7 +192,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       <button
         type="button"
         onClick={onClick}
-        className="cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/50 rounded-lg"
+        className="cursor-pointer min-h-[44px] min-w-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
       >
         {badgeContent}
       </button>

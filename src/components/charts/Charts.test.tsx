@@ -19,8 +19,8 @@ describe("Visual Charts Suite", () => {
       );
 
       expect(markup).toContain("Produção / Execução");
-      expect(markup).toContain("Estouro Orçamentário");
-      expect(markup).toContain("120.0% executado");
+      expect(markup).toContain("Excede o limite em 20.0 p.p.");
+      expect(markup).toContain("120.0% executado — excede o limite em 20.0 pontos percentuais.");
     });
 
     it("renders normal execution within budget", () => {
@@ -33,8 +33,8 @@ describe("Visual Charts Suite", () => {
       );
 
       expect(markup).toContain("Pré-Produção");
-      expect(markup).toContain("60.0% executado");
-      expect(markup).not.toContain("Estouro Orçamentário");
+      expect(markup).toContain("60.0% executado.");
+      expect(markup).not.toContain("Excede o limite");
     });
   });
 

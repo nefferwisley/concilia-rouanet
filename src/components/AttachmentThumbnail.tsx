@@ -11,6 +11,7 @@ interface AttachmentThumbnailProps {
   projectId?: string;
   compact?: boolean;
   onOpenPreview?: () => void;
+  onReimport?: () => void;
 }
 
 export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
@@ -22,6 +23,7 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
   projectId = "1961",
   compact = false,
   onOpenPreview,
+  onReimport,
 }) => {
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<DocumentUrlStatus>("LOADING");
@@ -108,7 +110,7 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
     return (
       <div
         ref={containerRef}
-        className={`${sizeClass} bg-slate-800/70 animate-pulse rounded-lg flex items-center justify-center text-[10px] text-slate-400 border border-slate-700/60`}
+        className={`${sizeClass} bg-slate-800/70 animate-pulse rounded-lg flex items-center justify-center text-xs text-slate-400 border border-slate-700/60`}
         aria-label={`Carregando prévia de ${fileName}`}
         role="status"
       >
@@ -123,7 +125,7 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
     return (
       <div
         ref={containerRef}
-        className={`${sizeClass} bg-slate-900 rounded-lg flex flex-col items-center justify-center text-center p-1 text-[9px] text-amber-300/90 border border-amber-500/30`}
+        className={`${sizeClass} bg-slate-900 rounded-lg flex flex-col items-center justify-center text-center p-2 text-xs text-amber-300/90 border border-amber-500/30`}
         title="Sessão expirada. Faça login novamente para visualizar documentos protegidos."
       >
         <LogIn className="w-3.5 h-3.5 text-amber-400 mb-0.5 shrink-0" />
@@ -137,11 +139,16 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
     return (
       <div
         ref={containerRef}
-        className={`${sizeClass} bg-slate-900 rounded-lg flex flex-col items-center justify-center text-center p-1 text-[9px] text-slate-400 border border-slate-800`}
+        className={`${sizeClass} bg-slate-900 rounded-lg flex flex-col items-center justify-center text-center p-2 text-xs text-slate-400 border border-slate-800`}
         title="Arquivo precisa ser reimportado."
       >
         <FileX className="w-3.5 h-3.5 text-slate-500 mb-0.5 shrink-0" />
-        {!compact && <span className="line-clamp-2 leading-tight text-slate-400">Reimportar</span>}
+        {!compact && <span className="line-clamp-2 leading-tight text-slate-400">Não localizado</span>}
+        {onReimport && (
+          <button type="button" onClick={onReimport} className="mt-1 min-h-[44px] px-2 text-xs text-emerald-300 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded">
+            Reimportar arquivo
+          </button>
+        )}
       </div>
     );
   }
@@ -151,14 +158,14 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
     return (
       <div
         ref={containerRef}
-        className={`${sizeClass} bg-slate-900 rounded-lg flex flex-col items-center justify-center text-center p-1 text-[9px] text-slate-400 border border-rose-500/30`}
+        className={`${sizeClass} bg-slate-900 rounded-lg flex flex-col items-center justify-center text-center p-2 text-xs text-slate-400 border border-rose-500/30`}
         title={errorMessage || "Erro ao carregar prévia"}
       >
         <AlertCircle className="w-3.5 h-3.5 text-rose-400 mb-0.5 shrink-0" />
         <button
           type="button"
           onClick={handleRetry}
-          className="mt-0.5 text-[8px] text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-1 py-0.5 rounded border border-slate-700 transition flex items-center gap-0.5"
+          className="mt-1 min-h-[44px] text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded border border-slate-700 transition flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
           title="Tentar carregar novamente"
         >
           <RefreshCw className="w-2.5 h-2.5" /> Retry
@@ -179,13 +186,19 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
     if (onOpenPreview) {
       e.preventDefault();
       onOpenPreview();
+    } else {
+      window.open(signedUrl, "_blank", "noopener,noreferrer");
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if ((e.key === "Enter" || e.key === " ") && onOpenPreview) {
+    if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      onOpenPreview();
+      if (onOpenPreview) {
+        onOpenPreview();
+      } else {
+        window.open(signedUrl, "_blank", "noopener,noreferrer");
+      }
     }
   };
 
@@ -198,7 +211,7 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
         tabIndex={0}
         role="button"
         aria-label={`Abrir prévia da imagem ${fileName}`}
-        className={`block ${sizeClass} overflow-hidden rounded-lg border border-slate-700 hover:border-emerald-500 transition cursor-pointer group focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+        className={`block ${sizeClass} overflow-hidden rounded-lg border border-slate-700 hover:border-emerald-500 transition cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`}
       >
         <img
           src={signedUrl}
@@ -220,7 +233,7 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
         tabIndex={0}
         role="button"
         aria-label={`Abrir prévia do PDF ${fileName}`}
-        className={`block ${sizeClass} overflow-hidden rounded-lg border border-slate-700 hover:border-emerald-500 transition relative group cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+        className={`block ${sizeClass} overflow-hidden rounded-lg border border-slate-700 hover:border-emerald-500 transition relative group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`}
       >
         <iframe
           src={`${signedUrl}#view=FitH`}
@@ -242,10 +255,10 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
       tabIndex={0}
       role="button"
       aria-label={`Abrir documento ${fileName}`}
-      className={`${sizeClass} bg-slate-900 rounded-lg flex flex-col items-center justify-center text-xs text-slate-400 border border-slate-700 hover:border-emerald-500 hover:text-emerald-400 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+      className={`${sizeClass} bg-slate-900 rounded-lg flex flex-col items-center justify-center text-xs text-slate-400 border border-slate-700 hover:border-emerald-500 hover:text-emerald-400 transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`}
     >
       <FileCheck className="w-6 h-6 mb-1 text-emerald-400" />
-      <span className="px-2 text-center text-[10px] break-all line-clamp-2">{fileName}</span>
+      <span className="px-2 text-center text-xs break-all line-clamp-2">{fileName}</span>
     </div>
   );
 };

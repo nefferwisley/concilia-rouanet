@@ -73,7 +73,7 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
       {/* Top row: Sequence number, Status Badge and Value */}
       <div className="flex items-center justify-between gap-2 mb-2.5">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[11px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+          <span className="font-mono text-xs font-bold text-slate-400 bg-slate-800 px-2 py-1 rounded">
             #{String(index + 1).padStart(3, "0")}
           </span>
           <StatusBadge status={transaction} size="sm" />
@@ -102,7 +102,7 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
               <p className="text-xs text-slate-400 line-clamp-1">{resolved.companyName}</p>
             )}
             {resolved.cnpjCpf && (
-              <span className="text-[11px] font-mono text-emerald-400">
+              <span className="text-xs font-mono text-emerald-400">
                 {resolved.cnpjCpf}
               </span>
             )}
@@ -116,7 +116,7 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
       </div>
 
       {/* Proof indicators row (NF badge, Comprovante BB badge) */}
-      <div className="flex flex-wrap items-center gap-1.5 py-2 border-t border-slate-800/80 text-[11px]">
+      <div className="flex flex-wrap items-center gap-1.5 py-2 border-t border-slate-800/80 text-xs">
         {hasFiscalDoc ? (
           <span className="inline-flex items-center gap-1 text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-medium">
             <FileCheck2 className="w-3 h-3 text-emerald-400" /> NF Vinculada
@@ -143,7 +143,7 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
             <button
               type="button"
               onClick={() => onOpenPreview(matchedDoc, transaction)}
-              className="px-2.5 py-1 text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-lg flex items-center gap-1 transition"
+              className="min-h-[44px] px-2.5 py-1 text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-lg flex items-center gap-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
             >
               <Eye className="w-3.5 h-3.5" /> Ver Doc
             </button>
@@ -151,7 +151,7 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
             <button
               type="button"
               onClick={() => onOpenLinkModal(transaction)}
-              className="px-2.5 py-1 text-xs font-semibold bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-lg flex items-center gap-1 transition shadow-sm"
+              className="min-h-[44px] px-2.5 py-1 text-xs font-semibold bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-lg flex items-center gap-1 transition shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
             >
               <Link className="w-3.5 h-3.5" /> Vincular
             </button>
@@ -160,7 +160,7 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
           <button
             type="button"
             onClick={() => setIsExpanded(!isExpanded)}
-            className="p-1.5 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition"
+            className="min-h-[44px] min-w-[44px] p-1.5 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
             aria-label={isExpanded ? "Recolher detalhes" : "Expandir detalhes"}
           >
             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -173,21 +173,21 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
         <div className="mt-3 pt-3 border-t border-slate-800 space-y-3 text-xs animate-fadeIn">
           {/* Rubrica */}
           <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
+            <span className="text-xs uppercase font-bold text-slate-400 block mb-0.5">
               Rubrica Orçamentária
             </span>
             <p className="text-slate-200 font-medium">
               {matchedRubric?.nomeRubrica || matchedRubric?.nome || "Não vinculada"}
             </p>
             {matchedRubric?.etapa && (
-              <span className="text-[10px] text-slate-400 block mt-0.5">
+              <span className="text-xs text-slate-400 block mt-0.5">
                 Etapa: {matchedRubric.etapa}
               </span>
             )}
           </div>
 
           {/* Doc Bancário / FITID */}
-          <div className="grid grid-cols-2 gap-2 text-slate-400 text-[11px]">
+          <div className="grid grid-cols-2 gap-2 text-slate-400 text-xs">
             <div>
               <span className="block text-slate-500">Doc. Bancário:</span>
               <span className="font-mono text-slate-300">
@@ -205,7 +205,7 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
           {/* Miniatura do Anexo se houver documento */}
           {hasFiscalDoc && matchedDoc && (
             <div className="pt-2">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1.5">
+              <span className="text-xs uppercase font-bold text-slate-400 block mb-1.5">
                 Comprovante Anexado
               </span>
               <div className="w-full max-w-[140px]">
@@ -226,7 +226,7 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
               <button
                 type="button"
                 onClick={() => onUnlink(transaction)}
-                className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 underline font-medium"
+                className="min-h-[44px] text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 underline font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 rounded"
               >
                 <Unlink className="w-3 h-3" /> Desvincular despesa
               </button>

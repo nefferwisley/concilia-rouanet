@@ -179,6 +179,7 @@ export const ReconciliationFilterBar: React.FC<ReconciliationFilterBarProps> = (
               <option value="DATE_DESC">📅 Mais Recentes</option>
               <option value="DATE_ASC">⏳ Mais Antigos</option>
               <option value="FAVORECIDO_ASC">🏢 Favorecido (A-Z)</option>
+              <option value="STATUS_ASC">🏷️ Status (A-Z)</option>
             </select>
           </div>
 
@@ -353,7 +354,7 @@ export const ReconciliationFilterBar: React.FC<ReconciliationFilterBarProps> = (
           {searchQuery && (
             <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2 py-0.5 rounded-full border border-slate-700">
               Busca: &ldquo;{searchQuery}&rdquo;
-              <button onClick={() => onSearchChange("")} className="hover:text-amber-400">
+              <button type="button" onClick={() => onSearchChange("")} aria-label="Remover filtro de busca" className="min-h-[32px] min-w-[32px] hover:text-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 rounded">
                 <X className="w-3 h-3" />
               </button>
             </span>
@@ -362,7 +363,7 @@ export const ReconciliationFilterBar: React.FC<ReconciliationFilterBarProps> = (
           {period !== "ALL" && (
             <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2 py-0.5 rounded-full border border-slate-700">
               Mês: {period}
-              <button onClick={() => onPeriodChange("ALL")} className="hover:text-amber-400">
+              <button type="button" onClick={() => onPeriodChange("ALL")} aria-label="Remover filtro de período" className="min-h-[32px] min-w-[32px] hover:text-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 rounded">
                 <X className="w-3 h-3" />
               </button>
             </span>
@@ -371,7 +372,7 @@ export const ReconciliationFilterBar: React.FC<ReconciliationFilterBarProps> = (
           {statusFilter !== "ALL" && (
             <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2 py-0.5 rounded-full border border-slate-700">
               Status: {statusFilter}
-              <button onClick={() => onStatusChange("ALL")} className="hover:text-amber-400">
+              <button type="button" onClick={() => onStatusChange("ALL")} aria-label="Remover filtro de status" className="min-h-[32px] min-w-[32px] hover:text-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 rounded">
                 <X className="w-3 h-3" />
               </button>
             </span>
@@ -380,7 +381,7 @@ export const ReconciliationFilterBar: React.FC<ReconciliationFilterBarProps> = (
           {expenseCategory !== "ALL" && (
             <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2 py-0.5 rounded-full border border-slate-700">
               {EXPENSE_CATEGORY_LABELS[expenseCategory]}
-              <button onClick={() => onExpenseCategoryChange("ALL")} className="hover:text-amber-400">
+              <button type="button" onClick={() => onExpenseCategoryChange("ALL")} aria-label="Remover filtro de categoria" className="min-h-[32px] min-w-[32px] hover:text-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 rounded">
                 <X className="w-3 h-3" />
               </button>
             </span>
@@ -389,7 +390,7 @@ export const ReconciliationFilterBar: React.FC<ReconciliationFilterBarProps> = (
           {activePreset !== "ALL" && (
             <span className="inline-flex items-center gap-1 bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30 font-semibold">
               Preset: {activePreset}
-              <button onClick={() => onPresetSelect("ALL")} className="hover:text-amber-100">
+              <button type="button" onClick={() => onPresetSelect("ALL")} aria-label="Remover filtro rápido" className="min-h-[32px] min-w-[32px] hover:text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 rounded">
                 <X className="w-3 h-3" />
               </button>
             </span>
@@ -398,7 +399,7 @@ export const ReconciliationFilterBar: React.FC<ReconciliationFilterBarProps> = (
           {sortBy !== "ACTION_DEFAULT" && (
             <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-200 px-2 py-0.5 rounded-full border border-slate-700">
               Ordem: {sortBy}
-              <button onClick={() => onSortChange("ACTION_DEFAULT")} className="hover:text-amber-400">
+              <button type="button" onClick={() => onSortChange("ACTION_DEFAULT")} aria-label="Remover ordenação" className="min-h-[32px] min-w-[32px] hover:text-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 rounded">
                 <X className="w-3 h-3" />
               </button>
             </span>

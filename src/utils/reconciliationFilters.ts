@@ -9,7 +9,8 @@ export type SortCriteria =
   | "VALUE_ASC"
   | "DATE_DESC"
   | "DATE_ASC"
-  | "FAVORECIDO_ASC";
+  | "FAVORECIDO_ASC"
+  | "STATUS_ASC";
 
 export type FilterPreset =
   | "ALL"
@@ -74,6 +75,9 @@ export function sortTransactionsActionOriented(
 
       case "FAVORECIDO_ASC":
         return nameA.localeCompare(nameB);
+
+      case "STATUS_ASC":
+        return String(a.status || "PENDENTE").localeCompare(String(b.status || "PENDENTE"));
 
       case "ACTION_DEFAULT":
       default:
