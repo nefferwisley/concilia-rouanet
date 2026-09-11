@@ -181,7 +181,7 @@ export const DocumentPreviewDrawer: React.FC<DocumentPreviewDrawerProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Favorecido */}
             <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-1">
-              <span className="text-[11px] uppercase tracking-wider text-slate-400 flex items-center gap-1 font-semibold">
+              <span className="text-xs uppercase tracking-wider text-slate-400 flex items-center gap-1 font-semibold">
                 <Building2 className="w-3 h-3 text-slate-400" /> Favorecido / Fornecedor
               </span>
               <p className="text-sm font-bold text-white">{resolved.personName || resolved.companyName || "Não informado"}</p>
@@ -195,7 +195,7 @@ export const DocumentPreviewDrawer: React.FC<DocumentPreviewDrawerProps> = ({
 
             {/* Documento Fiscal */}
             <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-1">
-              <span className="text-[11px] uppercase tracking-wider text-slate-400 flex items-center gap-1 font-semibold">
+              <span className="text-xs uppercase tracking-wider text-slate-400 flex items-center gap-1 font-semibold">
                 <FileText className="w-3 h-3 text-slate-400" /> Documento Fiscal
               </span>
               <p className="text-sm font-bold text-white">
@@ -210,7 +210,7 @@ export const DocumentPreviewDrawer: React.FC<DocumentPreviewDrawerProps> = ({
 
             {/* Valores e Retenções */}
             <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-2">
-              <span className="text-[11px] uppercase tracking-wider text-slate-400 flex items-center gap-1 font-semibold">
+              <span className="text-xs uppercase tracking-wider text-slate-400 flex items-center gap-1 font-semibold">
                 <DollarSign className="w-3 h-3 text-slate-400" /> Discriminação Financeira
               </span>
               <div className="space-y-1 text-xs">
@@ -233,7 +233,7 @@ export const DocumentPreviewDrawer: React.FC<DocumentPreviewDrawerProps> = ({
 
             {/* Vínculo Bancário e Rubrica */}
             <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-1">
-              <span className="text-[11px] uppercase tracking-wider text-slate-400 flex items-center gap-1 font-semibold">
+              <span className="text-xs uppercase tracking-wider text-slate-400 flex items-center gap-1 font-semibold">
                 <ShieldCheck className="w-3 h-3 text-slate-400" /> Vínculo Orçamentário e Extrato
               </span>
               <div className="text-xs space-y-1">

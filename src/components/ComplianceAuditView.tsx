@@ -149,7 +149,7 @@ export const ComplianceAuditView: React.FC<ComplianceAuditViewProps> = ({
                 ? "APROVAÇÃO COM RESSALVAS MENORES"
                 : "RISCO DE GLOSA / REPROVAÇÃO"}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">
+            <p className="text-xs text-slate-400 mt-1">
               {unresolvedAlerts.length === 0
                 ? "Nenhuma pendência grave detectada no dossiê."
                 : `${unresolvedAlerts.length} apontamento(s) requerem atenção ou justificativa formal.`}
@@ -162,7 +162,7 @@ export const ComplianceAuditView: React.FC<ComplianceAuditViewProps> = ({
           <div className="font-semibold text-slate-200 flex items-center gap-1.5 border-b border-slate-800 pb-1.5">
             <Scale className="w-4 h-4 text-emerald-400" /> Checklist Normativo Obrigatório
           </div>
-          <div className="space-y-1.5 text-[11px]">
+          <div className="space-y-1.5 text-xs">
             <div className="flex items-center justify-between text-slate-300">
               <span>1. Vigência dos Pagamentos:</span>
               <span className="text-emerald-400 font-bold">100% OK</span>
@@ -189,13 +189,13 @@ export const ComplianceAuditView: React.FC<ComplianceAuditViewProps> = ({
             <div className="text-xl font-bold font-mono text-rose-400 mt-1">
               {criticalCount > 0 ? formatCurrency(48.5) : "R$ 0,00"}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">
+            <p className="text-xs text-slate-400 mt-1">
               {criticalCount > 0
                 ? "Tarifas bancárias ou débitos sem NF passíveis de devolução ao erário."
                 : "Sem valores sujeitos a ressarcimento com recursos próprios."}
             </p>
           </div>
-          <div className="text-[10px] text-slate-500 pt-2 border-t border-slate-800">
+          <div className="text-xs text-slate-500 pt-2 border-t border-slate-800">
             Regulamentado pelo Decreto nº 11.453/2023 & IN MinC 01/2023
           </div>
         </div>
@@ -228,7 +228,7 @@ export const ComplianceAuditView: React.FC<ComplianceAuditViewProps> = ({
                 <div className="space-y-1.5 max-w-2xl">
                   <div className="flex flex-wrap items-center gap-2">
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                      className={`text-xs font-bold px-2 py-0.5 rounded ${
                         alt.gravidade === "ALTA"
                           ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
                           : alt.gravidade === "MEDIA"
@@ -238,12 +238,12 @@ export const ComplianceAuditView: React.FC<ComplianceAuditViewProps> = ({
                     >
                       Gravidade {alt.gravidade}
                     </span>
-                    <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">
+                    <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">
                       {alt.categoria}
                     </span>
-                    <span className="text-[10px] text-slate-400 font-mono">{alt.itemAfetado}</span>
+                    <span className="text-xs text-slate-400 font-mono">{alt.itemAfetado}</span>
                     {alt.resolvido && (
-                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-bold border border-emerald-500/30">
+                      <span className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-bold border border-emerald-500/30">
                         ✓ Sanado / Justificado
                       </span>
                     )}
@@ -253,10 +253,10 @@ export const ComplianceAuditView: React.FC<ComplianceAuditViewProps> = ({
                   <p className="text-xs text-slate-300 leading-relaxed">{alt.descricao}</p>
 
                   <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 text-xs space-y-1 mt-2">
-                    <div className="text-[11px] text-slate-400">
+                    <div className="text-xs text-slate-400">
                       <strong className="text-slate-300">Base Legal no MinC:</strong> {alt.baseLegal}
                     </div>
-                    <div className="text-[11px] text-emerald-400">
+                    <div className="text-xs text-emerald-400">
                       <strong className="text-emerald-300">Ação Corretiva Recomendada:</strong>{" "}
                       {alt.acaoRecomendada}
                     </div>
@@ -264,7 +264,7 @@ export const ComplianceAuditView: React.FC<ComplianceAuditViewProps> = ({
 
                   {alt.justificativaSugeridaSalic && (
                     <div className="mt-2 bg-slate-950 p-3 rounded-xl border border-slate-800">
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+                      <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
                         <span className="font-semibold text-slate-300">
                           Minuta de Justificativa Pronta para o SALIC:
                         </span>

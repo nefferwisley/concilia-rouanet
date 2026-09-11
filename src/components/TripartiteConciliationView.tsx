@@ -643,7 +643,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
           >
             <Split className="w-4 h-4" /> 04. Lançamentos Conciliados (Nexo Tripartite)
             <span
-              className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+              className={`text-xs px-1.5 py-0.2 rounded-full font-extrabold ${
                 activeSubTab === "04_lancamentos" ? "bg-slate-950/30 text-slate-950" : "bg-slate-800 text-emerald-400"
               }`}
             >
@@ -742,7 +742,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                   style={{ width: `${stats.percentComplete}%` }}
                 />
               </div>
-              <p className="text-[11px] text-slate-500 mt-2">
+              <p className="text-xs text-slate-500 mt-2">
                 Documentação anexada: {stats.documentaryCount} de {stats.totalCount}
               </p>
             </div>
@@ -752,7 +752,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
               <div className="mt-2 text-2xl font-bold text-sky-400">
                 {formatCurrency(stats.totalDebitoBB)}
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Valor total debitado da Conta Movimento
               </p>
             </div>
@@ -762,7 +762,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
               <div className="mt-2 text-2xl font-bold text-emerald-400">
                 {formatCurrency(stats.totalBrutoDoc)}
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Diferença para débitos: {formatCurrency(stats.grossDebitDifference)} · Retenções: {formatCurrency(stats.totalRetencoes)}
               </p>
             </div>
@@ -772,7 +772,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
               <div className="mt-2 text-2xl font-bold text-amber-400">
                 {stats.pendingEntryCount}
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 {hasImportedBankStatement
                   ? `${stats.pendingDocsCount} sem NF | ${stats.pendingBankProofCount} sem comp. bancário (categorias podem coincidir)`
                   : `Aguardando extrato OFX/CSV. A conciliação bancária permanece indisponível.`}
@@ -803,7 +803,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
               {/* Period Dropdown */}
               <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs">
                 <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-slate-400 text-[11px]">Período:</span>
+                <span className="text-slate-400 text-xs">Período:</span>
                 <select
                   value={selectedPeriod}
                   onChange={(e) => setSelectedPeriod(e.target.value)}
@@ -1014,7 +1014,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                           <div className="font-mono font-bold text-emerald-400">
                             {entry.idLancamento}
                           </div>
-                          <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                          <div className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
                             <Calendar className="w-3 h-3 text-slate-500" />
                             {entry.periodo} ({formatDate(entry.dataCompensacao)})
                           </div>
@@ -1025,7 +1025,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                           <div className="font-medium text-slate-200 line-clamp-1">
                             {entry.descricaoRubrica}
                           </div>
-                          <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                          <div className="text-xs text-slate-500 font-mono mt-0.5">
                             ID: {entry.idRubrica}
                           </div>
                         </td>
@@ -1036,11 +1036,11 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                             {resolved.personName || resolved.companyName || fiscalProvider.name}
                           </div>
                           {resolved.companyName && resolved.companyName !== resolved.personName && (
-                            <div className="text-[10px] text-slate-400 truncate" title={resolved.companyName}>
+                            <div className="text-xs text-slate-400 truncate" title={resolved.companyName}>
                               {resolved.companyName}
                             </div>
                           )}
-                          <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                          <div className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
                             {entry.tipoDoc && entry.tipoDoc.includes("Passagem") ? (
                               <Plane className="w-3 h-3 text-sky-400 shrink-0" />
                             ) : entry.tipoDoc && entry.tipoDoc.includes("Alimentação") ? (
@@ -1050,12 +1050,12 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                             )}
                             <span className="font-mono text-slate-300">{entry.numeroDoc}</span>
                             {(resolved.cnpjCpf || fiscalProvider.taxId) && (
-                              <span className="text-[10px] text-emerald-400 font-medium truncate flex items-center gap-0.5">
+                              <span className="text-xs text-emerald-400 font-medium truncate flex items-center gap-0.5">
                                 • {resolved.cnpjCpf || fiscalProvider.taxId}
                               </span>
                             )}
                           </div>
-                          <div className="mt-1 text-[10px] text-sky-300 font-mono">
+                          <div className="mt-1 text-xs text-sky-300 font-mono">
                             Documento BB: {bankDocumentNumber || "não identificado no comprovante"}
                           </div>
                         </td>
@@ -1065,7 +1065,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                           <div className="font-bold text-sky-400 font-mono">
                             {formatCurrency(entry.valorDebitoBB)}
                           </div>
-                          <div className="text-[10px] text-slate-500 font-mono">
+                          <div className="text-xs text-slate-500 font-mono">
                             Aut: {entry.idTransacaoBB}
                           </div>
                         </td>
@@ -1077,7 +1077,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                               ? formatCurrency(Number(bankTransaction.saldoAposTransacao))
                               : "Não informado"}
                           </div>
-                          <div className="text-[10px] text-slate-500">Saldo BB após este débito</div>
+                          <div className="text-xs text-slate-500">Saldo BB após este débito</div>
                         </td>
 
                         {/* Tripe Comprobatorio */}
@@ -1085,21 +1085,21 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                           <div className="space-y-1">
                             <div className="flex items-center gap-1.5">
                               {hasFiscal ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                <span className="inline-flex items-center gap-1 text-xs bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20">
                                   <FileCheck className="w-3 h-3" /> NF/Doc
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-[10px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded border border-red-500/20 font-bold">
+                                <span className="inline-flex items-center gap-1 text-xs bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded border border-red-500/20 font-bold">
                                   <FileX className="w-3 h-3" /> {hasImportedBankStatement ? "Falta NF" : "Aguardando OFX"}
                                 </span>
                               )}
 
                               {hasBank ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                <span className="inline-flex items-center gap-1 text-xs bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20">
                                   <CheckCircle2 className="w-3 h-3" /> Comp. BB
                                 </span>
                               ) : (
-                                <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${
+                                <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border ${
                                   hasImportedBankStatement
                                     ? "bg-red-500/10 text-red-400 border-red-500/20"
                                     : "bg-amber-500/10 text-amber-400 border-amber-500/20"
@@ -1178,43 +1178,43 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                             )}
 
                             {isTripodComplete ? (
-                              <div className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                              <div className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
                                 <ShieldCheck className="w-3 h-3 text-emerald-400" /> Dossiê 100% OK
                               </div>
                             ) : !hasImportedBankStatement ? (
-                              <div className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
+                              <div className="text-xs text-amber-400 font-semibold flex items-center gap-1">
                                 <HelpCircle className="w-3 h-3" /> Validação bancária indisponível sem extrato
                               </div>
                             ) : (
                               <div className="flex flex-col gap-1 mt-1">
                                 {!hasFiscal && (
-                                  <div className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
+                                  <div className="text-xs text-amber-400 font-semibold flex items-center gap-1">
                                     <AlertTriangle className="w-3 h-3 shrink-0" /> documento fiscal ausente
                                   </div>
                                 )}
                                 {!hasBank && (
-                                  <div className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
+                                  <div className="text-xs text-amber-400 font-semibold flex items-center gap-1">
                                     <AlertTriangle className="w-3 h-3 shrink-0" /> comprovante bancário ausente
                                   </div>
                                 )}
                                 {!entry.idRubrica && (
-                                  <div className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
+                                  <div className="text-xs text-amber-400 font-semibold flex items-center gap-1">
                                     <AlertTriangle className="w-3 h-3 shrink-0" /> rubrica SALIC ausente
                                   </div>
                                 )}
                                 {(!entry.idTransacaoBB || !entry.valorDebitoBB) && (
-                                  <div className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
+                                  <div className="text-xs text-amber-400 font-semibold flex items-center gap-1">
                                     <AlertTriangle className="w-3 h-3 shrink-0" /> lançamento sem correspondência no extrato
                                   </div>
                                 )}
                                 {entry.statusTripartite?.includes("DIVERG") && (
-                                  <div className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
+                                  <div className="text-xs text-amber-400 font-semibold flex items-center gap-1">
                                     <AlertTriangle className="w-3 h-3 shrink-0" /> divergência de valor/data
                                   </div>
                                 )}
                                 <button
                                   onClick={() => handleQuickCreateDocForEntry(entry)}
-                                  className="text-[10px] text-sky-400 hover:text-sky-300 underline flex items-center gap-1 font-semibold mt-1"
+                                  className="text-xs text-sky-400 hover:text-sky-300 underline flex items-center gap-1 font-semibold mt-1"
                                 >
                                   <Sparkles className="w-3 h-3" /> Gerar NF em 1 clique
                                 </button>
@@ -1343,7 +1343,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                       {summary.periodo}
                     </span>
                     <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                      className={`text-xs px-2 py-0.5 rounded-full font-bold ${
                         summary.statusGeral === "100% COMPLETO"
                           ? "bg-emerald-500/20 text-emerald-300"
                           : summary.statusGeral === "PARCIAL COM PENDÊNCIAS"
@@ -1384,7 +1384,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
 
                   {/* Progress Bar */}
                   <div className="mt-4">
-                    <div className="flex justify-between text-[11px] mb-1">
+                    <div className="flex justify-between text-xs mb-1">
                       <span className="text-slate-400">Conformidade</span>
                       <span className="font-bold text-slate-200">
                         {summary.percentualCompleto}%
@@ -1419,33 +1419,33 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                 <div className="flex justify-between p-3 bg-slate-950 rounded-xl border border-slate-800">
                   <div>
                     <div className="text-slate-400 font-medium">Conta Captação (Bloqueada)</div>
-                    <div className="text-[11px] text-slate-500">Ag: {project?.bancoInfo?.agencia || "0001-9"} | CC: {project?.bancoInfo?.contaCaptacao || "10001-1"}</div>
+                    <div className="text-xs text-slate-500">Ag: {project?.bancoInfo?.agencia || "0001-9"} | CC: {project?.bancoInfo?.contaCaptacao || "10001-1"}</div>
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-slate-200">{formatCurrency(project?.bancoInfo?.saldoBloqueado || 0)}</div>
-                    <div className="text-[10px] text-emerald-400 font-semibold">Liberada para Movimentação</div>
+                    <div className="text-xs text-emerald-400 font-semibold">Liberada para Movimentação</div>
                   </div>
                 </div>
 
                 <div className="flex justify-between p-3 bg-slate-950 rounded-xl border border-slate-800">
                   <div>
                     <div className="text-slate-400 font-medium">Conta Movimento (Livre)</div>
-                    <div className="text-[11px] text-slate-500">Ag: {project?.bancoInfo?.agencia || "0001-9"} | CC: {project?.bancoInfo?.contaMovimento || "10001-2"}</div>
+                    <div className="text-xs text-slate-500">Ag: {project?.bancoInfo?.agencia || "0001-9"} | CC: {project?.bancoInfo?.contaMovimento || "10001-2"}</div>
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-sky-400">{formatCurrency(project?.bancoInfo?.saldoMovimento || 0)}</div>
-                    <div className="text-[10px] text-slate-400">Saldo Disponível</div>
+                    <div className="text-xs text-slate-400">Saldo Disponível</div>
                   </div>
                 </div>
 
                 <div className="flex justify-between p-3 bg-slate-950 rounded-xl border border-slate-800">
                   <div>
                     <div className="text-slate-400 font-medium">Fundo BB Curto Prazo (Rendimentos)</div>
-                    <div className="text-[11px] text-slate-500">Aplicação Automática Compulsória</div>
+                    <div className="text-xs text-slate-500">Aplicação Automática Compulsória</div>
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-amber-400">{formatCurrency(project?.bancoInfo?.rendimentoAplicacao || 0)}</div>
-                    <div className="text-[10px] text-amber-500">Devolver ao FNC via GRU</div>
+                    <div className="text-xs text-amber-500">Devolver ao FNC via GRU</div>
                   </div>
                 </div>
               </div>
@@ -1505,7 +1505,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
 
           <div className="overflow-x-auto rounded-xl border border-slate-800">
             <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[10px]">
+              <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-xs">
                 <tr>
                   <th className="p-3">ID Rubrica</th>
                   <th className="p-3">Etapa</th>
@@ -1541,7 +1541,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                       </td>
                       <td className="p-3">
                         <span
-                          className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                          className={`text-xs px-2 py-0.5 rounded font-bold ${
                             saldo < 0
                               ? "bg-red-500/20 text-red-400"
                               : saldo === 0
@@ -1577,7 +1577,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
 
           <div className="overflow-x-auto rounded-xl border border-slate-800">
             <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[10px]">
+              <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-xs">
                 <tr>
                   <th className="p-3">ID Transação BB</th>
                   <th className="p-3">Data</th>
@@ -1593,7 +1593,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                     <td className="p-3 font-mono font-bold text-sky-400">{t.id}</td>
                     <td className="p-3 text-slate-400">{formatDate(t.data)}</td>
                     <td className="p-3">
-                      <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded font-mono text-slate-300">
+                      <span className="text-xs bg-slate-800 px-2 py-0.5 rounded font-mono text-slate-300">
                         {t.tipo}
                       </span>
                     </td>
@@ -1610,7 +1610,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                     </td>
                     <td className="p-3">
                       <span
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        className={`text-xs px-2 py-0.5 rounded-full font-bold ${
                           t.status === "CONCILIADO"
                             ? "bg-emerald-500/20 text-emerald-400"
                             : "bg-amber-500/20 text-amber-400"
@@ -1643,7 +1643,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
 
           <div className="overflow-x-auto rounded-xl border border-slate-800">
             <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[10px]">
+              <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-xs">
                 <tr>
                   <th className="p-3">ID Doc</th>
                   <th className="p-3">Tipo</th>
@@ -1666,7 +1666,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                     <td className="p-3 text-slate-400">{formatDate(d.dataEmissao)}</td>
                     <td className="p-3 font-medium text-slate-200">
                       <div>{d.fornecedorNome}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">{d.fornecedorCnpjCpf}</div>
+                      <div className="text-xs text-slate-500 font-mono">{d.fornecedorCnpjCpf}</div>
                     </td>
                     <td className="p-3 font-mono font-bold text-slate-100">
                       {formatCurrency(d.valorBruto || 0)}
@@ -1680,7 +1680,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                     <td className="p-3 font-mono font-bold text-emerald-400">
                       {formatCurrency(d.valorLiquido || 0)}
                     </td>
-                    <td className="p-3 font-mono text-[11px] text-sky-400">
+                    <td className="p-3 font-mono text-xs text-sky-400">
                       {d.arquivoNotaNome || "GED_Doc.pdf"}
                     </td>
                   </tr>
@@ -1697,7 +1697,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 space-y-6 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div>
-                <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-bold uppercase">
+                <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-bold uppercase">
                   GED Padronizado MinC (Art. 68)
                 </span>
                 <h3 className="text-lg font-bold text-slate-100 mt-1">
@@ -1765,7 +1765,7 @@ export const TripartiteConciliationView: React.FC<TripartiteConciliationViewProp
                             {file.nomeArquivo}
                           </span>
                         </div>
-                        <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                        <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs px-2 py-0.5 rounded-full font-bold">
                           {file.status}
                         </span>
                       </div>

@@ -143,27 +143,27 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
             {/* PRONAC Official Header Stamp */}
             <div className="border-b border-slate-800 pb-4 mb-4 flex flex-col md:flex-row md:items-center justify-between text-xs gap-3">
               <div>
-                <span className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">
+                <span className="text-xs text-slate-500 uppercase tracking-widest font-semibold">
                   MINISTÉRIO DA CULTURA - SALIC WEB
                 </span>
                 <h3 className="font-bold text-white text-sm mt-0.5">{project.nome}</h3>
-                <p className="text-slate-400 text-[11px]">
+                <p className="text-slate-400 text-xs">
                   PRONAC: <strong>{project.pronac}</strong> | Proponente: {project.proponente} ({project.cnpjCpf})
                 </p>
               </div>
 
               <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-right">
-                <span className="text-[10px] text-slate-400 block">Total Realizado Liquidado:</span>
+                <span className="text-xs text-slate-400 block">Total Realizado Liquidado:</span>
                 <span className="text-base font-bold font-mono text-emerald-400">
                   {formatCurrency(totalLiquidoRelatorio)}
                 </span>
               </div>
             </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto">
+            {/* Table (Desktop) */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+                <thead className="bg-slate-950 text-slate-400 uppercase text-xs tracking-wider border-b border-slate-800">
                   <tr>
                     <th className="px-3 py-3">Item</th>
                     <th className="px-3 py-3">Data Pgto</th>
@@ -195,7 +195,7 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
                             {r.doc?.fornecedorNome || r.tx.descricaoExtrato}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 font-mono text-slate-400 text-[11px]">
+                        <td className="px-3 py-2.5 font-mono text-slate-400 text-xs">
                           {r.doc ? formatCnpjCpf(r.doc.fornecedorCnpjCpf) : "-"}
                         </td>
                         <td className="px-3 py-2.5 text-right font-mono text-slate-200">
@@ -207,7 +207,7 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
                         <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-400">
                           {formatCurrency(r.tx.valor)}
                         </td>
-                        <td className="px-3 py-2.5 font-mono text-slate-400 text-[11px]">
+                        <td className="px-3 py-2.5 font-mono text-slate-400 text-xs">
                           {r.tx.documentoBancario}
                         </td>
                       </tr>
@@ -233,6 +233,75 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
                 </tfoot>
               </table>
             </div>
+
+            {/* Payment Mobile Cards (< md) */}
+            <div className="block md:hidden space-y-3 mt-1">
+              {paymentRows.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 text-xs">
+                  Nenhum pagamento registrado nesta relação.
+                </div>
+              ) : (
+                paymentRows.map((r, idx) => {
+                  const ret = r.doc
+                    ? (r.doc.retencaoIss || 0) + (r.doc.retencaoIrrf || 0) + (r.doc.retencaoInss || 0)
+                    : 0;
+                  return (
+                    <div key={idx} className="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-2">
+                      {/* Header: item nº + data */}
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-xs font-bold text-emerald-400">
+                          {r.rubric?.itemNumero || `${idx + 1}.1`}
+                        </span>
+                        <span className="font-mono text-xs text-slate-400">{formatDate(r.tx.data)}</span>
+                      </div>
+                      {/* Favorecido */}
+                      <div>
+                        <div className="font-semibold text-sm text-white line-clamp-1">
+                          {r.doc?.fornecedorNome || r.tx.descricaoExtrato || "—"}
+                        </div>
+                        {r.doc && (
+                          <div className="text-xs font-mono text-slate-400 mt-0.5">
+                            {formatCnpjCpf(r.doc.fornecedorCnpjCpf)} · {r.doc.tipo} nº {r.doc.numeroDoc}
+                          </div>
+                        )}
+                      </div>
+                      {/* Valores */}
+                      <div className="grid grid-cols-3 gap-2 text-xs pt-2 border-t border-slate-800">
+                        <div>
+                          <span className="text-slate-400 block">Bruto</span>
+                          <span className="font-mono font-semibold text-slate-200">
+                            {formatCurrency(r.doc ? r.doc.valorBruto : r.tx.valor)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block">Retenções</span>
+                          <span className="font-mono font-semibold text-amber-400">
+                            {ret > 0 ? formatCurrency(ret) : "—"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block">Pago (Líq)</span>
+                          <span className="font-mono font-bold text-emerald-400">
+                            {formatCurrency(r.tx.valor)}
+                          </span>
+                        </div>
+                      </div>
+                      {/* FITID */}
+                      {r.tx.documentoBancario && (
+                        <div className="text-xs font-mono text-slate-500 pt-1 border-t border-slate-800/60">
+                          Autenticação BB: {r.tx.documentoBancario}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+              {/* Total strip */}
+              <div className="flex items-center justify-between bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-xs font-bold">
+                <span className="text-white">TOTAL EXECUTADO</span>
+                <span className="font-mono text-emerald-400">{formatCurrency(totalLiquidoRelatorio)}</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -248,7 +317,7 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
               <div className="text-xl font-bold font-mono text-emerald-400">
                 {formatCurrency(project.valorCaptado)}
               </div>
-              <span className="text-[10px] text-slate-500">Depositados na Conta Captação BB</span>
+              <span className="text-xs text-slate-500">Depositados na Conta Captação BB</span>
             </div>
 
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
@@ -256,7 +325,7 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
               <div className="text-xl font-bold font-mono text-cyan-300">
                 {formatCurrency(project.bancoInfo.rendimentoAplicacao)}
               </div>
-              <span className="text-[10px] text-slate-500">BB FIC Curto Prazo</span>
+              <span className="text-xs text-slate-500">BB FIC Curto Prazo</span>
             </div>
 
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
@@ -269,7 +338,7 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
                   )
                 )}
               </div>
-              <span className="text-[10px] text-slate-500">Devolução via GRU no encerramento</span>
+              <span className="text-xs text-slate-500">Devolução via GRU no encerramento</span>
             </div>
           </div>
         </div>
@@ -291,7 +360,7 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
                 <p className="text-slate-400 mt-1">
                   Realização de 4 concertos didáticos gratuitos com interpretação simultânea em LIBRAS e audiodescrição.
                 </p>
-                <div className="mt-2 text-[11px] text-emerald-400 font-semibold">
+                <div className="mt-2 text-xs text-emerald-400 font-semibold">
                   Status: 100% Cumprida (Público estimado de 4.800 pessoas atendidas)
                 </div>
               </div>
@@ -304,7 +373,7 @@ export const SalicReportView: React.FC<SalicReportViewProps> = ({
                 <p className="text-slate-400 mt-1">
                   Distribuição de 100% dos ingressos com gratuidade a estudantes da rede pública e idosos.
                 </p>
-                <div className="mt-2 text-[11px] text-emerald-400 font-semibold">
+                <div className="mt-2 text-xs text-emerald-400 font-semibold">
                   Status: 100% Cumprida
                 </div>
               </div>

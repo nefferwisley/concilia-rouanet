@@ -191,13 +191,13 @@ export const BudgetPlanView: React.FC<BudgetPlanViewProps> = ({
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <span className="text-xs text-slate-400 font-medium">Orçamento Total Aprovado (SALIC)</span>
           <div className="text-xl font-bold font-mono text-white mt-1">{formatCurrency(totalAprovado)}</div>
-          <span className="text-[11px] text-slate-500">{rubrics.length} itens orçamentários</span>
+          <span className="text-xs text-slate-500">{rubrics.length} itens orçamentários</span>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <span className="text-xs text-slate-400 font-medium">Total Realizado / Executado</span>
           <div className="text-xl font-bold font-mono text-emerald-400 mt-1">{formatCurrency(totalExecutado)}</div>
-          <span className="text-[11px] text-emerald-500">
+          <span className="text-xs text-emerald-500">
             {totalAprovado > 0 ? ((totalExecutado / totalAprovado) * 100).toFixed(1) : 0}% executado
           </span>
         </div>
@@ -205,7 +205,7 @@ export const BudgetPlanView: React.FC<BudgetPlanViewProps> = ({
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <span className="text-xs text-slate-400 font-medium">Saldo Disponível no Orçamento</span>
           <div className="text-xl font-bold font-mono text-cyan-300 mt-1">{formatCurrency(saldoGeral)}</div>
-          <span className="text-[11px] text-cyan-400">Verba orçamentária remanescente</span>
+          <span className="text-xs text-cyan-400">Verba orçamentária remanescente</span>
         </div>
       </div>
 
@@ -249,11 +249,11 @@ export const BudgetPlanView: React.FC<BudgetPlanViewProps> = ({
         </div>
       </div>
 
-      {/* Rubrics Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow">
+      {/* Rubrics Desktop Table (>= md) */}
+      <div className="hidden md:block bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+            <thead className="bg-slate-950 text-slate-400 uppercase text-xs tracking-wider border-b border-slate-800">
               <tr>
                 <th className="px-4 py-3.5">Item</th>
                 <th className="px-4 py-3.5">Descrição da Rubrica / Meta</th>
@@ -275,16 +275,26 @@ export const BudgetPlanView: React.FC<BudgetPlanViewProps> = ({
                 const saldo = vlrAprov - vlrExec;
                 const exceeded20 = vlrAprov > 0 && vlrExec > limite20;
                 const reallocatedLegal = vlrAprov > 0 && vlrExec > vlrAprov && !exceeded20;
+                const execPct = vlrAprov > 0 ? Math.min(Math.round((vlrExec / vlrAprov) * 100), 120) : 0;
 
                 return (
                   <tr key={r.id} className="hover:bg-slate-800/40 transition">
                     <td className="px-4 py-3 font-mono font-bold text-slate-200">{getItemNumber(r)}</td>
                     <td className="px-4 py-3 max-w-xs">
                       <div className="font-semibold text-white">{getItemName(r)}</div>
-                      <div className="text-[11px] text-slate-400 line-clamp-1">{r.meta || r.descricaoDetalhada}</div>
+                      <div className="text-xs text-slate-400 line-clamp-1">{r.meta || r.descricaoDetalhada}</div>
+                      {vlrAprov > 0 && (
+                        <div className="mt-1.5 w-full bg-slate-800 rounded-full h-1 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${exceeded20 ? "bg-rose-500" : execPct > 80 ? "bg-amber-400" : "bg-emerald-500"}`}
+                            style={{ width: `${Math.min(execPct, 100)}%` }}
+                            title={`${execPct}% executado`}
+                          />
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-[11px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">
+                      <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">
                         {r.etapa}
                       </span>
                     </td>
@@ -309,15 +319,15 @@ export const BudgetPlanView: React.FC<BudgetPlanViewProps> = ({
                     </td>
                     <td className="px-4 py-3 text-center">
                       {exceeded20 ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded">
+                        <span className="inline-flex items-center gap-1 text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded">
                           <AlertTriangle className="w-3 h-3 text-rose-400" /> &gt;20% Glosa
                         </span>
                       ) : reallocatedLegal ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded">
+                        <span className="inline-flex items-center gap-1 text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded">
                           <Info className="w-3 h-3 text-amber-400" /> Remanejado &lt;20%
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded">
+                        <span className="inline-flex items-center gap-1 text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded">
                           <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Regular
                         </span>
                       )}
@@ -348,6 +358,132 @@ export const BudgetPlanView: React.FC<BudgetPlanViewProps> = ({
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Rubrics Mobile Cards (< md) */}
+      <div className="block md:hidden space-y-3">
+        {filteredRubrics.length === 0 ? (
+          <div className="p-8 text-center bg-slate-900 border border-slate-800 rounded-2xl text-slate-400 text-xs">
+            Nenhuma rubrica encontrada para os filtros selecionados.
+          </div>
+        ) : (
+          filteredRubrics.map((r, idx) => {
+            const vlrAprov = getItemApproved(r);
+            const vlrExec = getItemExecuted(r);
+            const limite20 = getItemLimit20(r);
+            const saldo = vlrAprov - vlrExec;
+            const exceeded20 = vlrAprov > 0 && vlrExec > limite20;
+            const reallocatedLegal = vlrAprov > 0 && vlrExec > vlrAprov && !exceeded20;
+            const execPct = vlrAprov > 0 ? Math.min(Math.round((vlrExec / vlrAprov) * 100), 120) : 0;
+
+            return (
+              <div
+                key={r.id}
+                className={`bg-slate-900 border rounded-2xl p-4 shadow-md ${
+                  exceeded20
+                    ? "border-rose-500/40 bg-rose-950/10"
+                    : reallocatedLegal
+                    ? "border-amber-500/30"
+                    : "border-slate-800 hover:border-slate-700"
+                }`}
+              >
+                {/* Linha 1: Item nº + Badge status */}
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-slate-400 bg-slate-800 px-2 py-1 rounded">
+                      #{String(idx + 1).padStart(3, "0")}
+                    </span>
+                    <span className="font-mono text-xs font-bold text-emerald-400">{getItemNumber(r)}</span>
+                  </div>
+                  {exceeded20 ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded">
+                      <AlertTriangle className="w-3 h-3" /> Glosa &gt;20%
+                    </span>
+                  ) : reallocatedLegal ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded">
+                      <Info className="w-3 h-3" /> Remanejado
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded">
+                      <CheckCircle2 className="w-3 h-3" /> Regular
+                    </span>
+                  )}
+                </div>
+
+                {/* Nome e meta */}
+                <h4 className="text-sm font-bold text-white mb-0.5 line-clamp-2">{getItemName(r)}</h4>
+                {(r.meta || r.descricaoDetalhada) && (
+                  <p className="text-xs text-slate-400 line-clamp-1 mb-2">{r.meta || r.descricaoDetalhada}</p>
+                )}
+
+                {/* Etapa */}
+                <div className="mb-2">
+                  <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">
+                    {r.etapa}
+                  </span>
+                </div>
+
+                {/* Valores */}
+                <div className="grid grid-cols-3 gap-2 text-xs py-2 border-t border-slate-800/80 mb-2">
+                  <div>
+                    <span className="text-slate-400 block">Aprovado</span>
+                    <span className="font-mono font-semibold text-slate-100">{formatCurrency(vlrAprov)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">Executado</span>
+                    <span className="font-mono font-semibold text-emerald-400">{formatCurrency(vlrExec)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">Saldo</span>
+                    <span className={`font-mono font-semibold ${saldo < 0 ? "text-amber-400" : "text-slate-300"}`}>
+                      {formatCurrency(saldo)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Barra de progresso */}
+                {vlrAprov > 0 && (
+                  <div className="mb-3">
+                    <div className="flex justify-between text-xs text-slate-400 mb-1">
+                      <span>Execução orçamentária</span>
+                      <span className="font-mono font-semibold text-slate-200">{execPct}%</span>
+                    </div>
+                    <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${exceeded20 ? "bg-rose-500" : execPct > 80 ? "bg-amber-400" : "bg-emerald-500"}`}
+                        style={{ width: `${Math.min(execPct, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Ação */}
+                <div className="pt-1 border-t border-slate-800/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingRubric(r);
+                      setFormData({
+                        etapa: r.etapa,
+                        meta: r.meta,
+                        itemNumero: r.itemNumero,
+                        nome: r.nome,
+                        unidade: r.unidade,
+                        quantidade: r.quantidade,
+                        valorUnitario: r.valorUnitario,
+                        descricaoDetalhada: r.descricaoDetalhada,
+                      });
+                    }}
+                    className="w-full min-h-[44px] text-xs font-semibold text-emerald-400 hover:text-emerald-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                    Editar Rubrica
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Add / Edit Modal */}
