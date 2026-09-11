@@ -56,7 +56,7 @@ describe("StatusBadge", () => {
   it("renders subreason detail when provided", () => {
     const html = renderToStaticMarkup(<StatusBadge status="Pendente" detail="NF ausente" />);
     expect(html).toContain("Pendente — NF ausente");
-    expect(html).toContain('aria-label="Status: Pendente: NF ausente"');
+    expect(html).toContain('aria-label="Status: Pendente. NF ausente"');
   });
 
   it("automatically infers subreason detail for transactions without fiscal documents", () => {
