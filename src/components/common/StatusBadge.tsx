@@ -11,6 +11,8 @@ export interface StatusBadgeProps {
   size?: "sm" | "md" | "lg";
   showTooltip?: boolean;
   tooltipText?: string;
+  /** Submotivo legível, como "NF ausente" ou "Risco de glosa". */
+  detail?: string;
   className?: string;
   onClick?: () => void;
 }
@@ -160,6 +162,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   size = "md",
   showTooltip = false,
   tooltipText,
+  detail,
   className = "",
   onClick,
 }) => {
@@ -212,7 +215,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
 
   // Fontes: piso operacional mínimo de 12px (text-xs) no tamanho sm; 14px (text-sm) no md e lg
   const sizeClasses = {
-    sm: "text-xs px-2.5 py-1 gap-1.5",
+    sm: "text-xs px-2.5 py-1 gap-1.5 min-h-[28px]",
     md: "text-xs sm:text-sm px-3 py-1 gap-2 font-medium",
     lg: "text-sm px-3.5 py-1.5 gap-2 font-semibold",
   }[size];
@@ -245,7 +248,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       <button
         type="button"
         onClick={onClick}
-        className="cursor-pointer min-h-[44px] inline-flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
+        className="cursor-pointer min-h-[44px] min-w-[44px] inline-flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
       >
         {badgeContent}
       </button>

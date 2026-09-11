@@ -91,7 +91,11 @@ async def aplicar_migrations() -> None:
                 contagem_pulada += 1
                 continue
 
-            sql = arquivo.read_text(encoding="utf-8")
+            # Alguns editores salvam .sql como UTF-8 com BOM. O PostgreSQL
+            # interpreta esse caractere invisível antes de CREATE como token
+            # inválido; ``utf-8-sig`` o remove quando presente e preserva
+            # arquivos UTF-8 comuns.
+            sql = arquivo.read_text(encoding="utf-8-sig")
             log.info("Aplicando migration %s ...", arquivo.name)
             # Cada migration na SUA transação e com o erro contido aqui: antes,
             # uma falha (ex: 0001 recriando tabela que já existe no Supabase)

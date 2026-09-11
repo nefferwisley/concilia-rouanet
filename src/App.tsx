@@ -281,6 +281,10 @@ export default function App() {
     message: null,
   });
   const [hasOnlineSnapshot, setHasOnlineSnapshot] = useState(false);
+  // Só permite o salvamento automático depois que o snapshot do projeto
+  // atualmente selecionado terminou de carregar. Sem essa trava, a troca de
+  // projeto podia enviar o estado ainda vazio da tela e sobrescrever dados.
+  const [loadedOnlineProjectId, setLoadedOnlineProjectId] = useState<string | null>(null);
 
   const refreshOnlineSession = useCallback(async () => {
     if (!apiClient.getToken()) {
@@ -441,6 +445,8 @@ export default function App() {
   useEffect(() => {
     const projectId = onlineSession.activeProjectId;
     if (IS_DEMO_MODE || onlineSession.status !== "ready" || !projectId || !apiClient.getToken()) return;
+    setHasOnlineSnapshot(false);
+    setLoadedOnlineProjectId(null);
     let active = true;
     void apiClient.loadProjectSnapshot<PersistedWorkspace>(projectId)
       .then(async (snapshot) => {
@@ -455,6 +461,7 @@ export default function App() {
         const reconciliation = projectTransactions.length > 0 && projectDocuments.length > 0
           ? runRealtimeTripartiteReconciliation(projectTransactions, projectDocuments, projectRubrics, project)
           : null;
+        setLoadedOnlineProjectId(projectId);
         setHasOnlineSnapshot(true);
         setProjects(snapshot.projects?.map(removePlaceholderBankData) || []);
         setActiveProjectId(snapshot.activeProjectId || projectId);
@@ -532,7 +539,13 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    if (IS_DEMO_MODE || !hasOnlineSnapshot || !apiClient.getToken() || !activeProjectId) return;
+    if (
+      IS_DEMO_MODE
+      || !hasOnlineSnapshot
+      || loadedOnlineProjectId !== activeProjectId
+      || !apiClient.getToken()
+      || !activeProjectId
+    ) return;
     const timer = window.setTimeout(() => {
       void apiClient.saveProjectSnapshot(activeProjectId, {
         projects,
@@ -546,7 +559,7 @@ export default function App() {
       }).catch((error) => console.warn("Não foi possível atualizar o projeto online:", error));
     }, 750);
     return () => window.clearTimeout(timer);
-  }, [hasOnlineSnapshot, activeProjectId, projects, allRubrics, allTransactions, allDocuments, allAlerts, allTripartiteEntries, allReceipts]);
+  }, [hasOnlineSnapshot, loadedOnlineProjectId, activeProjectId, projects, allRubrics, allTransactions, allDocuments, allAlerts, allTripartiteEntries, allReceipts]);
 
   // Active Project & Safe arrays
   const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0] || EMPTY_PROJECT;
@@ -994,6 +1007,8 @@ export default function App() {
       onSelectProject={(projectId) => {
         localStorage.setItem(ONLINE_ACTIVE_PROJECT_STORAGE_KEY, projectId);
         setOnlineSession((current) => ({ ...current, activeProjectId: projectId }));
+        setHasOnlineSnapshot(false);
+        setLoadedOnlineProjectId(null);
         setActiveProjectId(projectId);
       }}
     >

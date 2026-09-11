@@ -6,10 +6,7 @@ import {
   Unlink,
   FileCheck2,
   FileX,
-  AlertTriangle,
-  Building,
   Calendar,
-  Sparkles,
   CheckCircle2,
   Clock,
   Eye,
@@ -98,7 +95,7 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
         </div>
       </div>
 
-      {/* Linha 2: Favorecido / fornecedor */}
+      {/* Linha 2: Favorecido / fornecedor (PF + PJ) */}
       <div className="mb-1.5">
         <h4 className="text-sm font-bold text-white line-clamp-1">
           {resolved.personName || resolved.companyName || "Favorecido não identificado"}
@@ -162,13 +159,13 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
         </span>
       </div>
 
-      {/* Linha de Ações Mínimas Obrigatórias: [ Ver documentos ] [ Conciliar ] [ Mais detalhes ] */}
+      {/* Linha de Ações: [ Ver documentos ] [ Conciliar ] [ Mais detalhes ] */}
       <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-800/80">
         {hasFiscalDoc && matchedDoc && onOpenPreview ? (
           <button
             type="button"
             onClick={() => onOpenPreview(matchedDoc, transaction)}
-            className="flex-1 min-h-[44px] px-3 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95"
+            className="flex-1 min-h-[44px] px-3 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
             aria-label={`Ver documentos de ${resolved.personName || "transação"}`}
           >
             <Eye className="w-4 h-4 text-emerald-400" aria-hidden="true" />
@@ -189,7 +186,7 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
           <button
             type="button"
             onClick={() => onOpenLinkModal(transaction)}
-            className="flex-1 min-h-[44px] px-3 py-2 text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-xl flex items-center justify-center gap-1.5 transition shadow-sm active:scale-95"
+            className="flex-1 min-h-[44px] px-3 py-2 text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-xl flex items-center justify-center gap-1.5 transition shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
             aria-label={`Conciliar lançamento #${String(index + 1).padStart(3, "0")}`}
           >
             <Link className="w-4 h-4" aria-hidden="true" />
@@ -199,7 +196,7 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
           <button
             type="button"
             onClick={() => onUnlink(transaction)}
-            className="flex-1 min-h-[44px] px-3 py-2 text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-xl flex items-center justify-center gap-1.5 transition"
+            className="flex-1 min-h-[44px] px-3 py-2 text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-xl flex items-center justify-center gap-1.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
             aria-label="Desvincular conciliação"
           >
             <Unlink className="w-4 h-4 text-rose-400" aria-hidden="true" />
@@ -210,7 +207,7 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
         <button
           type="button"
           onClick={() => setIsExpanded(!isExpanded)}
-          className="min-h-[44px] px-3 py-2 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl flex items-center justify-center gap-1 transition"
+          className="min-h-[44px] px-3 py-2 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl flex items-center justify-center gap-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
           aria-expanded={isExpanded}
           aria-label={isExpanded ? "Recolher detalhes" : "Mais detalhes do lançamento"}
         >
@@ -221,7 +218,7 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
 
       {/* Seção de Detalhes Expansível */}
       {isExpanded && (
-        <div className="mt-3 pt-3 border-t border-slate-800 space-y-3 text-xs">
+        <div className="mt-3 pt-3 border-t border-slate-800 space-y-3 text-xs animate-fadeIn">
           {/* Rubrica Detalhada */}
           <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
             <span className="text-xs uppercase font-bold text-slate-400 block mb-1">
@@ -269,6 +266,19 @@ export const TransactionMobileCard: React.FC<TransactionMobileCardProps> = ({
                   onOpenPreview={() => onOpenPreview && onOpenPreview(matchedDoc, transaction)}
                 />
               </div>
+            </div>
+          )}
+
+          {/* Botão de desvincular se conciliado */}
+          {hasFiscalDoc && onUnlink && (
+            <div className="pt-1 flex justify-end">
+              <button
+                type="button"
+                onClick={() => onUnlink(transaction)}
+                className="min-h-[44px] text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 underline font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 rounded"
+              >
+                <Unlink className="w-3 h-3" /> Desvincular despesa
+              </button>
             </div>
           )}
         </div>

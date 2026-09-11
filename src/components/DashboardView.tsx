@@ -54,7 +54,10 @@ import { BudgetBulletChart } from "./charts/BudgetBulletChart";
 import { MonthlyReconciliationChart } from "./charts/MonthlyReconciliationChart";
 import { BalanceEvolutionChart } from "./charts/BalanceEvolutionChart";
 import { StatusBadge } from "./common/StatusBadge";
+<<<<<<< HEAD
 import { TransactionMobileCard } from "./common/TransactionMobileCard";
+=======
+>>>>>>> origin/main
 
 interface DashboardViewProps {
   project: PronacProject;
@@ -156,6 +159,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const reconciledTransactions = debitTransactions.filter((t) => isTransactionReconciled(t, hasImportedBankStatement));
   const pendingTransactions = debitTransactions.filter((t) => !isTransactionReconciled(t, hasImportedBankStatement));
   const glosaTransactions = debitTransactions.filter((t) => t.status === "ALERTA_GLOSA");
+  const deadline = project.prazoLimitePrestacao || project.dataFimVigencia;
+  const isDeadlineOverdue = Boolean(deadline && new Date(`${deadline}T23:59:59`).getTime() < Date.now());
+  const priorityTransactions = Array.from(new Map([...glosaTransactions, ...pendingTransactions].map((transaction) => [transaction.id, transaction])).values())
+    .sort((left, right) => {
+      const leftGlosa = left.status === "ALERTA_GLOSA" || Boolean(left.alertaRisco);
+      const rightGlosa = right.status === "ALERTA_GLOSA" || Boolean(right.alertaRisco);
+      if (leftGlosa !== rightGlosa) return leftGlosa ? -1 : 1;
+      const leftHasNf = Boolean(left.matchedDocId || left.idDocumentoFiscalVinculado);
+      const rightHasNf = Boolean(right.matchedDocId || right.idDocumentoFiscalVinculado);
+      if (leftHasNf !== rightHasNf) return leftHasNf ? 1 : -1;
+      const leftHasProof = Boolean(left.documentoNumero || left.documentoBancario);
+      const rightHasProof = Boolean(right.documentoNumero || right.documentoBancario);
+      if (leftHasProof !== rightHasProof) return leftHasProof ? 1 : -1;
+      const dateOrder = String(left.data || left.dataTransacao || "").localeCompare(String(right.data || right.dataTransacao || ""));
+      if (dateOrder !== 0) return dateOrder;
+      return (Number(right.valor) || 0) - (Number(left.valor) || 0);
+    })
+    .slice(0, 4);
 
   // Stages breakdown
   const stages: Array<{
@@ -529,6 +550,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       )}
 
+<<<<<<< HEAD
       {/* 1. SEÇÃO PRIORITÁRIA: PRIORIDADES DE HOJE & DECISÃO IMEDIATA (≤ 3s) */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
@@ -553,6 +575,85 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </p>
             </div>
           </div>
+=======
+      {/* Prioridades vêm antes do guia: são a porta de entrada operacional. */}
+      <section aria-labelledby="prioridades-hoje" className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-800">
+          <div>
+            <h2 id="prioridades-hoje" className="text-sm font-bold text-white">Prioridades de Hoje</h2>
+            <p className="text-xs text-slate-400">Pendências ordenadas por prazo, risco, ausência de evidência e valor.</p>
+          </div>
+          <button type="button" onClick={showPendingTransactions} className="min-h-[44px] px-3 text-xs font-semibold text-slate-950 bg-emerald-500 hover:bg-emerald-400 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">
+            Resolver pendências
+          </button>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mb-3 text-xs">
+          <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 p-3"><span className="text-slate-400">Críticas</span><strong className="block text-lg font-mono text-rose-300">{glosaTransactions.length}</strong></div>
+          <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3"><span className="text-slate-400">Sem NF</span><strong className="block text-lg font-mono text-amber-300">{pendingTransactions.filter((tx) => !tx.matchedDocId && !tx.idDocumentoFiscalVinculado).length}</strong></div>
+          <div className="rounded-xl border border-sky-500/30 bg-sky-950/20 p-3"><span className="text-slate-400">Sem comprovante</span><strong className="block text-lg font-mono text-sky-300">{pendingTransactions.filter((tx) => !tx.documentoNumero && !tx.documentoBancario).length}</strong></div>
+          <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-3"><span className="text-slate-400">Valor em risco</span><strong className="block text-sm font-mono text-rose-300">{formatCurrency(glosaTransactions.reduce((total, tx) => total + (Number(tx.valor) || 0), 0))}</strong></div>
+          <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-3"><span className="text-slate-400">Prazo</span><strong className={isDeadlineOverdue ? "block text-sm text-rose-300" : "block text-sm text-emerald-300"}>{isDeadlineOverdue ? "Vencido" : formatDate(deadline)}</strong></div>
+        </div>
+        {priorityTransactions.length ? (
+          <ol className="space-y-2">
+            {priorityTransactions.map((transaction) => {
+              const missingNf = !transaction.matchedDocId && !transaction.idDocumentoFiscalVinculado;
+              const detail = transaction.alertaRisco ? "Risco de glosa" : missingNf ? "NF ausente" : !transaction.documentoNumero && !transaction.documentoBancario ? "Comprovante ausente" : "Revisão necessária";
+              return <li key={transaction.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                <div className="min-w-0"><StatusBadge status={transaction} detail={detail} size="sm" /><p className="mt-1 text-sm font-medium text-slate-100 truncate">{transaction.favorecido || transaction.descricaoExtrato || "Favorecido não identificado"}</p><p className="text-xs text-slate-400">{formatDate(transaction.data || transaction.dataTransacao || "")} · {detail}</p></div>
+                <div className="flex items-center gap-3"><strong className="font-mono text-sm text-white">{formatCurrency(Number(transaction.valor) || 0)}</strong><button type="button" onClick={showPendingTransactions} className="min-h-[44px] px-3 text-xs text-emerald-300 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded">Abrir</button></div>
+              </li>;
+            })}
+          </ol>
+        ) : <p className="text-sm text-emerald-300">Não há pendências prioritárias neste projeto.</p>}
+      </section>
+
+      {/* Guided Workflow Tracker */}
+      <details className="bg-slate-900/95 border border-slate-800 rounded-2xl p-4.5 shadow-md">
+        <summary className="cursor-pointer list-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <ListTodo className="w-3.5 h-3.5" />
+            </div>
+            <h2 className="text-xs font-bold text-white uppercase tracking-wider">
+              Guia Passo a Passo da Prestação de Contas SALIC
+            </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">Etapas concluídas:</span>
+            <span className="text-xs font-bold text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              {readinessPercent}%
+            </span>
+          </div>
+        </div>
+
+        </summary>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-2.5 pt-3">
+          {workflowSteps.map((step) => (
+            <button
+              key={step.id}
+              onClick={() => onNavigateTab(step.tab)}
+              className={`text-left p-3 rounded-xl border transition-all text-xs flex flex-col justify-between ${
+                step.completed
+                  ? "bg-emerald-500/5 border-emerald-500/30 hover:bg-emerald-500/10"
+                  : "bg-slate-950/60 border-slate-800 hover:border-slate-700"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="font-semibold text-slate-200 truncate">{step.title}</span>
+                {step.completed ? (
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                ) : (
+                  <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 line-clamp-1">{step.description}</p>
+            </button>
+          ))}
+        </div>
+      </details>
+>>>>>>> origin/main
 
           <div className="flex items-center gap-2">
             <button

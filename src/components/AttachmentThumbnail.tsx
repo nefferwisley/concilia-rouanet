@@ -121,7 +121,7 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
       <div
         ref={containerRef}
         className={`${sizeClass} bg-slate-800/70 animate-pulse rounded-xl flex flex-col items-center justify-center p-1 text-xs text-slate-400 border border-slate-700/60 select-none`}
-        aria-label={`${fileName} — Estado: Carregando prévia`}
+        aria-label={`Carregando prévia de ${fileName}`}
         title={`Carregando prévia de ${fileName}`}
         role="status"
       >
@@ -136,7 +136,7 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
     return (
       <div
         ref={containerRef}
-        className={`${sizeClass} bg-slate-900 rounded-xl flex flex-col items-center justify-center text-center p-1.5 text-xs text-amber-300/90 border border-amber-500/40 select-none`}
+        className={`${sizeClass} bg-slate-900 rounded-xl flex flex-col items-center justify-center text-center p-2 text-xs text-amber-300/90 border border-amber-500/40 select-none`}
         title="Sessão expirada. Faça login novamente para visualizar documentos protegidos."
         aria-label={`${fileName} — Estado: Sessão expirada`}
       >
@@ -160,7 +160,7 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
         <button
           type="button"
           onClick={handleReimport}
-          className="mt-1 text-xs font-semibold text-amber-400 hover:text-amber-300 hover:underline min-h-[32px] px-1 flex items-center gap-0.5"
+          className="mt-1 text-xs font-semibold text-amber-400 hover:text-amber-300 hover:underline min-h-[32px] px-1 flex items-center gap-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
           title="Clique para reimportar este arquivo"
         >
           Reimportar
@@ -169,25 +169,22 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
     );
   }
 
-  // 4. Estado: Falha ao gerar prévia (502 / 503 / timeout de rede)
+  // 4. Erro de rede (502 / 503 / conexão) -> Permite retry com clique
   if (status === "NETWORK_ERROR" || !signedUrl) {
     return (
       <div
         ref={containerRef}
-        className={`${sizeClass} bg-slate-900/90 rounded-xl flex flex-col items-center justify-center text-center p-1.5 text-xs text-slate-300 border border-rose-500/40`}
-        title={errorMessage || "Falha ao gerar prévia. Clique em Tentar novamente."}
-        aria-label={`${fileName} — Estado: Falha ao gerar prévia`}
+        className={`${sizeClass} bg-slate-900 rounded-xl flex flex-col items-center justify-center text-center p-2 text-xs text-slate-400 border border-rose-500/30`}
+        title={errorMessage || "Erro ao carregar prévia"}
       >
-        <AlertCircle className="w-4 h-4 text-rose-400 mb-0.5 shrink-0" aria-hidden="true" />
-        <span className="text-xs text-rose-300 font-medium line-clamp-1">Falha na prévia</span>
+        <AlertCircle className="w-4 h-4 text-rose-400 mb-0.5 shrink-0" />
         <button
           type="button"
           onClick={handleRetry}
-          className="mt-1 text-xs text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded-lg border border-slate-700 transition flex items-center gap-1 min-h-[36px]"
-          title="Tentar carregar novamente a prévia"
-          aria-label="Tentar novamente carregar o anexo"
+          className="mt-1 min-h-[32px] text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded border border-slate-700 transition flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+          title="Tentar carregar novamente"
         >
-          <RefreshCw className="w-3 h-3 text-slate-300" aria-hidden="true" /> Tentar
+          <RefreshCw className="w-3 h-3" /> Tentar
         </button>
       </div>
     );

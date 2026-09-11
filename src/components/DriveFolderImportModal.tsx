@@ -496,7 +496,10 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
             try {
               response = await fetch("/api/gemini/extract-project-files", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${apiClient.getToken()}`,
+                },
                 body: JSON.stringify({ files: batch }),
               });
             } catch {

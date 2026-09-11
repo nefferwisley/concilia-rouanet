@@ -1,13 +1,63 @@
+import asyncio
 import logging
+from typing import Any
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 from backend.database import get_conn
 from backend.models import ProjetoCreate, ProjetoOut, ProjetoUpdate
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/projetos", tags=["projetos"])
+
+class SnapshotSave(BaseModel):
+    snapshot: dict[str, Any]
+
+
+def _has_project_evidence(snapshot: dict[str, Any], project_id: str) -> bool:
+    """Indica se o snapshot contém itens financeiros para o projeto informado."""
+    for collection in ("transactions", "documents", "rubrics", "alerts", "tripartiteEntries", "receipts"):
+        source = snapshot.get(collection)
+        if not isinstance(source, dict):
+            continue
+        value = source.get(project_id)
+        if isinstance(value, (list, dict)) and len(value) > 0:
+            return True
+    return False
+
+
+
+
+def _resumo_snapshot_legacy(row: asyncpg.Record) -> dict:
+    """Converte um snapshot pertencente ao usuário no formato da listagem."""
+    project_id = str(row["project_id"])
+    payload = row["payload"] if isinstance(row["payload"], dict) else {}
+    projects = payload.get("projects", [])
+    project = next(
+        (item for item in projects if isinstance(item, dict) and str(item.get("id")) == project_id),
+        payload.get("project", {}) if isinstance(payload.get("project"), dict) else {},
+    )
+    transactions = payload.get("transactions", {})
+    project_transactions = transactions.get(project_id, []) if isinstance(transactions, dict) else []
+    return {
+        "id": project_id,
+        "pronac": str(project.get("pronac") or project_id),
+        "nome": str(project.get("nome") or f"Projeto {project_id}"),
+        "transacoes_count": len(project_transactions) if isinstance(project_transactions, list) else 0,
+        "criado_em": row["updated_at"].isoformat(),
+        "source": "legacy_snapshot",
+    }
+
+async def _require_project(conn, projeto_id: str):
+    project = await conn.fetchrow(
+        "SELECT id, pronac, nome, proponente, banco, created_at, updated_at FROM projetos WHERE id = $1",
+        projeto_id,
+    )
+    if not project:
+        raise HTTPException(404, "Projeto não encontrado (ou sem permissão).")
+    return project
 
 
 @router.post("", status_code=201, response_model=ProjetoOut)
@@ -48,7 +98,7 @@ async def criar_projeto(body: ProjetoCreate, dep=Depends(get_conn)):
 
 @router.get("")
 async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = None, dep=Depends(get_conn)):
-    conn, _ = dep
+    conn, user_id = dep
     limit = min(max(limit, 1), 100)
     page = max(page, 1)
     offset = (page - 1) * limit
@@ -76,6 +126,73 @@ async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = N
             limit, offset,
         )
 
+    # Mantém os projetos normalizados e inclui snapshots privados ainda não
+    # migrados. Pelo mesmo id, o snapshot preserva nome e contagem originais
+    # até a normalização completa terminar.
+    snapshots = await conn.fetch(
+        """
+        select project_id, payload, updated_at
+        from project_snapshots
+        where owner_id = $1 and is_deleted = false
+        order by updated_at desc
+        """,
+        user_id,
+    )
+    legacy_projects = [_resumo_snapshot_legacy(row) for row in snapshots]
+    normalized_projects = [
+        {
+            "id": str(row["id"]),
+            "pronac": row["pronac"],
+            "nome": row["nome"],
+            "transacoes_count": row["transacoes_count"],
+            "criado_em": row["created_at"].isoformat(),
+            "source": "postgres",
+        }
+        for row in rows
+    ]
+    projects_by_id = {project["id"]: project for project in normalized_projects}
+    projects_by_id.update({project["id"]: project for project in legacy_projects})
+    projects = list(projects_by_id.values())
+    if pronac:
+        needle = pronac.lower()
+        projects = [
+            project for project in projects
+            if needle in project["pronac"].lower() or needle in project["nome"].lower()
+        ]
+    return {
+        "total": len(projects),
+        "page": page,
+        "projetos": projects[offset:offset + limit],
+    }
+
+
+    # Projetos ainda salvos no formato legado pertencem ao mesmo usuário do
+    # snapshot. Eles continuam privados e somente são usados quando não há
+    # projeto normalizado acessível para a conta atual.
+    if not rows:
+        snapshots = await conn.fetch(
+            """
+            select project_id, payload, updated_at
+            from project_snapshots
+            where owner_id = $1 and is_deleted = false
+            order by updated_at desc
+            """,
+            user_id,
+        )
+        legacy_projects = [_resumo_snapshot_legacy(row) for row in snapshots]
+        if pronac:
+            needle = pronac.lower()
+            legacy_projects = [
+                project for project in legacy_projects
+                if needle in project["pronac"].lower() or needle in project["nome"].lower()
+            ]
+        total = len(legacy_projects)
+        return {
+            "total": total,
+            "page": page,
+            "projetos": legacy_projects[offset:offset + limit],
+        }
+
     return {
         "total": total,
         "page": page,
@@ -87,6 +204,185 @@ async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = N
             }
             for r in rows
         ],
+    }
+
+
+@router.get("/{projeto_id}/snapshot")
+async def obter_snapshot_legacy(projeto_id: str, dep=Depends(get_conn)):
+    """Recupera somente o snapshot salvo pelo usuário autenticado."""
+    conn, user_id = dep
+    row = await conn.fetchrow(
+        """
+        select payload
+        from project_snapshots
+        where project_id = $1 and owner_id = $2 and is_deleted = false
+        limit 1
+        """,
+        projeto_id,
+        user_id,
+    )
+    if not row:
+        raise HTTPException(404, "Snapshot do projeto não encontrado.")
+
+    return {"snapshot": row["payload"]}
+
+@router.put("/{projeto_id}/snapshot")
+async def salvar_snapshot_legacy(projeto_id: str, body: SnapshotSave, dep=Depends(get_conn)):
+    """Salva o estado legado com versão e sem permitir apagar evidências por engano."""
+    conn, user_id = dep
+    snapshot = body.snapshot
+    existing = await conn.fetchrow(
+        """
+        select payload, version
+        from project_snapshots
+        where project_id = $1 and owner_id = $2 and is_deleted = false
+        for update
+        """,
+        projeto_id,
+        user_id,
+    )
+    if existing:
+        current = existing["payload"] if isinstance(existing["payload"], dict) else {}
+        if _has_project_evidence(current, projeto_id) and not _has_project_evidence(snapshot, projeto_id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Proteção ativada: uma atualização vazia não pode substituir os dados existentes do projeto.",
+            )
+        row = await conn.fetchrow(
+            """
+            update project_snapshots
+            set payload = $3, version = version + 1, source_system = 'fastapi'
+            where project_id = $1 and owner_id = $2 and is_deleted = false
+            returning version
+            """,
+            projeto_id,
+            user_id,
+            snapshot,
+        )
+        return {"project_id": projeto_id, "version": row["version"]}
+
+    row = await conn.fetchrow(
+        """
+        insert into project_snapshots (project_id, owner_id, payload, version, source_system)
+        values ($1, $2, $3, 1, 'fastapi')
+        returning version
+        """,
+        projeto_id,
+        user_id,
+        snapshot,
+    )
+    return {"project_id": projeto_id, "version": row["version"]}
+
+    return {"snapshot": row["payload"]}
+
+
+@router.get("/{projeto_id}/workspace")
+async def obter_workspace(projeto_id: str, dep=Depends(get_conn)):
+    """Workspace oficial para o React; não lê snapshot nem localStorage."""
+    conn, _ = dep
+    project = await _require_project(conn, projeto_id)
+    rubrics, transactions, documents, movements = await asyncio.gather(
+        conn.fetch(
+            "SELECT id, codigo, descricao, descricao_completa, valor_orcado FROM rubricas WHERE projeto_id = $1 ORDER BY codigo",
+            projeto_id,
+        ),
+        conn.fetch(
+            """
+            SELECT id, fornecedor, cnpj_fornecedor, data_pagamento, meio_pagamento,
+                   valor_bruto, valor_retencao, valor_liquido, tem_nf, tem_comprovante,
+                   status, score_conciliacao, salic_ref, created_at, updated_at
+            FROM transacoes WHERE projeto_id = $1 ORDER BY data_pagamento nulls last, created_at
+            """,
+            projeto_id,
+        ),
+        conn.fetch(
+            "SELECT id, origem, nome_arquivo, arquivo_ref, tamanho_bytes, status, created_at FROM documentos_projeto WHERE projeto_id = $1 ORDER BY created_at",
+            projeto_id,
+        ),
+        conn.fetch(
+            """
+            SELECT em.id, em.data, em.historico, em.documento, em.tipo, em.valor, em.saldo_apos, em.status_conciliacao
+            FROM extrato_movimentos em
+            JOIN contas_captadoras cc ON cc.id = em.conta_id
+            WHERE cc.projeto_id = $1 ORDER BY em.data, em.created_at
+            """,
+            projeto_id,
+        ),
+    )
+    return {
+        "project": dict(project),
+        "rubrics": [dict(row) for row in rubrics],
+        "transactions": [dict(row) for row in transactions],
+        "documents": [dict(row) for row in documents],
+        "bank_movements": [dict(row) for row in movements],
+        "source": "postgres",
+    }
+
+
+@router.get("/{projeto_id}/tripartite")
+async def obter_tripartite(projeto_id: str, dep=Depends(get_conn)):
+    """Estado de conciliação derivado das evidências persistidas."""
+    conn, _ = dep
+    await _require_project(conn, projeto_id)
+    rows = await conn.fetch(
+        """
+        SELECT t.id, t.fornecedor, t.cnpj_fornecedor, t.data_pagamento,
+               t.valor_bruto, t.valor_liquido, t.status, t.tem_nf, t.tem_comprovante,
+               count(el.id) filter (where el.evidence_type = 'FISCAL_DOCUMENT' and el.revoked_at is null) as fiscal_evidence,
+               count(el.id) filter (where el.evidence_type = 'BANK_PROOF' and el.revoked_at is null) as bank_proof_evidence
+        FROM transacoes t
+        LEFT JOIN evidence_links el ON el.lancamento_id = t.id
+        WHERE t.projeto_id = $1
+        GROUP BY t.id
+        ORDER BY t.data_pagamento nulls last, t.created_at
+        """,
+        projeto_id,
+    )
+    has_statement = bool(await conn.fetchval(
+        "SELECT exists(SELECT 1 FROM extrato_movimentos em JOIN contas_captadoras cc ON cc.id = em.conta_id WHERE cc.projeto_id = $1)",
+        projeto_id,
+    ))
+    entries = []
+    for row in rows:
+        item = dict(row)
+        item["documentacao_anexada"] = bool(item["fiscal_evidence"] or item["tem_nf"])
+        item["comprovante_anexado"] = bool(item["bank_proof_evidence"] or item["tem_comprovante"])
+        item["extrato_importado"] = has_statement
+        item["conciliacao_bancaria_validada"] = bool(
+            has_statement and item["documentacao_anexada"] and item["comprovante_anexado"]
+            and item["status"] == "CONCILIADO_OK"
+        )
+        entries.append(item)
+    return {"project_id": projeto_id, "has_bank_statement": has_statement, "entries": entries}
+
+
+@router.get("/{projeto_id}/observabilidade")
+async def obter_observabilidade(projeto_id: str, dep=Depends(get_conn)):
+    conn, _ = dep
+    await _require_project(conn, projeto_id)
+    counts = await conn.fetch(
+        """
+        SELECT o.status, count(*)::int AS total
+        FROM import_file_occurrences o
+        JOIN importacoes i ON i.id = o.importacao_id
+        WHERE i.projeto_id = $1 GROUP BY o.status
+        """,
+        projeto_id,
+    )
+    oldest_pending_seconds = await conn.fetchval(
+        """
+        SELECT extract(epoch from (now() - min(j.created_at)))::int
+        FROM processing_jobs j
+        JOIN import_files f ON f.id = j.file_id
+        WHERE f.projeto_id = $1 AND j.status = 'PENDING'
+        """,
+        projeto_id,
+    )
+    return {
+        "project_id": projeto_id,
+        "files_by_status": {row["status"]: row["total"] for row in counts},
+        "oldest_pending_seconds": oldest_pending_seconds,
+        "attention_required": bool(oldest_pending_seconds and oldest_pending_seconds > 600),
     }
 
 

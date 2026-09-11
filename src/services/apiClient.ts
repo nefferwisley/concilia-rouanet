@@ -50,6 +50,15 @@ export interface StoredProjectDocument {
   byteSize: number;
 }
 
+export interface PersistedProjectWorkspace {
+  project: Record<string, unknown>;
+  rubrics: Array<Record<string, unknown>>;
+  transactions: Array<Record<string, unknown>>;
+  documents: Array<Record<string, unknown>>;
+  bank_movements: Array<Record<string, unknown>>;
+  source: "postgres";
+}
+
 export class ApiClient {
   private static instance: ApiClient;
   private authToken: string | null = null;
@@ -141,6 +150,15 @@ export class ApiClient {
     return snapshot;
   }
 
+  /** Fonte oficial após a migração: dados normalizados do PostgreSQL. */
+  public async loadProjectWorkspace(projectId: string): Promise<PersistedProjectWorkspace | null> {
+    const response = await fetch(`${this.apiBaseUrl}/projetos/${encodeURIComponent(projectId)}/workspace`, {
+      headers: this.authenticatedHeaders(),
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new ApiClientError(response.status, "Não foi possível carregar o workspace persistido.");
+    return await response.json() as PersistedProjectWorkspace;
+  }
 
   public async uploadProjectDocument(
     projectId: string,

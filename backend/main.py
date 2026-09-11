@@ -16,6 +16,7 @@ from backend.routes import (
     divergencias,
     documentos,
     importacoes,
+    legacy_extraction,
     organizacao,
     orquestrador,
     planilha,
@@ -153,6 +154,7 @@ app.add_middleware(
 
 app.include_router(projetos.router)
 app.include_router(importacoes.router)
+app.include_router(legacy_extraction.router)
 app.include_router(real_imports.router)
 app.include_router(conciliacao.router)
 app.include_router(relatorios.router)

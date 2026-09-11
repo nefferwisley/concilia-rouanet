@@ -27,6 +27,10 @@ export const BudgetBulletChart: React.FC<BudgetBulletChartProps> = ({
   const percent = safeApproved > 0 ? (safeExecuted / safeApproved) * 100 : 0;
   const isOverBudget = safeExecuted > safeApproved;
   const saldo = safeApproved - safeExecuted;
+  const excessPercentagePoints = Math.max(0, percent - 100);
+  const executionDescription = isOverBudget
+    ? `${percent.toFixed(1)}% executado — excede o limite em ${excessPercentagePoints.toFixed(1)} pontos percentuais.`
+    : `${percent.toFixed(1)}% executado.`;
 
   // Escala dinâmica: o domínio máximo do gráfico é pelo menos 125% do aprovado ou 110% do executado,
   // permitindo que o excesso ultrapasse visualmente o marcador de 100% sem nenhum corte (anti-clipping).
@@ -48,7 +52,7 @@ export const BudgetBulletChart: React.FC<BudgetBulletChartProps> = ({
   return (
     <div
       role="img"
-      aria-label={chartDescription}
+      aria-label={`${label}: ${executionDescription}`}
       className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5 transition hover:border-slate-700"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -112,7 +116,7 @@ export const BudgetBulletChart: React.FC<BudgetBulletChartProps> = ({
       {/* Detalhes e Indicadores inferiores */}
       {showDetails && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-300 mt-1 gap-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <span>
               Saldo:{" "}
               <strong className={`font-mono ${saldo < 0 ? "text-rose-400 font-bold" : "text-slate-200"}`}>
@@ -121,13 +125,13 @@ export const BudgetBulletChart: React.FC<BudgetBulletChartProps> = ({
             </span>
             {isOverBudget && (
               <span className="text-xs bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1.5 py-0.5 rounded font-semibold">
-                Estouro Orçamentário
+                Excede o limite em {excessPercentagePoints.toFixed(1)} p.p.
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
             <span className={`font-mono font-semibold ${isOverBudget ? "text-rose-400 font-bold" : "text-slate-300"}`}>
-              {percentText}
+              {executionDescription}
             </span>
           </div>
         </div>
