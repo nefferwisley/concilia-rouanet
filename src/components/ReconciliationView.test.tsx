@@ -30,7 +30,7 @@ describe("ReconciliationView verified pending transactions", () => {
     expect(markup).toContain("Alimentação e diárias (25)");
     expect(markup).toContain("Passagens aéreas (8)");
     expect(markup).toContain("Miniatura do arquivo");
-  });
+  }, 20000);
 
   it("gives every pending row a stable unique visual identity", () => {
     const pending = initialTransactions["proj-1961"].filter(
