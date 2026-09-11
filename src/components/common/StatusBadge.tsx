@@ -6,13 +6,12 @@ export type StandardStatus = "Conciliado" | "Pendente" | "Em revisão" | "Alerta
 
 export interface StatusBadgeProps {
   status?: StandardStatus | string | BankTransaction | TripartiteEntry;
+  /** Submotivo legível, como "NF ausente" ou "Risco de glosa". */
   detail?: string;
   showDetail?: boolean;
   size?: "sm" | "md" | "lg";
   showTooltip?: boolean;
   tooltipText?: string;
-  /** Submotivo legível, como "NF ausente" ou "Risco de glosa". */
-  detail?: string;
   className?: string;
   onClick?: () => void;
 }
@@ -162,7 +161,6 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   size = "md",
   showTooltip = false,
   tooltipText,
-  detail,
   className = "",
   onClick,
 }) => {
@@ -234,7 +232,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   const badgeContent = (
     <span
       role="status"
-      aria-label={`${styleConfig.ariaLabel}${resolvedDetail ? `: ${resolvedDetail}` : ""}`}
+      aria-label={`${styleConfig.ariaLabel}${resolvedDetail ? `. ${resolvedDetail}` : ""}`}
       title={showTooltip || tooltipText ? description : undefined}
       className={`inline-flex items-center font-medium rounded-lg border ${styleConfig.bg} ${styleConfig.text} ${styleConfig.border} ${sizeClasses} ${className} select-none transition-colors`}
     >

@@ -54,10 +54,7 @@ import { BudgetBulletChart } from "./charts/BudgetBulletChart";
 import { MonthlyReconciliationChart } from "./charts/MonthlyReconciliationChart";
 import { BalanceEvolutionChart } from "./charts/BalanceEvolutionChart";
 import { StatusBadge } from "./common/StatusBadge";
-<<<<<<< HEAD
 import { TransactionMobileCard } from "./common/TransactionMobileCard";
-=======
->>>>>>> origin/main
 
 interface DashboardViewProps {
   project: PronacProject;
@@ -550,32 +547,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       )}
 
-<<<<<<< HEAD
-      {/* 1. SEÇÃO PRIORITÁRIA: PRIORIDADES DE HOJE & DECISÃO IMEDIATA (≤ 3s) */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
-
-        {/* Cabeçalho da Fila de Prioridades */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <ShieldAlert className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-                  Prioridades de Hoje — Painel de Decisão Imediata (≤ 3s)
-                </h2>
-                <span className="text-xs font-mono font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full">
-                  {prioritiesOfToday.length} itens a resolver
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Fila de auditoria por criticidade: prazo vencido &rarr; alertas &rarr; sem NF/comprovante &rarr; divergências &rarr; maior valor
-              </p>
-            </div>
-          </div>
-=======
       {/* Prioridades vêm antes do guia: são a porta de entrada operacional. */}
       <section aria-labelledby="prioridades-hoje" className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-800">
@@ -653,18 +624,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           ))}
         </div>
       </details>
->>>>>>> origin/main
 
+      {/* Matriz de Decisão Executiva (identificação em ≤ 3 segundos) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
+        <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-800">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={showPendingTransactions}
-              className="min-h-[44px] px-4 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl transition shadow-md flex items-center gap-1.5 active:scale-95"
-            >
-              <AlertTriangle className="w-4 h-4" />
-              Resolver pendências ({financialSummary.pendingDebitCount})
-            </button>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+              Painel de Decisão Imediata (≤ 3s)
+            </h2>
           </div>
+          <button
+            type="button"
+            onClick={showPendingTransactions}
+            className="min-h-[44px] px-4 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl transition shadow-md flex items-center gap-1.5 active:scale-95"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            Resolver pendências ({financialSummary.pendingDebitCount})
+          </button>
         </div>
 
         {/* Grid de Decisão com as 6 Métricas Prioritárias (Req 6) */}
