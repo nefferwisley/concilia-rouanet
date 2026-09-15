@@ -896,7 +896,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Card 2: Valor Captado */}
-        <div className="hidden sm:block bg-slate-900/90 border border-emerald-500/35 rounded-xl p-4.5 shadow">
+        <div className="bg-slate-900/90 border border-emerald-500/35 rounded-xl p-4.5 shadow">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
             <span className="font-medium flex items-center gap-1.5">
               <ArrowUpRight className="w-4 h-4 text-emerald-400" /> Orçamento Captado
