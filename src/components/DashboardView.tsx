@@ -469,9 +469,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     });
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {/* Top Banner / Project Meta Header */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+      <div className="order-[-2] bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -867,14 +867,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* KPI Cards Grid */}
       {canUseValidatedSummary && (
-        <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="order-[-1] flex flex-wrap items-center gap-2 text-xs">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 font-semibold text-sky-300">
             <ShieldCheck className="h-3.5 w-3.5" /> Resumo validado
           </span>
           <span className="text-slate-400">{validatedSummary?.fonte}</span>
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="order-[-1] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {/* Card 1: Valor Aprovado */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4.5 shadow">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
