@@ -152,6 +152,11 @@ app.add_middleware(
 )
 
 
+# Register the versioned snapshot/document contract before the legacy project
+# router. Both routers historically exposed PUT/GET /{projeto_id}/snapshot;
+# Starlette resolves the first matching route, so the legacy handler otherwise
+# swallowed the web client's versioned payload and returned opaque 500s.
+app.include_router(snapshots.router)
 app.include_router(projetos.router)
 app.include_router(importacoes.router)
 app.include_router(legacy_extraction.router)
@@ -170,7 +175,6 @@ app.include_router(planilha.router)
 app.include_router(rubricas.router)
 app.include_router(orquestrador.router)
 app.include_router(processamento.router)
-app.include_router(snapshots.router)
 app.include_router(rag.router)
 # Login de demonstração SEM autenticação (rota /api/v1/dev/demo-login).
 app.include_router(dev_demo.router)
