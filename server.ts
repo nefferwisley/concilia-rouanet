@@ -50,6 +50,16 @@ function isPersistentStorageConfigured() {
   return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_SERVICE_ROLE_KEY);
 }
 
+function hasProjectEvidence(snapshot: any, projectId: string) {
+  return ["transactions", "documents", "rubrics", "alerts", "tripartiteEntries", "receipts"]
+    .some((collection) => {
+      const value = snapshot?.[collection]?.[projectId];
+      return Array.isArray(value)
+        ? value.length > 0
+        : Boolean(value && typeof value === "object" && Object.keys(value).length > 0);
+    });
+}
+
 function restHeaders(extra: Record<string, string> = {}) {
   return {
     apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -193,6 +203,15 @@ app.put("/api/v1/projetos/:projectId/snapshot", requireSupabaseUser, async (req:
     return res.status(413).json({ error: "O estado do projeto excede o limite de 10 MB." });
   }
   try {
+    const currentResponse = await fetch(
+      `${SUPABASE_URL}/rest/v1/project_snapshots?project_id=eq.${encodeURIComponent(projectId)}&owner_id=eq.${encodeURIComponent(req.authUser!.id)}&select=payload&limit=1`,
+      { headers: restHeaders() },
+    );
+    if (!currentResponse.ok) throw new Error(`snapshot guard read ${currentResponse.status}`);
+    const currentRows = await currentResponse.json() as Array<{ payload: unknown }>;
+    if (hasProjectEvidence(currentRows[0]?.payload, projectId) && !hasProjectEvidence(snapshot, projectId)) {
+      return res.status(409).json({ error: "Uma atualização vazia não pode substituir os dados existentes do projeto." });
+    }
     const response = await fetch(`${SUPABASE_URL}/rest/v1/project_snapshots?on_conflict=project_id`, {
       method: "POST",
       headers: restHeaders({ "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" }),
