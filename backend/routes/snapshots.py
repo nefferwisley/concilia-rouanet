@@ -6,14 +6,20 @@ Implementa:
 3. Sanitização contra PDFs em base64 dentro do snapshot.
 4. Trilha imutável em audit_events para criação/edição de snapshots e documentos.
 """
+import base64
+import binascii
 import hashlib
 import json
 import logging
+import re
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from backend.database import get_conn
+from backend.services import storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +30,46 @@ class SnapshotUpdateRequest(BaseModel):
     snapshot: Dict[str, Any]
     version: Optional[int] = None
     source_system: Optional[str] = "web_client"
+
+
+class ProjectDocumentUploadRequest(BaseModel):
+    """Payload compatível com o cliente web para persistir uma evidência."""
+
+    documentId: str
+    fileName: str
+    mimeType: str
+    base64: str
+
+
+_ALLOWED_DOCUMENT_MIME_TYPES = {
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.ms-powerpoint",
+    "application/rtf",
+    "text/csv",
+    "text/plain",
+    "application/xml",
+    "text/xml",
+    "application/json",
+    "application/zip",
+    "application/octet-stream",
+}
+_BASE64_RE = re.compile(r"^[A-Za-z0-9+/]*={0,2}$")
+_MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
+
+
+def _storage_segment(value: str, fallback: str = "arquivo") -> str:
+    """Mantém cada segmento da chave do Storage sem traversal ou separadores."""
+    clean = re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip(".-")[:120]
+    return clean or fallback
 
 
 def _sanitizar_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -184,4 +230,106 @@ async def salvar_snapshot(
         "project_id": projeto_id,
         "version": nova_versao,
         "snapshot_hash": snapshot_hash
+    }
+
+
+@router.post("/{projeto_id}/documentos", status_code=status.HTTP_201_CREATED)
+async def armazenar_documento_projeto(
+    projeto_id: str,
+    payload: ProjectDocumentUploadRequest,
+    dep=Depends(get_conn),
+):
+    """Persiste documentos enviados pelo importador web.
+
+    O frontend envia base64 porque seleciona arquivos via File System Access API.
+    O conteúdo é decodificado somente no servidor, gravado no Storage privado e
+    referenciado por ``document_assets``; o snapshot nunca recebe os bytes.
+    """
+    conn, user_id = dep
+    if not projeto_id.strip() or not payload.documentId.strip() or not payload.fileName.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Identificação do projeto e do arquivo é obrigatória.")
+    if payload.mimeType not in _ALLOWED_DOCUMENT_MIME_TYPES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tipo de arquivo não suportado para o dossiê.")
+
+    raw_base64 = re.sub(r"^data:[^;]+;base64,", "", payload.base64.strip())
+    if not raw_base64 or not _BASE64_RE.fullmatch(raw_base64) or len(raw_base64) % 4:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Conteúdo do arquivo inválido.")
+    try:
+        conteudo = base64.b64decode(raw_base64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Conteúdo do arquivo inválido.") from exc
+    if not conteudo or len(conteudo) > _MAX_DOCUMENT_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Arquivo vazio ou acima de 25 MB.")
+
+    # A chave é sanitizada pelo storage_service; o nome original permanece no
+    # catálogo para exibição e auditoria.
+    caminho = "/".join(
+        (
+            _storage_segment(projeto_id, "projeto"),
+            _storage_segment(payload.documentId, "documento"),
+            _storage_segment(Path(payload.fileName).name),
+        )
+    )
+    try:
+        object_path = await run_in_threadpool(storage_service.upload_arquivo, caminho, conteudo)
+        await conn.execute(
+            """
+            INSERT INTO document_assets (
+                project_id, document_id, owner_id, object_path, file_name, mime_type, byte_size
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (project_id, document_id) DO UPDATE SET
+                owner_id = EXCLUDED.owner_id,
+                object_path = EXCLUDED.object_path,
+                file_name = EXCLUDED.file_name,
+                mime_type = EXCLUDED.mime_type,
+                byte_size = EXCLUDED.byte_size,
+                updated_at = now()
+            """,
+            projeto_id,
+            payload.documentId,
+            user_id,
+            object_path,
+            payload.fileName,
+            payload.mimeType,
+            len(conteudo),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001 — converte falhas de storage/DB em resposta acionável
+        logger.exception("Falha ao armazenar documento %s do projeto %s", payload.fileName, projeto_id)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Não foi possível armazenar o documento.") from exc
+
+    return {
+        "stored": True,
+        "documentId": payload.documentId,
+        "fileName": payload.fileName,
+        "byteSize": len(conteudo),
+    }
+
+
+@router.get("/{projeto_id}/documentos")
+async def listar_documentos_projeto(projeto_id: str, dep=Depends(get_conn)):
+    """Lista apenas metadados dos documentos privados do usuário."""
+    conn, user_id = dep
+    rows = await conn.fetch(
+        """
+        SELECT document_id, file_name, mime_type, byte_size
+        FROM document_assets
+        WHERE project_id = $1 AND owner_id = $2
+        ORDER BY created_at ASC
+        """,
+        projeto_id,
+        user_id,
+    )
+    return {
+        "documentos": [
+            {
+                "documentId": row["document_id"],
+                "fileName": row["file_name"],
+                "mimeType": row["mime_type"],
+                "byteSize": row["byte_size"],
+            }
+            for row in rows
+        ]
     }
