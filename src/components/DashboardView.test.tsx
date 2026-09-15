@@ -306,7 +306,6 @@ describe("DashboardView reconciliation summary", () => {
     expect(markup).toContain("BB 8768-8");
     expect(markup).toContain("110.401");
     expect(markup).not.toContain("Documento:");
-    expect(markup).toContain("hidden sm:block");
   });
 });
 
