@@ -11,6 +11,11 @@ logger = logging.getLogger(__name__)
 # routes/revisao.py — definido aqui de novo (em vez de importar de lá) pra
 # não inverter a direção da dependência (services não deve importar de routes).
 UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", "/app/uploads"))
+# Keep the FastAPI storage path aligned with the bucket used by the public
+# service and already provisioned in Supabase.  A configurable override keeps
+# local/test deployments free to use a different bucket without hard-coding a
+# second production name in every call site.
+DOCUMENT_BUCKET = os.environ.get("DOCUMENT_BUCKET", "documentos-1961")
 
 _client = None
 
@@ -49,13 +54,13 @@ def get_supabase_client() -> Client | None:
     
     try:
         _client = create_client(settings.supabase_url, settings.supabase_service_role_key)
-        # Tenta verificar ou criar o bucket 'documentos'
+        # Tenta verificar ou criar o bucket de documentos do produto.
         try:
-            _client.storage.get_bucket("documentos")
+            _client.storage.get_bucket(DOCUMENT_BUCKET)
         except Exception:
             try:
-                _client.storage.create_bucket("documentos", options={"public": False})
-                logger.info("Bucket 'documentos' criado com sucesso no Supabase Storage.")
+                _client.storage.create_bucket(DOCUMENT_BUCKET, options={"public": False})
+                logger.info("Bucket '%s' criado com sucesso no Supabase Storage.", DOCUMENT_BUCKET)
             except Exception as e:
                 logger.debug("Tentativa de criar bucket 'documentos' falhou (pode já existir): %s", e)
         return _client
@@ -76,24 +81,24 @@ def upload_arquivo(caminho_logico: str, conteudo: bytes) -> str:
         try:
             # Tenta upload. Se já existir, faz update.
             try:
-                client.storage.from_("documentos").upload(
+                client.storage.from_(DOCUMENT_BUCKET).upload(
                     path=caminho_clean,
                     file=conteudo,
                     file_options={"x-upsert": "true", "content-type": "application/octet-stream"}
                 )
             except Exception as upload_err:
                 if "already exists" in str(upload_err).lower() or "duplicate" in str(upload_err).lower():
-                    client.storage.from_("documentos").update(
+                    client.storage.from_(DOCUMENT_BUCKET).update(
                         path=caminho_clean,
                         file=conteudo,
                         file_options={"content-type": "application/octet-stream"}
                     )
                 else:
                     raise upload_err
-            logger.info("Upload com sucesso pro Supabase Storage: documentos/%s", caminho_clean)
+            logger.info("Upload com sucesso pro Supabase Storage: %s/%s", DOCUMENT_BUCKET, caminho_clean)
             return caminho_clean
         except Exception as e:
-            logger.error("Falha ao subir arquivo pro Supabase Storage (documentos/%s): %s", caminho_clean, e)
+            logger.error("Falha ao subir arquivo pro Supabase Storage (%s/%s): %s", DOCUMENT_BUCKET, caminho_clean, e)
             raise e
     else:
         if settings.app_env == "production":
@@ -116,10 +121,10 @@ def baixar_arquivo(caminho_logico: str) -> bytes | None:
 
     if client:
         try:
-            res = client.storage.from_("documentos").download(caminho_clean)
+            res = client.storage.from_(DOCUMENT_BUCKET).download(caminho_clean)
             return res
         except Exception as e:
-            logger.debug("Erro ao baixar do Supabase Storage (documentos/%s): %s", caminho_clean, e)
+            logger.debug("Erro ao baixar do Supabase Storage (%s/%s): %s", DOCUMENT_BUCKET, caminho_clean, e)
             return None
     else:
         # Fallback local
@@ -143,7 +148,7 @@ def gerar_url_assinada(caminho_logico: str, expires_in: int = 3600) -> str | Non
 
     if client:
         try:
-            res = client.storage.from_("documentos").create_signed_url(caminho_clean, expires_in)
+            res = client.storage.from_(DOCUMENT_BUCKET).create_signed_url(caminho_clean, expires_in)
             if isinstance(res, dict):
                 return res.get("signedURL") or res.get("signedUrl")
             return getattr(res, "signed_url", None) or str(res)

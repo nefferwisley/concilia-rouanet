@@ -8,9 +8,19 @@ export function chooseActiveProjectId(
   projects: OnlineProjectSummary[],
   preferredProjectId?: string | null,
 ): string | null {
-  return projects.some((project) => project.id === preferredProjectId)
-    ? preferredProjectId ?? null
-    : projects[0]?.id ?? null;
+  const preferred = projects.find((project) => project.id === preferredProjectId);
+  // A stale saved selection can point at the automatically-created empty
+  // project while the real project already contains the user's launches.
+  // Keep an explicitly selected project when it has data; otherwise choose
+  // the populated project with the largest transaction count.
+  if (preferred && (preferred.transacoesCount > 0 || projects.every((project) => project.transacoesCount === 0))) {
+    return preferred.id;
+  }
+
+  return projects.reduce<OnlineProjectSummary | null>((current, project) => {
+    if (!current || project.transacoesCount > current.transacoesCount) return project;
+    return current;
+  }, null)?.id ?? null;
 }
 
 export async function loadOnlineSession(

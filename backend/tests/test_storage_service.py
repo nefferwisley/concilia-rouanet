@@ -104,7 +104,7 @@ class _FakeStorage:
         self._bucket = _FakeBucket()
 
     def from_(self, nome_bucket):
-        assert nome_bucket == "documentos"
+        assert nome_bucket == storage_service.DOCUMENT_BUCKET
         return self._bucket
 
 

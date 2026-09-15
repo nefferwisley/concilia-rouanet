@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OnlineSessionApi } from "../contracts/online";
-import { loadOnlineSession } from "./onlineSession";
+import { chooseActiveProjectId, loadOnlineSession } from "./onlineSession";
 
 const project = {
   id: "1961",
@@ -11,6 +11,15 @@ const project = {
 };
 
 describe("loadOnlineSession", () => {
+  it("does not reopen a stale empty project when another project has launches", () => {
+    const projects = [
+      { ...project, id: "empty", transacoesCount: 0 },
+      { ...project, id: "1961", transacoesCount: 194 },
+    ];
+
+    expect(chooseActiveProjectId(projects, "empty")).toBe("1961");
+  });
+
   it("keeps the saved project when the API returns it", async () => {
     const api: OnlineSessionApi = {
       checkHealth: async () => ({ online: true }),
