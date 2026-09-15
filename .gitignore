@@ -9,4 +9,5 @@ coverage/
 __pycache__/
 *.pyc
 scratch/
+artifacts/data-evaluator/
 *.patch
