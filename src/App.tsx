@@ -58,6 +58,7 @@ import {
   OFFICIAL_PROJECT_1961_ACTIVE_VERSION_KEY,
   OFFICIAL_PROJECT_1961_DATA_VERSION,
   OFFICIAL_PROJECT_1961_DATA_VERSION_KEY,
+  OFFICIAL_PROJECT_1961_ID,
   resolveInitialActiveProjectId,
 } from "./utils/officialProject1961Migration";
 import { Plus, X, Building, CheckCircle2, LayoutDashboard, Split, ArrowLeftRight, ShieldCheck, Menu } from "lucide-react";
@@ -451,32 +452,57 @@ export default function App() {
     void apiClient.loadProjectSnapshot<PersistedWorkspace>(projectId)
       .then(async (snapshot) => {
         if (!active || !snapshot) return;
+        const snapshotToLoad = projectId === OFFICIAL_PROJECT_1961_ID
+          && (snapshot.transactions?.[projectId]?.length || 0) === 0
+          ? {
+              ...snapshot,
+              projects: mergeOfficialProject1961(snapshot.projects || [], initialProjects, true),
+              activeProjectId: projectId,
+              rubrics: mergeOfficialProject1961Dataset(snapshot.rubrics || {}, initialRubrics, true),
+              transactions: mergeOfficialProject1961Dataset(snapshot.transactions || {}, initialTransactions, true),
+              documents: mergeOfficialProject1961Dataset(snapshot.documents || {}, initialDocuments, true),
+              alerts: mergeOfficialProject1961Dataset(snapshot.alerts || {}, initialAlerts, true),
+              tripartiteEntries: mergeOfficialProject1961Dataset(snapshot.tripartiteEntries || {}, initialTripartiteEntries, true),
+              receipts: snapshot.receipts || {},
+            }
+          : snapshot;
         const storedDocuments = await apiClient.listProjectDocuments(projectId).catch(() => []);
         if (!active) return;
-        const restoredDocuments = restoreStoredDocuments(snapshot.documents || {}, projectId, storedDocuments);
-        const projectTransactions = snapshot.transactions?.[projectId] || [];
+        const restoredDocuments = restoreStoredDocuments(snapshotToLoad.documents || {}, projectId, storedDocuments);
+        const projectTransactions = snapshotToLoad.transactions?.[projectId] || [];
         const projectDocuments = restoredDocuments[projectId] || [];
-        const projectRubrics = snapshot.rubrics?.[projectId] || [];
-        const project = snapshot.projects?.find((item) => item.id === projectId);
+        const projectRubrics = snapshotToLoad.rubrics?.[projectId] || [];
+        const project = snapshotToLoad.projects?.find((item) => item.id === projectId);
         const reconciliation = projectTransactions.length > 0 && projectDocuments.length > 0
           ? runRealtimeTripartiteReconciliation(projectTransactions, projectDocuments, projectRubrics, project)
           : null;
         setLoadedOnlineProjectId(projectId);
         setHasOnlineSnapshot(true);
-        setProjects(snapshot.projects?.map(removePlaceholderBankData) || []);
-        setActiveProjectId(snapshot.activeProjectId || projectId);
-        setAllRubrics(snapshot.rubrics || {});
+        setOnlineSession((current) => ({
+          ...current,
+          projects: current.projects.map((item) => item.id === projectId
+            ? {
+                ...item,
+                pronac: project?.pronac || item.pronac,
+                nome: project?.nome || item.nome,
+                transacoesCount: projectTransactions.length,
+              }
+            : item),
+        }));
+        setProjects(snapshotToLoad.projects?.map(removePlaceholderBankData) || []);
+        setActiveProjectId(snapshotToLoad.activeProjectId || projectId);
+        setAllRubrics(snapshotToLoad.rubrics || {});
         setAllTransactions(reconciliation
-          ? { ...(snapshot.transactions || {}), [projectId]: reconciliation.transactions }
-          : snapshot.transactions || {});
+          ? { ...(snapshotToLoad.transactions || {}), [projectId]: reconciliation.transactions }
+          : snapshotToLoad.transactions || {});
         setAllDocuments(reconciliation
           ? { ...restoredDocuments, [projectId]: reconciliation.documents }
           : restoredDocuments);
-        setAllAlerts(snapshot.alerts || {});
+        setAllAlerts(snapshotToLoad.alerts || {});
         setAllTripartiteEntries(reconciliation
-          ? { ...(snapshot.tripartiteEntries || {}), [projectId]: reconciliation.tripartiteEntries }
-          : snapshot.tripartiteEntries || {});
-        setAllReceipts(snapshot.receipts || {});
+          ? { ...(snapshotToLoad.tripartiteEntries || {}), [projectId]: reconciliation.tripartiteEntries }
+          : snapshotToLoad.tripartiteEntries || {});
+        setAllReceipts(snapshotToLoad.receipts || {});
       })
       .catch((error) => console.warn("Não foi possível recuperar o último estado online:", error));
     return () => { active = false; };
