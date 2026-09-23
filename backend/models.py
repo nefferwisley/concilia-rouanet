@@ -43,6 +43,7 @@ class ImportacaoStatus(BaseModel):
     linhas_ok: int
     linhas_erro: int
     linhas_alerta: int
+    linhas_duplicadas: int = 0
     mensagem: Optional[str] = None
 
 

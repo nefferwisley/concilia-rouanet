@@ -1,4 +1,5 @@
 import json
+import hashlib
 import logging
 
 import yaml
@@ -27,8 +28,10 @@ async def iniciar_importacao(
     if modo not in ("dry_run", "commit"):
         raise HTTPException(400, "modo deve ser 'dry_run' ou 'commit'.")
 
+    arquivo_bytes = await arquivo.read()
+    arquivo_sha256 = hashlib.sha256(arquivo_bytes).hexdigest()
     try:
-        conteudo_json = json.loads(await arquivo.read())
+        conteudo_json = json.loads(arquivo_bytes)
     except json.JSONDecodeError as e:
         raise HTTPException(400, f"Arquivo JSON inválido: {e}")
 
@@ -55,10 +58,11 @@ async def iniciar_importacao(
             await conn2.execute("set local role authenticated")
             row = await conn2.fetchrow(
                 """
-                insert into importacoes (projeto_id, criado_por, status, modo, arquivo_json)
-                values ($1, $2, 'iniciando', $3, $4::jsonb) returning id
+                insert into importacoes (
+                    projeto_id, criado_por, status, modo, arquivo_json, arquivo_sha256
+                ) values ($1, $2, 'iniciando', $3, $4::jsonb, $5) returning id
                 """,
-                projeto_id, user_id, modo, json.dumps(conteudo_json),
+                projeto_id, user_id, modo, json.dumps(conteudo_json), arquivo_sha256,
             )
     finally:
         await acquired_pool.release(conn2)
@@ -66,7 +70,8 @@ async def iniciar_importacao(
 
     background_tasks.add_task(
         executar_importacao_bg,
-        importacao_id, projeto_id, cfg, conteudo_json, modo == "commit", api_key_gemini or None,
+        importacao_id, projeto_id, cfg, conteudo_json, modo == "commit",
+        api_key_gemini or None, arquivo_sha256,
     )
 
     return {
@@ -120,6 +125,7 @@ async def listar_importacoes(
             "linhas_ok": row["linhas_ok"],
             "linhas_erro": row["linhas_erro"],
             "linhas_alerta": row["linhas_alerta"],
+            "linhas_duplicadas": row["linhas_duplicadas"],
             "mensagem": row["mensagem"],
         }
 
@@ -149,6 +155,7 @@ async def status_importacao(importacao_id: str, dep=Depends(get_conn)):
         "linhas_ok": row["linhas_ok"],
         "linhas_erro": row["linhas_erro"],
         "linhas_alerta": row["linhas_alerta"],
+        "linhas_duplicadas": row["linhas_duplicadas"],
         "mensagem": row["mensagem"],
         "erro_fatal": row["erro_fatal"],
     }

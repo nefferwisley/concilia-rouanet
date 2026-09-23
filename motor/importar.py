@@ -19,6 +19,7 @@ requirements: psycopg2-binary, pyyaml, google-generativeai
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -90,6 +91,19 @@ def parse_tipo_doc(texto: str):
     if "RECIB" in t:
         return "RECIBO"
     return "OUTRO"
+
+
+def chave_registro_fonte(arquivo_sha256: str, linha_num: int, linha: dict) -> str:
+    """Gera uma identidade estável para uma linha de um arquivo imutável."""
+    payload = json.dumps(
+        linha,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    material = f"{arquivo_sha256}:{linha_num}:{payload}".encode("utf-8")
+    return hashlib.sha256(material).hexdigest()
 
 
 # ============================================================
@@ -230,7 +244,7 @@ class MotorImportacao:
         self._rubrica_cache = {}
         self.buscador_rag = None   # setado por quem chama, depois de saber o projeto_id
         self.stats = dict(
-            linhas_ok=0, linhas_erro=0, linhas_alerta=0,
+            linhas_ok=0, linhas_erro=0, linhas_alerta=0, linhas_duplicadas=0,
             rubricas=0, transacoes=0, documentos=0, despesas=0,
             movimentos=0, conciliacoes=0, logs=0, revisoes=0,
         )
@@ -327,7 +341,18 @@ class MotorImportacao:
 
         return None, score, metodo
 
-    def importar_lancamento(self, cur, projeto_id, conta_id, dados, linha_num):
+    def importar_lancamento(
+        self,
+        cur,
+        projeto_id,
+        conta_id,
+        dados,
+        linha_num,
+        *,
+        source_system="json_import",
+        source_record_key=None,
+        source_importacao_id=None,
+    ):
         cur.execute("SAVEPOINT sp_lancamento")
         try:
             rubrica_id, score_rubrica, metodo_rubrica = self.obter_ou_criar_rubrica(
@@ -383,8 +408,13 @@ class MotorImportacao:
                 """
                 insert into transacoes (
                     projeto_id, fornecedor, documento, data_pagamento,
-                    valor_bruto, valor_liquido, tem_nf, tem_comprovante, status
-                ) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    valor_bruto, valor_liquido, tem_nf, tem_comprovante, status,
+                    source_system, source_record_key, source_importacao_id,
+                    data_quality_score
+                ) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                on conflict (projeto_id, source_system, source_record_key)
+                where source_system is not null and source_record_key is not null
+                do nothing
                 returning id
                 """,
                 (
@@ -392,9 +422,16 @@ class MotorImportacao:
                     dados["_valor_liquido_dec"], dados["_valor_liquido_dec"],
                     bool(dados.get("documento_ref")), bool(dados.get("documento_ref")),
                     status,
+                    source_system, source_record_key, source_importacao_id,
+                    Decimal("0.60") if motivos_revisao else Decimal("1.00"),
                 ),
             )
-            transacao_id = cur.fetchone()[0]
+            transacao_row = cur.fetchone()
+            if transacao_row is None:
+                self.stats["linhas_duplicadas"] += 1
+                cur.execute("RELEASE SAVEPOINT sp_lancamento")
+                return True
+            transacao_id = transacao_row[0]
             self.stats["transacoes"] += 1
 
             documento_id = None
@@ -510,6 +547,7 @@ def main():
         cfg = yaml.safe_load(f)
     with open(args.json, "r", encoding="utf-8") as f:
         json_data = json.load(f)
+    arquivo_sha256 = hashlib.sha256(Path(args.json).read_bytes()).hexdigest()
 
     orcamento = carregar_rubricas_salic(cfg, config_path.parent)
     raiz, lancamentos = resolver_projeto_e_lancamentos(json_data, cfg)
@@ -548,7 +586,15 @@ def main():
                     break
                 continue
 
-            sucesso = motor.importar_lancamento(cur, projeto_id, conta_id, dados, i)
+            sucesso = motor.importar_lancamento(
+                cur,
+                projeto_id,
+                conta_id,
+                dados,
+                i,
+                source_system="cli_json",
+                source_record_key=chave_registro_fonte(arquivo_sha256, i, linha),
+            )
             if sucesso:
                 motor.stats["linhas_ok"] += 1
                 motor.log(f"  ✓ linha {i}: importada")

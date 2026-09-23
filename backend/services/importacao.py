@@ -21,6 +21,7 @@ from motor.importar import (
     MotorImportacao,
     Validador,
     carregar_rubricas_salic,
+    chave_registro_fonte,
     resolver_projeto_e_lancamentos,
 )
 from motor.matching_rag import BuscadorRubricaRAG
@@ -38,7 +39,7 @@ def _atualizar(importacao_id: str, **campos):
             sets.append(f"{k} = %s")
             valores.append(v)
     valores.append(importacao_id)
-    logger.info("bg update importacoes %s: %s | db=%s", importacao_id, list(campos), settings.database_url)
+    logger.info("bg update importacoes %s: %s", importacao_id, list(campos))
     # A linha `importacoes` é inserida dentro da transação do request (get_conn),
     # que só encerra DEPOIS que a background task começa. Pra não perder o
     # primeiro UPDATE por linha ainda não visível, retenta até enxergar a
@@ -59,7 +60,13 @@ def _atualizar(importacao_id: str, **campos):
 
 
 def executar_importacao_bg(
-    importacao_id: str, projeto_id: str, cfg: dict, json_data: dict, commit: bool, api_key_gemini: str | None
+    importacao_id: str,
+    projeto_id: str,
+    cfg: dict,
+    json_data: dict,
+    commit: bool,
+    api_key_gemini: str | None,
+    arquivo_sha256: str,
 ):
     logger = logging.getLogger("rouanet-api.importacao")
     logger.info("Iniciando importacao bg %s", importacao_id)
@@ -112,14 +119,25 @@ def executar_importacao_bg(
                     erros_lista.append({"linha": i, "motivos": erros})
                     motor.stats["linhas_erro"] += 1
                 else:
-                    sucesso = motor.importar_lancamento(cur, projeto_id, conta_id, dados, i)
-                    motor.stats["linhas_ok" if sucesso else "linhas_erro"] += 1
+                    sucesso = motor.importar_lancamento(
+                        cur,
+                        projeto_id,
+                        conta_id,
+                        dados,
+                        i,
+                        source_system="api_json",
+                        source_record_key=chave_registro_fonte(arquivo_sha256, i, linha),
+                        source_importacao_id=importacao_id,
+                    )
+                    if sucesso:
+                        motor.stats["linhas_ok"] += 1
 
                 if i % 5 == 0 or i == total:
                     _atualizar(
                         importacao_id, linhas_processadas=i,
                         linhas_ok=motor.stats["linhas_ok"], linhas_erro=motor.stats["linhas_erro"],
                         linhas_alerta=motor.stats["linhas_alerta"],
+                        linhas_duplicadas=motor.stats["linhas_duplicadas"],
                         mensagem=f"Processando linha {i}/{total}...",
                     )
 
@@ -128,7 +146,11 @@ def executar_importacao_bg(
         else:
             conn.rollback()
 
-        relatorio = {"resumo": motor.stats, "erros": erros_lista, "alertas": alertas_lista}
+        relatorio = {
+            "resumo": motor.stats,
+            "erros": erros_lista + motor.erros_relatorio,
+            "alertas": alertas_lista,
+        }
         with psycopg2.connect(settings.database_url) as conn2:
             conn2.autocommit = True
             with conn2.cursor() as cur2:
