@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 import crypto from "crypto";
 import * as xlsx from "xlsx";
 import { runRealtimeTripartiteReconciliation } from "./src/utils/shadowLedger";
+import { buildSupabaseAdminHeaders } from "./src/services/supabaseAdminHeaders";
 
 dotenv.config();
 
@@ -51,11 +52,7 @@ function isPersistentStorageConfigured() {
 }
 
 function restHeaders(extra: Record<string, string> = {}) {
-  return {
-    apikey: SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-    ...extra,
-  };
+  return buildSupabaseAdminHeaders(SUPABASE_SERVICE_ROLE_KEY, extra);
 }
 
 function storagePath(projectId: string, documentId: string, fileName: string) {
