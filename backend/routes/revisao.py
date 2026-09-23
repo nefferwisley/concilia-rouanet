@@ -70,7 +70,10 @@ async def enviar_documento_transacao(
 
     nome_limpo = Path(arquivo.filename).name
     caminho_bucket = await run_in_threadpool(
-        storage_service.upload_arquivo, f"{projeto_id}/transacoes/{transacao_id}/{nome_limpo}", conteudo
+        storage_service.upload_arquivo,
+        f"{projeto_id}/transacoes/{transacao_id}/{nome_limpo}",
+        conteudo,
+        arquivo.content_type,
     )
 
     sha = hashlib.sha256(conteudo).hexdigest()
@@ -156,7 +159,8 @@ async def listar_documentos_transacao(projeto_id: str, transacao_id: str, dep=De
     no_bucket: set[str] = set()
     if refs:
         existentes = await conn.fetch(
-            "select name from storage.objects where bucket_id = 'documentos' and name = any($1)",
+            "select name from storage.objects where bucket_id = $1 and name = any($2)",
+            storage_service.DOCUMENT_BUCKET,
             refs,
         )
         no_bucket = {row["name"] for row in existentes}
@@ -653,4 +657,4 @@ async def obter_visualizacao_documento(documento_id: str, dep=Depends(get_conn))
         "arquivo_ref": arquivo_ref,
         "signed_url": signed_url,
         "confianca_ocr": row.get("confianca_ocr"),
-    }
+    }

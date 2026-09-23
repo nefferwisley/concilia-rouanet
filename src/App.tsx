@@ -1017,8 +1017,8 @@ export default function App() {
     return (
       <OnlineLoginView
         configuration={supabaseAuthConfiguration}
-        onAuthenticated={(accessToken) => {
-          apiClient.setToken(accessToken);
+        onAuthenticated={(accessToken, refreshToken) => {
+          apiClient.setSession(accessToken, refreshToken);
           setHasAuthenticatedSession(true);
         }}
       />

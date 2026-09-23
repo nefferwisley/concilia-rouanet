@@ -246,7 +246,10 @@ async def enviar_documentos_projeto(
 
             nome_limpo = Path(arquivo.filename).name
             caminho_bucket = await run_in_threadpool(
-                storage_service.upload_arquivo, f"{projeto_id}/{nome_limpo}", conteudo
+                storage_service.upload_arquivo,
+                f"{projeto_id}/{nome_limpo}",
+                conteudo,
+                arquivo.content_type,
             )
 
             row = await conn.fetchrow(
@@ -344,7 +347,10 @@ async def sincronizar_drive(projeto_id: str, dep=Depends(get_conn)):
 
         nome_limpo = Path(arq["name"]).name
         caminho_bucket = await run_in_threadpool(
-            storage_service.upload_arquivo, f"{projeto_id}/{nome_limpo}", conteudo
+            storage_service.upload_arquivo,
+            f"{projeto_id}/{nome_limpo}",
+            conteudo,
+            arq.get("mimeType"),
         )
 
         row = await conn.fetchrow(
@@ -476,7 +482,8 @@ async def backfill_storage(projeto_id: str, commit: bool = False, limite: int = 
     # arquivo -- com ~600 documentos, o loop anterior (download() por doc)
     # estourava o timeout do worker antes de terminar até o dry-run.
     existentes_rows = await conn.fetch(
-        "select name from storage.objects where bucket_id = 'documentos' and name like $1",
+        "select name from storage.objects where bucket_id = $1 and name like $2",
+        storage_service.DOCUMENT_BUCKET,
         f"{projeto_id}/%",
     )
     nomes_existentes = {row["name"] for row in existentes_rows}
@@ -674,7 +681,8 @@ async def vincular_por_prestador(projeto_id: str, commit: bool = False, dep=Depe
         projeto_id,
     )
     existentes_rows = await conn.fetch(
-        "select name from storage.objects where bucket_id = 'documentos' and name like $1",
+        "select name from storage.objects where bucket_id = $1 and name like $2",
+        storage_service.DOCUMENT_BUCKET,
         f"{projeto_id}/%",
     )
     nomes_no_bucket = {row["name"] for row in existentes_rows}
@@ -800,7 +808,8 @@ async def listar_candidatos_ambiguos(projeto_id: str, dep=Depends(get_conn)):
         projeto_id,
     )
     existentes_rows = await conn.fetch(
-        "select name from storage.objects where bucket_id = 'documentos' and name like $1",
+        "select name from storage.objects where bucket_id = $1 and name like $2",
+        storage_service.DOCUMENT_BUCKET,
         f"{projeto_id}/%",
     )
     nomes_no_bucket = {row["name"] for row in existentes_rows}
@@ -878,7 +887,8 @@ async def vincular_manual_documento(
         raise HTTPException(404, "Documento do Drive não encontrado neste projeto.")
 
     existe_no_bucket = await conn.fetchval(
-        "select exists(select 1 from storage.objects where bucket_id = 'documentos' and name = $1)",
+        "select exists(select 1 from storage.objects where bucket_id = $1 and name = $2)",
+        storage_service.DOCUMENT_BUCKET,
         doc_drive["arquivo_ref"],
     )
     if not existe_no_bucket:

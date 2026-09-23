@@ -7,8 +7,22 @@
 
 import type { OnlineProjectList } from "../contracts/online";
 import { PronacProject } from "../types";
+import { getSupabaseAuthConfiguration, refreshSupabaseSession } from "./supabaseAuth";
 
 const DEFAULT_API_BASE_URL = "/api/v1";
+const AUTH_TOKEN_KEY = "rouanet_auth_token";
+const REFRESH_TOKEN_KEY = "rouanet_refresh_token";
+
+function tokenExpiresSoon(token: string): boolean {
+  try {
+    const encoded = token.split(".")[1];
+    const normalized = encoded.replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")));
+    return typeof payload.exp === "number" && payload.exp <= Math.floor(Date.now() / 1000) + 60;
+  } catch {
+    return false;
+  }
+}
 
 export function resolveApiUrls(
   apiBaseUrl?: string,
@@ -62,6 +76,8 @@ export interface PersistedProjectWorkspace {
 export class ApiClient {
   private static instance: ApiClient;
   private authToken: string | null = null;
+  private refreshToken: string | null = null;
+  private refreshPromise: Promise<string | null> | null = null;
   private readonly apiBaseUrl: string;
   private readonly healthUrl: string;
 
@@ -71,7 +87,10 @@ export class ApiClient {
     this.healthUrl = urls.healthUrl;
     this.authToken = typeof localStorage === "undefined"
       ? null
-      : localStorage.getItem("rouanet_auth_token");
+      : localStorage.getItem(AUTH_TOKEN_KEY);
+    this.refreshToken = typeof localStorage === "undefined"
+      ? null
+      : localStorage.getItem(REFRESH_TOKEN_KEY);
   }
 
   public static getInstance(): ApiClient {
@@ -86,9 +105,16 @@ export class ApiClient {
   }
 
   public setToken(token: string) {
+    this.setSession(token, this.refreshToken);
+  }
+
+  public setSession(token: string, refreshToken: string | null) {
     this.authToken = token;
+    this.refreshToken = refreshToken;
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("rouanet_auth_token", token);
+      localStorage.setItem(AUTH_TOKEN_KEY, token);
+      if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+      else localStorage.removeItem(REFRESH_TOKEN_KEY);
     }
   }
 
@@ -96,17 +122,41 @@ export class ApiClient {
     return this.authToken;
   }
 
+  public async getValidToken(): Promise<string | null> {
+    if (!this.authToken || !tokenExpiresSoon(this.authToken) || !this.refreshToken) return this.authToken;
+    if (!this.refreshPromise) {
+      this.refreshPromise = (async () => {
+        const configuration = getSupabaseAuthConfiguration();
+        if (!configuration || !this.refreshToken) return this.authToken;
+        try {
+          const session = await refreshSupabaseSession(configuration, this.refreshToken);
+          this.setSession(session.accessToken, session.refreshToken);
+          return session.accessToken;
+        } catch {
+          this.clearToken();
+          return null;
+        } finally {
+          this.refreshPromise = null;
+        }
+      })();
+    }
+    return this.refreshPromise;
+  }
+
   public clearToken() {
     this.authToken = null;
+    this.refreshToken = null;
     if (typeof localStorage !== "undefined") {
-      localStorage.removeItem("rouanet_auth_token");
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
     }
   }
 
-  private authenticatedHeaders(contentType = false): Record<string, string> {
+  private async authenticatedHeaders(contentType = false): Promise<Record<string, string>> {
     const headers: Record<string, string> = {};
     if (contentType) headers["Content-Type"] = "application/json";
-    if (this.authToken) headers.Authorization = `Bearer ${this.authToken}`;
+    const token = await this.getValidToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
     return headers;
   }
 
@@ -114,7 +164,7 @@ export class ApiClient {
     const targetVersion = version ?? ((snapshot && typeof snapshot === "object") ? (snapshot as any)._version : undefined);
     const response = await fetch(`${this.apiBaseUrl}/projetos/${encodeURIComponent(projectId)}/snapshot`, {
       method: "PUT",
-      headers: this.authenticatedHeaders(true),
+      headers: await this.authenticatedHeaders(true),
       body: JSON.stringify({ snapshot, version: targetVersion, source_system: "web_client" }),
     });
     if (!response.ok) {
@@ -137,7 +187,7 @@ export class ApiClient {
 
   public async loadProjectSnapshot<T>(projectId: string): Promise<T | null> {
     const response = await fetch(`${this.apiBaseUrl}/projetos/${encodeURIComponent(projectId)}/snapshot`, {
-      headers: this.authenticatedHeaders(),
+      headers: await this.authenticatedHeaders(),
     });
     if (response.status === 404) return null;
     if (!response.ok) throw new ApiClientError(response.status, "Não foi possível carregar o projeto salvo.");
@@ -153,7 +203,7 @@ export class ApiClient {
   /** Fonte oficial após a migração: dados normalizados do PostgreSQL. */
   public async loadProjectWorkspace(projectId: string): Promise<PersistedProjectWorkspace | null> {
     const response = await fetch(`${this.apiBaseUrl}/projetos/${encodeURIComponent(projectId)}/workspace`, {
-      headers: this.authenticatedHeaders(),
+      headers: await this.authenticatedHeaders(),
     });
     if (response.status === 404) return null;
     if (!response.ok) throw new ApiClientError(response.status, "Não foi possível carregar o workspace persistido.");
@@ -169,15 +219,23 @@ export class ApiClient {
   ): Promise<void> {
     const response = await fetch(`${this.apiBaseUrl}/projetos/${encodeURIComponent(projectId)}/documentos`, {
       method: "POST",
-      headers: this.authenticatedHeaders(true),
+      headers: await this.authenticatedHeaders(true),
       body: JSON.stringify({ documentId, fileName, mimeType, base64 }),
     });
-    if (!response.ok) throw new ApiClientError(response.status, `Não foi possível armazenar ${fileName}.`);
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { detail?: unknown; error?: unknown } | null;
+      const detail = typeof payload?.detail === "string"
+        ? payload.detail
+        : typeof payload?.error === "string"
+          ? payload.error
+          : `Não foi possível armazenar ${fileName}.`;
+      throw new ApiClientError(response.status, `${detail} (HTTP ${response.status})`);
+    }
   }
 
   public async listProjectDocuments(projectId: string): Promise<StoredProjectDocument[]> {
     const response = await fetch(`${this.apiBaseUrl}/projetos/${encodeURIComponent(projectId)}/documentos`, {
-      headers: this.authenticatedHeaders(),
+      headers: await this.authenticatedHeaders(),
     });
     if (!response.ok) throw new ApiClientError(response.status, "Não foi possível carregar os documentos armazenados.");
     const payload = await response.json() as { documentos?: StoredProjectDocument[] };
@@ -205,7 +263,8 @@ export class ApiClient {
    */
   public async listProjects(): Promise<OnlineProjectList> {
     const headers: Record<string, string> = {};
-    if (this.authToken) headers.Authorization = `Bearer ${this.authToken}`;
+    const token = await this.getValidToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
 
     let response: Response;
     try {
@@ -249,7 +308,8 @@ export class ApiClient {
   public async getProjetos(): Promise<PronacProject[] | null> {
     try {
       const headers: Record<string, string> = {};
-      if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
+      const token = await this.getValidToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
       const res = await fetch(`${this.apiBaseUrl}/projetos`, { headers });
       if (res.ok) {
@@ -267,7 +327,8 @@ export class ApiClient {
   public async saveProjeto(project: Partial<PronacProject>): Promise<PronacProject | null> {
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
+      const token = await this.getValidToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
       const res = await fetch(`${this.apiBaseUrl}/projetos`, {
         method: "POST",
@@ -289,7 +350,8 @@ export class ApiClient {
   public async triggerConciliacao(projetoId: string): Promise<any | null> {
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
+      const token = await this.getValidToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
       const res = await fetch(`${this.apiBaseUrl}/conciliar`, {
         method: "POST",
@@ -314,7 +376,8 @@ export class ApiClient {
   ): Promise<IniciarProcessamentoResult | null> {
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
+      const token = await this.getValidToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
       const res = await fetch(`${this.apiBaseUrl}/projetos/${encodeURIComponent(projetoId)}/processar`, {
         method: "POST",
@@ -336,7 +399,8 @@ export class ApiClient {
   public async obterStatusProcessamento(jobId: string): Promise<JobProcessamentoStatus | null> {
     try {
       const headers: Record<string, string> = {};
-      if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
+      const token = await this.getValidToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
       const res = await fetch(`${this.apiBaseUrl}/processamentos/${encodeURIComponent(jobId)}`, { headers });
       if (res.ok) {
@@ -354,7 +418,8 @@ export class ApiClient {
   public async obterProcessamentoAtual(projetoId: string): Promise<JobProcessamentoStatus | null> {
     try {
       const headers: Record<string, string> = {};
-      if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
+      const token = await this.getValidToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
       const res = await fetch(`${this.apiBaseUrl}/projetos/${encodeURIComponent(projetoId)}/processamento-atual`, {
         headers,
@@ -374,7 +439,8 @@ export class ApiClient {
   public async reprocessarJob(jobId: string): Promise<IniciarProcessamentoResult | null> {
     try {
       const headers: Record<string, string> = {};
-      if (this.authToken) headers["Authorization"] = `Bearer ${this.authToken}`;
+      const token = await this.getValidToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
       const res = await fetch(`${this.apiBaseUrl}/processamentos/${encodeURIComponent(jobId)}/retry`, {
         method: "POST",
@@ -395,7 +461,7 @@ export class ApiClient {
   public async getRagStatus(projectId: string): Promise<RagStatusResponse | null> {
     try {
       const res = await fetch(`${this.apiBaseUrl}/rag/status?projectId=${encodeURIComponent(projectId)}`, {
-        headers: this.authenticatedHeaders(),
+        headers: await this.authenticatedHeaders(),
       });
       if (res.ok) {
         return (await res.json()) as RagStatusResponse;
@@ -412,7 +478,7 @@ export class ApiClient {
   public async getRagMetrics(projectId: string): Promise<RagMetricsResponse | null> {
     try {
       const res = await fetch(`${this.apiBaseUrl}/rag/metrics?projectId=${encodeURIComponent(projectId)}`, {
-        headers: this.authenticatedHeaders(),
+        headers: await this.authenticatedHeaders(),
       });
       if (res.ok) {
         return (await res.json()) as RagMetricsResponse;
@@ -435,7 +501,7 @@ export class ApiClient {
     try {
       const res = await fetch(`${this.apiBaseUrl}/rag/search`, {
         method: "POST",
-        headers: this.authenticatedHeaders(true),
+        headers: await this.authenticatedHeaders(true),
         body: JSON.stringify(params),
       });
       if (res.ok) {

@@ -5,6 +5,7 @@ export interface SupabaseAuthConfiguration {
 
 export interface SupabaseAccessSession {
   accessToken: string;
+  refreshToken: string | null;
   email: string | null;
 }
 
@@ -61,6 +62,7 @@ export async function signInWithSupabasePassword(
 
   const payload = await response.json().catch(() => null) as {
     access_token?: string;
+    refresh_token?: string;
     user?: { email?: string | null };
     msg?: string;
     error_description?: string;
@@ -73,5 +75,41 @@ export async function signInWithSupabasePassword(
     );
   }
 
-  return { accessToken: payload.access_token, email: payload.user?.email ?? null };
+  return {
+    accessToken: payload.access_token,
+    refreshToken: payload.refresh_token ?? null,
+    email: payload.user?.email ?? null,
+  };
+}
+
+export async function refreshSupabaseSession(
+  configuration: SupabaseAuthConfiguration,
+  refreshToken: string,
+): Promise<SupabaseAccessSession> {
+  const response = await fetch(`${configuration.url}/auth/v1/token?grant_type=refresh_token`, {
+    method: "POST",
+    headers: {
+      apikey: configuration.publishableKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  const payload = await response.json().catch(() => null) as {
+    access_token?: string;
+    refresh_token?: string;
+    user?: { email?: string | null };
+    msg?: string;
+    error_description?: string;
+    message?: string;
+  } | null;
+  if (!response.ok || !payload?.access_token) {
+    throw new SupabaseAuthError(
+      payload?.error_description || payload?.msg || payload?.message || "Sua sessão expirou. Entre novamente.",
+    );
+  }
+  return {
+    accessToken: payload.access_token,
+    refreshToken: payload.refresh_token ?? refreshToken,
+    email: payload.user?.email ?? null,
+  };
 }

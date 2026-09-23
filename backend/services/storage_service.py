@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import unicodedata
 from pathlib import Path
 from supabase import create_client, Client
@@ -18,6 +19,12 @@ UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", "/app/uploads"))
 DOCUMENT_BUCKET = os.environ.get("DOCUMENT_BUCKET", "documentos-1961")
 
 _client = None
+_MIME_TYPE_RE = re.compile(r"^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$")
+
+
+def normalizar_mime_type(mime_type: str | None) -> str:
+    value = (mime_type or "").strip()
+    return value if _MIME_TYPE_RE.fullmatch(value) else "application/octet-stream"
 
 
 def sanitizar_chave(caminho: str) -> str:
@@ -54,28 +61,36 @@ def get_supabase_client() -> Client | None:
     
     try:
         _client = create_client(settings.supabase_url, settings.supabase_service_role_key)
-        # Tenta verificar ou criar o bucket de documentos do produto.
+        # Verifica ou cria o bucket de documentos do produto.
         try:
             _client.storage.get_bucket(DOCUMENT_BUCKET)
-        except Exception:
+        except Exception as lookup_error:
             try:
                 _client.storage.create_bucket(DOCUMENT_BUCKET, options={"public": False})
                 logger.info("Bucket '%s' criado com sucesso no Supabase Storage.", DOCUMENT_BUCKET)
-            except Exception as e:
-                logger.debug("Tentativa de criar bucket 'documentos' falhou (pode já existir): %s", e)
+            except Exception as create_error:
+                raise RuntimeError(
+                    f"Bucket privado '{DOCUMENT_BUCKET}' indisponível: {lookup_error}; {create_error}"
+                ) from create_error
         return _client
     except Exception as e:
+        _client = None
         logger.error("Erro ao inicializar cliente Supabase: %s", e)
         return None
 
-def upload_arquivo(caminho_logico: str, conteudo: bytes) -> str:
+def upload_arquivo(
+    caminho_logico: str,
+    conteudo: bytes,
+    mime_type: str | None = "application/octet-stream",
+) -> str:
     """
-    Salva o arquivo no bucket 'documentos' do Supabase Storage.
+    Salva o arquivo no bucket privado configurado do Supabase Storage.
     Retorna o caminho_logico salvo no bucket (ex: "projeto_id/nome.pdf").
     Se o Supabase não estiver configurado, usa fallback para salvar em disco local (UPLOAD_DIR / caminho_logico).
     """
     client = get_supabase_client()
     caminho_clean = sanitizar_chave(caminho_logico)
+    content_type = normalizar_mime_type(mime_type)
 
     if client:
         try:
@@ -84,14 +99,14 @@ def upload_arquivo(caminho_logico: str, conteudo: bytes) -> str:
                 client.storage.from_(DOCUMENT_BUCKET).upload(
                     path=caminho_clean,
                     file=conteudo,
-                    file_options={"x-upsert": "true", "content-type": "application/octet-stream"}
+                    file_options={"x-upsert": "true", "content-type": content_type}
                 )
             except Exception as upload_err:
                 if "already exists" in str(upload_err).lower() or "duplicate" in str(upload_err).lower():
                     client.storage.from_(DOCUMENT_BUCKET).update(
                         path=caminho_clean,
                         file=conteudo,
-                        file_options={"content-type": "application/octet-stream"}
+                        file_options={"content-type": content_type}
                     )
                 else:
                     raise upload_err
@@ -113,7 +128,7 @@ def upload_arquivo(caminho_logico: str, conteudo: bytes) -> str:
 
 def baixar_arquivo(caminho_logico: str) -> bytes | None:
     """
-    Baixa os bytes do arquivo do bucket 'documentos' do Supabase Storage.
+    Baixa os bytes do arquivo do bucket privado configurado do Supabase Storage.
     Se o Supabase não estiver configurado, tenta ler do disco local.
     """
     client = get_supabase_client()

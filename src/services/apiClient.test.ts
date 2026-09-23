@@ -8,6 +8,7 @@ beforeEach(() => {
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
   });
 });
 
@@ -107,6 +108,22 @@ describe("API URLs", () => {
     await expect(client.listProjectDocuments("1961")).resolves.toEqual([
       { documentId: "doc-1", fileName: "nota.pdf", mimeType: "application/pdf", byteSize: 1200 },
     ]);
+  });
+
+  it("surfaces the backend detail when document storage fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail: "Bucket privado indisponível." }), { status: 502 }),
+      ),
+    );
+
+    const { ApiClient } = await import("./apiClient");
+    const client = ApiClient.createForTesting("https://api.example.com/api/v1");
+
+    await expect(
+      client.uploadProjectDocument("1961", "doc-1", "nota.pdf", "application/pdf", "YQ=="),
+    ).rejects.toThrow("Bucket privado indisponível. (HTTP 502)");
   });
 
   it("calls processing pipeline and returns job response", async () => {

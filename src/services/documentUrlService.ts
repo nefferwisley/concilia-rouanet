@@ -1,3 +1,5 @@
+import { apiClient } from "./apiClient";
+
 export type DocumentUrlStatus = "IDLE" | "LOADING" | "SUCCESS" | "UNAUTHORIZED" | "NOT_FOUND" | "NETWORK_ERROR" | "ERROR";
 
 export interface DocumentUrlResult {
@@ -63,7 +65,7 @@ class DocumentUrlService {
 
     const promise = (async (): Promise<DocumentUrlResult> => {
       try {
-        const token = typeof localStorage !== "undefined" ? localStorage.getItem("rouanet_auth_token") : null;
+        const token = await apiClient.getValidToken();
         const headers: Record<string, string> = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
 

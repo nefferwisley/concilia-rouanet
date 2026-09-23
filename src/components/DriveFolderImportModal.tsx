@@ -474,7 +474,8 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
         // O servidor Node publicado oferece extração e persistência no mesmo
         // domínio. Não dependa de um FastAPI externo para salvar a pasta.
         if (!configuredApiBaseUrl || configuredApiBaseUrl === "/api/v1") {
-          if (!apiClient.getToken()) {
+          const authToken = await apiClient.getValidToken();
+          if (!authToken) {
             throw new Error("Entre na sua conta antes de importar: os arquivos serão salvos no cofre privado do projeto.");
           }
           const extractedTransactions: BankTransaction[] = [];
@@ -498,7 +499,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
-                  Authorization: `Bearer ${apiClient.getToken()}`,
+                  Authorization: `Bearer ${authToken}`,
                 },
                 body: JSON.stringify({ files: batch }),
               });
@@ -718,7 +719,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
           return;
         }
 
-        const token = localStorage.getItem("rouanet_auth_token");
+        const token = await apiClient.getValidToken();
         const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
         const baseUrl = configuredApiBaseUrl;
         const normalizeId = (value: string) => value.replace(/\D/g, "");
@@ -876,7 +877,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
       if (files.length === 0) {
         throw new Error("Nenhum arquivo encontrado na pasta especificada do Google Drive.");
       }
-      if (!apiClient.getToken()) {
+      if (!await apiClient.getValidToken()) {
         throw new Error("Entre na sua conta antes de importar: os arquivos do Drive serão salvos no cofre privado do projeto.");
       }
 

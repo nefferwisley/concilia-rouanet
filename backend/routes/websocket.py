@@ -163,9 +163,34 @@ async def ws_sincronia_projeto(
     }
     """
     try:
-        verificar_jwt(token)
+        user_id = verificar_jwt(token)
     except Exception:
         await websocket.close(code=4401)
+        return
+
+    acquired_pool, conn = await adquirir_conn()
+    try:
+        async with conn.transaction():
+            await conn.execute(
+                "select set_config('request.jwt.claims', $1, true)", f'{{"sub":"{user_id}"}}'
+            )
+            await conn.execute("set local role authenticated")
+            autorizado = await conn.fetchval(
+                """
+                select exists(select 1 from projetos where id::text = $1)
+                    or exists(
+                        select 1 from project_snapshots
+                        where project_id = $1 and owner_id = $2 and is_deleted = false
+                    )
+                """,
+                projeto_id,
+                user_id,
+            )
+    finally:
+        await acquired_pool.release(conn)
+
+    if not autorizado:
+        await websocket.close(code=4403)
         return
 
     await websocket.accept()

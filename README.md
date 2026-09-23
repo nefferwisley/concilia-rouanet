@@ -19,8 +19,8 @@ SaaS completo para gestão orçamentária, conciliação bancária tripartite e 
 ## 🛠️ Tecnologias Utilizadas
 
 - **Frontend:** React 19, TypeScript, Tailwind CSS, Lucide Icons, Recharts, Framer Motion, Zod, Fuse.js.
-- **Backend:** Express.js, Node.js, `pdf-parse`, `@google/genai` (Gemini API para OCR, conciliação inteligente e pareceres de auditoria).
-- **Persistência:** LocalStorage com versionamento e higienização automática de cache.
+- **Backend:** FastAPI, asyncpg e serviços Python de importação, OCR e conciliação.
+- **Persistência:** PostgreSQL e Supabase Storage privado; LocalStorage apenas para o modo de demonstração.
 
 ---
 
@@ -29,7 +29,8 @@ SaaS completo para gestão orçamentária, conciliação bancária tripartite e 
 ```text
 ├── AGENTS.md               # Memória e instruções de contexto para agentes de IA
 ├── GEMINI.md               # Diretrizes para assistentes Gemini
-├── server.ts               # Servidor backend Express (APIs Gemini, OCR e PDF Parse)
+├── backend/                # API FastAPI publicada em produção
+├── server.ts               # Implementação Express legada, fora do runtime oficial
 ├── src/
 │   ├── App.tsx             # Componente raiz e navegação
 │   ├── components/         # Módulos de visualização (Dashboard, Conciliação, Core Skills, etc.)
@@ -45,6 +46,8 @@ SaaS completo para gestão orçamentária, conciliação bancária tripartite e 
 
 ## 💻 Scripts Disponíveis
 
-- `npm run dev`: Inicia o servidor de desenvolvimento (Vite + Express).
-- `npm run build`: Compila o frontend e o backend para produção.
+- `npm run dev`: Inicia o frontend Vite; rode `npm run dev:backend` em outro terminal para a API.
+- `npm run dev:backend`: Inicia a API FastAPI em desenvolvimento.
+- `npm run build`: Compila o frontend para produção; o backend Python é iniciado separadamente.
+- `npm start`: Inicia o mesmo backend FastAPI utilizado em produção.
 - `npm run lint`: Executa a verificação estática de tipos com `tsc --noEmit`.

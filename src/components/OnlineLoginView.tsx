@@ -10,7 +10,7 @@ import {
 
 interface OnlineLoginViewProps {
   configuration: SupabaseAuthConfiguration | null;
-  onAuthenticated: (accessToken: string) => void;
+  onAuthenticated: (accessToken: string, refreshToken: string | null) => void;
 }
 
 export function OnlineLoginView({ configuration, onAuthenticated }: OnlineLoginViewProps) {
@@ -32,7 +32,7 @@ export function OnlineLoginView({ configuration, onAuthenticated }: OnlineLoginV
     try {
       await setSupabasePassword(configuration, inviteToken, password);
       window.history.replaceState({}, document.title, window.location.pathname);
-      onAuthenticated(inviteToken);
+      onAuthenticated(inviteToken, null);
     } catch (caught) {
       setError(caught instanceof SupabaseAuthError ? caught.message : "Falha ao definir a senha.");
     } finally {
@@ -47,7 +47,7 @@ export function OnlineLoginView({ configuration, onAuthenticated }: OnlineLoginV
     setIsSubmitting(true);
     try {
       const session = await signInWithSupabasePassword(configuration, email.trim(), password);
-      onAuthenticated(session.accessToken);
+      onAuthenticated(session.accessToken, session.refreshToken);
     } catch (caught) {
       setError(caught instanceof SupabaseAuthError ? caught.message : "Falha ao iniciar a sessão.");
     } finally {

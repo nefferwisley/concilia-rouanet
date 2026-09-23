@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from typing import Any
 
@@ -105,25 +104,22 @@ async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = N
 
     filtro = f"%{pronac}%" if pronac else None
     if filtro:
-        total = await conn.fetchval("select count(*) from projetos where pronac ilike $1", filtro)
         rows = await conn.fetch(
             """
             select p.id, p.pronac, p.nome, p.created_at,
                    (select count(*) from transacoes t where t.projeto_id = p.id) as transacoes_count
             from projetos p where p.pronac ilike $1
-            order by p.created_at desc limit $2 offset $3
+            order by p.created_at desc
             """,
-            filtro, limit, offset,
+            filtro,
         )
     else:
-        total = await conn.fetchval("select count(*) from projetos")
         rows = await conn.fetch(
             """
             select p.id, p.pronac, p.nome, p.created_at,
                    (select count(*) from transacoes t where t.projeto_id = p.id) as transacoes_count
-            from projetos p order by p.created_at desc limit $1 offset $2
+            from projetos p order by p.created_at desc
             """,
-            limit, offset,
         )
 
     # Mantém os projetos normalizados e inclui snapshots privados ainda não
@@ -163,47 +159,6 @@ async def listar_projetos(page: int = 1, limit: int = 20, pronac: str | None = N
         "total": len(projects),
         "page": page,
         "projetos": projects[offset:offset + limit],
-    }
-
-
-    # Projetos ainda salvos no formato legado pertencem ao mesmo usuário do
-    # snapshot. Eles continuam privados e somente são usados quando não há
-    # projeto normalizado acessível para a conta atual.
-    if not rows:
-        snapshots = await conn.fetch(
-            """
-            select project_id, payload, updated_at
-            from project_snapshots
-            where owner_id = $1 and is_deleted = false
-            order by updated_at desc
-            """,
-            user_id,
-        )
-        legacy_projects = [_resumo_snapshot_legacy(row) for row in snapshots]
-        if pronac:
-            needle = pronac.lower()
-            legacy_projects = [
-                project for project in legacy_projects
-                if needle in project["pronac"].lower() or needle in project["nome"].lower()
-            ]
-        total = len(legacy_projects)
-        return {
-            "total": total,
-            "page": page,
-            "projetos": legacy_projects[offset:offset + limit],
-        }
-
-    return {
-        "total": total,
-        "page": page,
-        "projetos": [
-            {
-                "id": str(r["id"]), "pronac": r["pronac"], "nome": r["nome"],
-                "transacoes_count": r["transacoes_count"],
-                "criado_em": r["created_at"].isoformat(),
-            }
-            for r in rows
-        ],
     }
 
 
@@ -281,12 +236,11 @@ async def obter_workspace(projeto_id: str, dep=Depends(get_conn)):
     """Workspace oficial para o React; não lê snapshot nem localStorage."""
     conn, _ = dep
     project = await _require_project(conn, projeto_id)
-    rubrics, transactions, documents, movements = await asyncio.gather(
-        conn.fetch(
+    rubrics = await conn.fetch(
             "SELECT id, codigo, descricao, descricao_completa, valor_orcado FROM rubricas WHERE projeto_id = $1 ORDER BY codigo",
             projeto_id,
-        ),
-        conn.fetch(
+        )
+    transactions = await conn.fetch(
             """
             SELECT id, fornecedor, cnpj_fornecedor, data_pagamento, meio_pagamento,
                    valor_bruto, valor_retencao, valor_liquido, tem_nf, tem_comprovante,
@@ -294,12 +248,12 @@ async def obter_workspace(projeto_id: str, dep=Depends(get_conn)):
             FROM transacoes WHERE projeto_id = $1 ORDER BY data_pagamento nulls last, created_at
             """,
             projeto_id,
-        ),
-        conn.fetch(
+        )
+    documents = await conn.fetch(
             "SELECT id, origem, nome_arquivo, arquivo_ref, tamanho_bytes, status, created_at FROM documentos_projeto WHERE projeto_id = $1 ORDER BY created_at",
             projeto_id,
-        ),
-        conn.fetch(
+        )
+    movements = await conn.fetch(
             """
             SELECT em.id, em.data, em.historico, em.documento, em.tipo, em.valor, em.saldo_apos, em.status_conciliacao
             FROM extrato_movimentos em
@@ -307,8 +261,7 @@ async def obter_workspace(projeto_id: str, dep=Depends(get_conn)):
             WHERE cc.projeto_id = $1 ORDER BY em.data, em.created_at
             """,
             projeto_id,
-        ),
-    )
+        )
     return {
         "project": dict(project),
         "rubrics": [dict(row) for row in rubrics],

@@ -80,8 +80,11 @@ def _sanitizar_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
     clean = json.loads(json.dumps(payload))
     # Limpa possíveis chaves base64 em documentos
     docs = clean.get("documentos") or clean.get("documents") or []
-    if isinstance(docs, list):
-        for doc in docs:
+    document_lists = docs.values() if isinstance(docs, dict) else [docs]
+    for document_list in document_lists:
+        if not isinstance(document_list, list):
+            continue
+        for doc in document_list:
             if isinstance(doc, dict):
                 if "base64" in doc:
                     doc["base64"] = None
@@ -265,21 +268,26 @@ async def armazenar_documento_projeto(
     # catálogo para exibição e auditoria.
     caminho = "/".join(
         (
+            _storage_segment(user_id, "usuario"),
             _storage_segment(projeto_id, "projeto"),
             _storage_segment(payload.documentId, "documento"),
             _storage_segment(Path(payload.fileName).name),
         )
     )
     try:
-        object_path = await run_in_threadpool(storage_service.upload_arquivo, caminho, conteudo)
+        object_path = await run_in_threadpool(
+            storage_service.upload_arquivo,
+            caminho,
+            conteudo,
+            payload.mimeType,
+        )
         await conn.execute(
             """
             INSERT INTO document_assets (
                 project_id, document_id, owner_id, object_path, file_name, mime_type, byte_size
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (project_id, document_id) DO UPDATE SET
-                owner_id = EXCLUDED.owner_id,
+            ON CONFLICT (owner_id, project_id, document_id) DO UPDATE SET
                 object_path = EXCLUDED.object_path,
                 file_name = EXCLUDED.file_name,
                 mime_type = EXCLUDED.mime_type,

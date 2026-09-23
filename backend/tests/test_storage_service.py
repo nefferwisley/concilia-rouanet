@@ -84,11 +84,13 @@ def test_upload_arquivo_normaliza_caminho_com_barra_invertida_e_barra_inicial(mo
 class _FakeBucket:
     def __init__(self):
         self.uploads = {}
+        self.upload_options = {}
 
     def upload(self, path, file, file_options=None):
         if path in self.uploads:
             raise Exception("The resource already exists (Duplicate)")
         self.uploads[path] = file
+        self.upload_options[path] = file_options
 
     def update(self, path, file, file_options=None):
         self.uploads[path] = file
@@ -122,6 +124,24 @@ def test_upload_e_baixar_arquivo_com_client_supabase_fake(monkeypatch):
 
     baixado = storage_service.baixar_arquivo("projeto456/nf.pdf")
     assert baixado == b"conteudo-nf"
+
+
+def test_upload_preserva_mime_type_real(monkeypatch):
+    fake = _FakeClient()
+    monkeypatch.setattr(storage_service, "get_supabase_client", lambda: fake)
+
+    storage_service.upload_arquivo("projeto456/planilha.xlsx", b"xlsx", "application/vnd.ms-excel")
+
+    assert fake.storage._bucket.upload_options["projeto456/planilha.xlsx"]["content-type"] == "application/vnd.ms-excel"
+
+
+def test_upload_rejeita_mime_type_com_quebra_de_linha(monkeypatch):
+    fake = _FakeClient()
+    monkeypatch.setattr(storage_service, "get_supabase_client", lambda: fake)
+
+    storage_service.upload_arquivo("projeto456/arquivo.bin", b"bin", "text/plain\r\nX-Test: 1")
+
+    assert fake.storage._bucket.upload_options["projeto456/arquivo.bin"]["content-type"] == "application/octet-stream"
 
 
 def test_upload_arquivo_ja_existente_faz_update_em_vez_de_falhar(monkeypatch):

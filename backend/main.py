@@ -50,8 +50,10 @@ async def lifespan(app: FastAPI):
 
         await aplicar_migrations()
         log.info("Migrations verificadas/aplicadas no startup.")
-    except Exception as e:  # noqa: BLE001 — não derrubar o app se o banco estiver fora
-        log.warning("Migrations não puderam ser aplicadas no startup: %s", e)
+    except Exception as e:  # noqa: BLE001 — desenvolvimento pode iniciar sem o banco
+        if settings.app_env == "production":
+            raise
+        log.warning("Migrations não puderam ser aplicadas no startup de desenvolvimento: %s", e)
 
     # Recupera jobs órfãos que possam ter ficado em processamento em caso de reinicialização prévia
     try:
