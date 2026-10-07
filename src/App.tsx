@@ -1030,13 +1030,6 @@ export default function App() {
       session={onlineSession}
       isDemoMode={IS_DEMO_MODE}
       onRetry={() => void refreshOnlineSession()}
-      onSelectProject={(projectId) => {
-        localStorage.setItem(ONLINE_ACTIVE_PROJECT_STORAGE_KEY, projectId);
-        setOnlineSession((current) => ({ ...current, activeProjectId: projectId }));
-        setHasOnlineSnapshot(false);
-        setLoadedOnlineProjectId(null);
-        setActiveProjectId(projectId);
-      }}
     >
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950">
       {/* Top Accessibility Toolbar (eMAG / WCAG 2.1) */}
@@ -1046,7 +1039,15 @@ export default function App() {
       <Navbar
         projects={projects}
         activeProject={currentProjectWithLiveStats}
-        onSelectProject={(selected) => setActiveProjectId(selected.id)}
+        onSelectProject={(selected) => {
+          setActiveProjectId(selected.id);
+          if (!IS_DEMO_MODE) {
+            localStorage.setItem(ONLINE_ACTIVE_PROJECT_STORAGE_KEY, selected.id);
+            setOnlineSession((current) => ({ ...current, activeProjectId: selected.id }));
+            setHasOnlineSnapshot(false);
+            setLoadedOnlineProjectId(null);
+          }
+        }}
         onOpenNewProjectModal={() => setIsNewProjectModalOpen(true)}
         onRestoreOriginalData={() => void handleRestoreOriginalData()}
         onDeleteActiveProject={handleDeleteActiveProject}
@@ -1078,35 +1079,11 @@ export default function App() {
         alerts={currentAlerts}
         isMobileMenuOpen={isMobileNavOpen}
         onToggleMobileMenu={() => setIsMobileNavOpen(!isMobileNavOpen)}
+        rulesContext={rulesContext}
+        onRulesContextChange={setRulesContext}
+        userRole={userRole}
+        onUserRoleChange={setUserRole}
       />
-
-      {/* Contexto normativo e perfil da sessão */}
-      <div className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex flex-wrap items-center justify-end gap-3 text-xs">
-        <label className="flex items-center gap-2 text-slate-400 font-medium">
-          Regras aplicáveis:
-          <select
-            value={rulesContext}
-            onChange={(e) => setRulesContext(e.target.value as "SALIC" | "FSA_ANCINE")}
-            className="bg-slate-800 text-slate-200 border border-slate-700 rounded px-2 py-1 outline-none focus:border-emerald-500"
-          >
-            <option value="SALIC">SALIC / PRONAC</option>
-            <option value="FSA_ANCINE">FSA / ANCINE</option>
-          </select>
-          <span className="text-[11px] text-slate-500">
-            {rulesContext === "SALIC" ? "SALIC = sistema MinC; PRONAC = número do projeto." : "Regras do Fundo Setorial do Audiovisual."}
-          </span>
-        </label>
-        <span className="text-slate-400 font-medium">Perfil Ativo (RBAC):</span>
-        <select
-          value={userRole}
-          onChange={(e) => setUserRole(e.target.value as UserRole)}
-          className="bg-slate-800 text-slate-200 border border-slate-700 rounded px-2 py-1 outline-none focus:border-emerald-500"
-        >
-          <option value="ADMIN">ADMIN</option>
-          <option value="AUDITOR">AUDITOR (MinC)</option>
-          <option value="PRODUTOR">PRODUTOR (Agente Cultural)</option>
-        </select>
-      </div>
 
       {/* Body Area with Sidebar + Content */}
       <div className="flex-1 flex overflow-hidden relative">

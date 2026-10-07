@@ -6,7 +6,6 @@ import { OnlineSessionBoundary } from "./OnlineSessionBoundary";
 const props = {
   isDemoMode: false,
   onRetry: vi.fn(),
-  onSelectProject: vi.fn(),
   children: <p>Painel real</p>,
 };
 
@@ -29,7 +28,7 @@ describe("OnlineSessionBoundary", () => {
     expect(html).not.toContain("Painel real");
   });
 
-  it("shows only API project summary data when ready", () => {
+  it("shows the dashboard without a duplicate project selector when ready", () => {
     const html = renderToStaticMarkup(
       <OnlineSessionBoundary
         {...props}
@@ -50,9 +49,9 @@ describe("OnlineSessionBoundary", () => {
       />,
     );
 
-    expect(html).toContain("Projeto 1961");
-    expect(html).toContain("178 lançamentos cadastrados");
     expect(html).toContain("Painel real");
+    expect(html).not.toContain("Projeto online");
+    expect(html).not.toContain("<select");
   });
 
   it("suppresses children while a production session loads", () => {

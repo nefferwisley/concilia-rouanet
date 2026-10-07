@@ -5,10 +5,8 @@ export interface OnlineSessionBoundaryProps {
   session: OnlineSessionState;
   isDemoMode: boolean;
   onRetry: () => void;
-  onSelectProject: (projectId: string) => void;
   children: ReactNode;
 }
-
 function SessionNotice({
   title,
   message,
@@ -42,7 +40,6 @@ export function OnlineSessionBoundary({
   session,
   isDemoMode,
   onRetry,
-  onSelectProject,
   children,
 }: OnlineSessionBoundaryProps) {
   if (isDemoMode) return <>{children}</>;
@@ -67,39 +64,5 @@ export function OnlineSessionBoundary({
     return <SessionNotice title="Nenhum projeto disponível" message={session.message} />;
   }
 
-  const activeProject = session.projects.find((project) => project.id === session.activeProjectId)
-    ?? session.projects[0];
-
-  return (
-    <>
-      <section className="border-b border-slate-800 bg-slate-950 px-4 py-3 text-slate-100">
-        <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <label className="text-sm font-medium text-slate-300">
-            Projeto online
-            <select
-              aria-label="Projeto online"
-              value={activeProject?.id ?? ""}
-              onChange={(event) => onSelectProject(event.target.value)}
-              className="ml-3 rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100"
-            >
-              {session.projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.pronac} — {project.nome}
-                </option>
-              ))}
-            </select>
-          </label>
-          {activeProject && (
-            <p className="text-sm text-slate-300">
-              <strong className="text-white">{activeProject.nome}</strong> · {activeProject.transacoesCount} lançamentos cadastrados
-            </p>
-          )}
-        </div>
-        <p className="mx-auto mt-2 max-w-7xl text-xs text-slate-400">
-          Dados financeiros detalhados serão carregados da API nas próximas etapas.
-        </p>
-      </section>
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }

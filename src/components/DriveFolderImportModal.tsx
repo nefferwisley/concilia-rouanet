@@ -671,30 +671,61 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
               .filter((document) => !sourceDocumentIdsLinkedToFiscal.has(document.id)),
           );
 
-          // Cada arquivo lido recebe uma referência persistente: se ele gerou
-          // uma nota fiscal, fica sob a própria nota; caso contrário, ganha um
-          // item "Documento importado" visível no dossiê.
+          // Cada arquivo lido recebe uma referência persistente. Uma falha em
+          // um único PDF não pode impedir que lançamentos e os demais arquivos
+          // sejam salvos: o item fica explicitamente pendente para nova tentativa.
+          const storageFailureDocumentIds = new Set<string>();
+          const storageFailureNames: string[] = [];
           for (const source of filesForStorage) {
             if (!source.base64) continue;
-            const fiscalDocument = fiscalDocumentForSource(source);
-            await apiClient.uploadProjectDocument(
-              importedProject.id,
-              fiscalDocument?.id || sourceDocumentId(source),
-              source.name,
-              source.mimeType,
-              source.base64,
-            );
+            const targetDocumentId = fiscalDocumentForSource(source)?.id || sourceDocumentId(source);
+            try {
+              await apiClient.uploadProjectDocument(
+                importedProject.id,
+                targetDocumentId,
+                source.name,
+                source.mimeType,
+                source.base64,
+              );
+            } catch (storageError) {
+              console.warn(`Arquivo pendente de armazenamento: ${source.name}`, storageError);
+              storageFailureDocumentIds.add(targetDocumentId);
+              storageFailureNames.push(source.name);
+            }
           }
+          const documentsWithStorageStatus = allDocuments.map((document) => (
+            storageFailureDocumentIds.has(document.id)
+              ? {
+                  ...document,
+                  arquivoArmazenado: false,
+                  statusComprovacao: "Arquivo lido; armazenamento pendente",
+                }
+              : document
+          ));
+          const storageAlerts: AuditAlert[] = storageFailureNames.length
+            ? [{
+                id: `armazenamento-pendente-${importedProject.id}`,
+                gravidade: "MEDIA",
+                categoria: "Documentação",
+                titulo: `${storageFailureNames.length} arquivo(s) aguardando armazenamento`,
+                descricao: `Os dados extraídos foram preservados. Reimporte apenas os arquivos pendentes: ${storageFailureNames.slice(0, 3).join(", ")}${storageFailureNames.length > 3 ? "…" : ""}.`,
+                itemAfetado: storageFailureNames.join(", "),
+                baseLegal: "Evidências digitais devem permanecer acessíveis para a prestação de contas.",
+                acaoRecomendada: "Tente importar novamente os arquivos indicados.",
+                justificativaSugeridaSalic: "Arquivo pendente de armazenamento, sem alteração dos lançamentos extraídos.",
+              }]
+            : [];
           const mergedAlerts = mergeById(currentAlerts, [
             ...synced.alerts,
             ...extractedAlerts,
+            ...storageAlerts,
           ]);
           const snapshot = {
             projects: [importedProject],
             activeProjectId: importedProject.id,
             rubrics: { [importedProject.id]: synced.rubrics },
             transactions: { [importedProject.id]: synced.transactions },
-            documents: { [importedProject.id]: allDocuments },
+            documents: { [importedProject.id]: documentsWithStorageStatus },
             alerts: { [importedProject.id]: mergedAlerts },
             tripartiteEntries: { [importedProject.id]: synced.tripartiteEntries },
             receipts: {},
@@ -702,7 +733,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
           await apiClient.saveProjectSnapshot(importedProject.id, snapshot);
           setProgressPercent(100);
           setStatus("done");
-          setStatusMessage(`${processedFiles} arquivos importados em ${importedProject.nome}.`);
+          setStatusMessage(storageFailureNames.length ? `${processedFiles} arquivos importados; ${storageFailureNames.length} aguardando armazenamento.` : `${processedFiles} arquivos importados em ${importedProject.nome}.`);
           void apiClient.iniciarProcessamento(importedProject.id, {
             fonte: "modal_pasta_arquivos",
             caminho_pasta: selectedSubfolderFilter,
@@ -711,7 +742,7 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
             project: importedProject,
             rubrics: synced.rubrics,
             transactions: synced.transactions,
-            documents: allDocuments,
+            documents: documentsWithStorageStatus,
             alerts: snapshot.alerts[importedProject.id],
             tripartiteEntries: synced.tripartiteEntries,
           });

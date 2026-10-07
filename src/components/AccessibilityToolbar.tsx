@@ -1,16 +1,9 @@
 import React, { useState, useEffect } from "react";
 import {
   Sun,
-  Moon,
-  Type,
-  ZoomIn,
-  ZoomOut,
-  RotateCcw,
   Keyboard,
   Eye,
   X,
-  Volume2,
-  Check,
 } from "lucide-react";
 
 interface AccessibilityToolbarProps {
@@ -25,6 +18,7 @@ export const AccessibilityToolbar: React.FC<AccessibilityToolbarProps> = ({ onNa
     const saved = localStorage.getItem("concilia_rouanet_font_scale");
     return saved ? parseFloat(saved) : 1;
   });
+  const [isAccessibilityOpen, setIsAccessibilityOpen] = useState(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
 
   // Aplica alto contraste no HTML
@@ -96,30 +90,43 @@ export const AccessibilityToolbar: React.FC<AccessibilityToolbarProps> = ({ onNa
 
   return (
     <>
-      {/* Top Accessibility Bar (gov.br / eMAG standard) */}
-      <div
-        role="region"
-        aria-label="Barra de Acessibilidade"
-        className="bg-slate-950 border-b border-slate-800/80 px-3 sm:px-6 py-1 text-[11px] text-slate-400 flex flex-wrap items-center justify-between gap-2 z-50 select-none"
-      >
-        <div className="flex items-center gap-3">
-          <span className="font-semibold text-slate-300 hidden sm:inline flex items-center gap-1">
-            <Eye className="w-3 h-3 text-emerald-400" /> Acessibilidade eMAG / WCAG
-          </span>
-          <span className="text-slate-600 hidden sm:inline">|</span>
-          <span className="text-[10px] text-slate-400">
-            Atalhos: <kbd className="bg-slate-800 text-slate-300 px-1 py-0.5 rounded border border-slate-700 font-mono">Alt + 1..5</kbd> navegar
-          </span>
-        </div>
+      <div className="fixed bottom-4 right-4 z-50 select-none">
+        {isAccessibilityOpen && (
+          <>
+            <button
+              type="button"
+              aria-label="Fechar opções de acessibilidade"
+              className="fixed inset-0 cursor-default bg-transparent"
+              onClick={() => setIsAccessibilityOpen(false)}
+            />
+            <div
+              role="region"
+              aria-label="Opções de acessibilidade"
+              className="relative z-10 mb-2 w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-slate-700 bg-slate-900 p-3 text-slate-300 shadow-2xl"
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Eye className="h-4 w-4 text-emerald-400" />
+                  <span className="text-sm font-semibold text-white">Acessibilidade</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAccessibilityOpen(false)}
+                  aria-label="Fechar opções de acessibilidade"
+                  className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Zoom In / Out / Reset */}
-          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-slate-400">Tamanho do texto</span>
+                <div className="flex items-center rounded-lg border border-slate-700 bg-slate-950 p-0.5">
             <button
               onClick={() => setFontScale((prev) => Math.min(prev + 0.1, 1.4))}
               aria-label="Aumentar tamanho do texto (Alt + +)"
               title="Aumentar texto (Alt + +)"
-              className="px-2 py-0.5 text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800 rounded transition"
+                    className="rounded px-2 py-1 text-xs font-bold text-slate-300 transition hover:bg-slate-800 hover:text-white"
             >
               A+
             </button>
@@ -127,7 +134,7 @@ export const AccessibilityToolbar: React.FC<AccessibilityToolbarProps> = ({ onNa
               onClick={() => setFontScale(1)}
               aria-label="Tamanho normal do texto (Alt + 0)"
               title="Texto normal (Alt + 0)"
-              className="px-1.5 py-0.5 text-[10px] text-slate-400 hover:text-white hover:bg-slate-800 rounded transition"
+                    className="rounded px-2 py-1 text-[10px] text-slate-400 transition hover:bg-slate-800 hover:text-white"
             >
               A
             </button>
@@ -135,39 +142,56 @@ export const AccessibilityToolbar: React.FC<AccessibilityToolbarProps> = ({ onNa
               onClick={() => setFontScale((prev) => Math.max(prev - 0.1, 0.85))}
               aria-label="Diminuir tamanho do texto (Alt + -)"
               title="Diminuir texto (Alt + -)"
-              className="px-2 py-0.5 text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800 rounded transition"
+                    className="rounded px-2 py-1 text-xs font-bold text-slate-300 transition hover:bg-slate-800 hover:text-white"
             >
               A-
             </button>
-          </div>
+                </div>
+              </div>
 
-          {/* High Contrast Toggle */}
-          <button
-            onClick={() => setHighContrast((prev) => !prev)}
-            aria-pressed={highContrast}
-            aria-label="Alternar modo de alto contraste (Alt + C)"
-            title="Alto Contraste (Alt + C)"
-            className={`px-2.5 py-1 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition ${
-              highContrast
-                ? "bg-yellow-400 text-black border-yellow-300 font-bold"
-                : "bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800"
-            }`}
-          >
-            <Sun className="w-3 h-3" />
-            <span className="hidden sm:inline">{highContrast ? "Alto Contraste: ON" : "Alto Contraste"}</span>
-          </button>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setHighContrast((prev) => !prev)}
+                  aria-pressed={highContrast}
+                  aria-label="Alternar modo de alto contraste (Alt + C)"
+                  title="Alto Contraste (Alt + C)"
+                  className={`flex min-h-10 items-center justify-center gap-1.5 rounded-lg border px-2.5 py-2 text-xs font-medium transition ${
+                    highContrast
+                      ? "border-yellow-300 bg-yellow-400 font-bold text-black"
+                      : "border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800"
+                  }`}
+                >
+                  <Sun className="h-3.5 w-3.5" />
+                  <span>{highContrast ? "Contraste ativo" : "Alto contraste"}</span>
+                </button>
 
-          {/* Shortcuts Modal Trigger */}
-          <button
-            onClick={() => setIsShortcutsModalOpen(true)}
-            aria-label="Ver todos os atalhos de teclado (Alt + K)"
-            title="Atalhos de Teclado (Alt + K)"
-            className="p-1 sm:px-2 sm:py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-1 text-xs"
-          >
-            <Keyboard className="w-3 h-3" />
-            <span className="hidden md:inline">Atalhos</span>
-          </button>
-        </div>
+                <button
+                  onClick={() => {
+                    setIsAccessibilityOpen(false);
+                    setIsShortcutsModalOpen(true);
+                  }}
+                  aria-label="Ver todos os atalhos de teclado (Alt + K)"
+                  title="Atalhos de Teclado (Alt + K)"
+                  className="flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                >
+                  <Keyboard className="h-3.5 w-3.5" />
+                  <span>Atalhos</span>
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setIsAccessibilityOpen((open) => !open)}
+          aria-expanded={isAccessibilityOpen}
+          aria-label="Abrir opções de acessibilidade"
+          title="Acessibilidade"
+          className="relative z-10 ml-auto flex min-h-11 min-w-11 items-center justify-center rounded-full border border-emerald-500/40 bg-slate-900 text-emerald-400 shadow-xl transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        >
+          <Eye className="h-5 w-5" />
+        </button>
       </div>
 
       {/* Keyboard Shortcuts Modal */}
