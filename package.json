@@ -1,5 +1,6 @@
 {
-  "name": "react-example",
+  "name": "revisarouanet",
+  "description": "RevisaRouanet — MVP conciliação SALIC",
   "private": true,
   "version": "0.0.0",
   "type": "module",

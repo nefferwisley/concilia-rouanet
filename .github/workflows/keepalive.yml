@@ -1,0 +1,22 @@
+name: Keepalive RevisaRouanet
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /health/db
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+        run: |
+          URL="${BACKEND_URL:-https://concilia-rouanet-1961.onrender.com}"
+          codigo=$(curl --silent --show-error --max-time 120 --output /dev/null --write-out "%{http_code}" "${URL%/}/health/db")
+          echo "HTTP $codigo"
+          [ "$codigo" = "200" ] || { echo "::error::HTTP $codigo"; exit 1; }

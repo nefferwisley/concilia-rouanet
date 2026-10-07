@@ -148,7 +148,7 @@ app.add_middleware(
     # cada preview novo fica bloqueado por CORS até alguém lembrar de
     # atualizar CORS_ORIGINS no Render (foi o que quebrou o carregamento
     # dos lançamentos em produção).
-    allow_origin_regex=r"https://([a-z0-9-]+\.)?rouanet-concilia\.pages\.dev",
+    allow_origin_regex=r"https://(revisarouanet\.onrender\.com|revisarouanet\.pages\.dev|revisarouanet\.com\.br|app\.revisarouanet\.com\.br|([a-z0-9-]+\.)?rouanet-concilia\.pages\.dev)",
     allow_methods=["*"],
     allow_headers=["*"],
 )

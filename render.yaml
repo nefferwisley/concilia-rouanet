@@ -11,6 +11,8 @@ services:
     healthCheckPath: /health
     autoDeployTrigger: commit
     envVars:
+      - key: CORS_ORIGINS
+        value: "https://rouanet-concilia.pages.dev,https://concilia-rouanet-1961.onrender.com,https://revisarouanet.onrender.com,https://revisarouanet.pages.dev,https://revisarouanet.com.br,https://app.revisarouanet.com.br"
       - key: DATABASE_URL
         sync: false
       - key: SUPABASE_URL
