@@ -6,6 +6,7 @@
  */
 
 import type { OnlineProjectList } from "../contracts/online";
+import type { ImportValidationReport, StructuredInput } from "../contracts/importValidation";
 import { PronacProject } from "../types";
 import { getSupabaseAuthConfiguration, refreshSupabaseSession } from "./supabaseAuth";
 
@@ -158,6 +159,43 @@ export class ApiClient {
     const token = await this.getValidToken();
     if (token) headers.Authorization = `Bearer ${token}`;
     return headers;
+  }
+
+  private async structuredUpload(input: StructuredInput, validate: boolean): Promise<Record<string, unknown>> {
+    if (!await this.getValidToken()) throw new ApiClientError(401, "Entre na sua conta para validar/importar arquivos.");
+    if (input.format === "json" && !input.config) throw new ApiClientError(400, "Selecione a configuração YAML.");
+    const body = new FormData();
+    body.append("arquivo", input.file);
+    const path = input.format === "xlsx"
+      ? `/projetos/${encodeURIComponent(input.projectId)}/planilha`
+      : "/importacoes";
+    if (input.format === "json") {
+      body.append("projeto_id", input.projectId);
+      body.append("config_yaml", input.config!);
+      if (!validate) body.append("modo", "commit");
+    }
+    const response = await fetch(`${this.apiBaseUrl}${path}${validate ? "/validar" : ""}`, {
+      method: "POST", headers: await this.authenticatedHeaders(), body,
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new ApiClientError(response.status, typeof payload?.detail === "string"
+        ? payload.detail : `Não foi possível processar os arquivos (HTTP ${response.status}).`);
+    }
+    if (!payload || typeof payload !== "object") throw new ApiClientError(502, "Resposta inválida do servidor.");
+    return payload;
+  }
+
+  public async validateStructuredInput(input: StructuredInput): Promise<ImportValidationReport> {
+    const report = await this.structuredUpload(input, true) as unknown as ImportValidationReport;
+    if (report.projeto_id !== input.projectId || typeof report.linhas_validas !== "number") {
+      throw new ApiClientError(502, "A prévia não corresponde ao projeto selecionado.");
+    }
+    return report;
+  }
+
+  public async importStructuredInput(input: StructuredInput): Promise<Record<string, unknown>> {
+    return this.structuredUpload(input, false);
   }
 
   public async saveProjectSnapshot(projectId: string, snapshot: unknown, version?: number): Promise<void> {
@@ -618,4 +656,3 @@ export interface JobProcessamentoStatus {
 }
 
 export const apiClient = ApiClient.getInstance();
-

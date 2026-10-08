@@ -27,6 +27,7 @@ import { PronacProject, BudgetRubric, BankTransaction, FiscalDocument, AuditAler
 import { requestGoogleDriveToken } from "../services/googleDriveService";
 import { runRealtimeTripartiteReconciliation } from "../utils/shadowLedger";
 import { apiClient } from "../services/apiClient";
+import { StructuredImportPanel } from "./import/StructuredImportPanel";
 
 export interface UploadedFileItem {
   id: string;
@@ -1072,6 +1073,8 @@ export const DriveFolderImportModal: React.FC<DriveFolderImportModalProps> = ({
             ✕
           </button>
         </div>
+
+        <StructuredImportPanel projectId={activeProject.id} pronac={activeProject.pronac} />
 
         {/* Tab Navigation */}
         <div className="flex gap-2 border-b border-slate-800 pb-2 overflow-x-auto">

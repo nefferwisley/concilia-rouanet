@@ -26,33 +26,23 @@ from __future__ import annotations
 
 import datetime
 import re
-import unicodedata
+from zipfile import BadZipFile
+from xml.etree.ElementTree import ParseError
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 
 import openpyxl
+from openpyxl.utils.exceptions import InvalidFileException
+from motor.cabecalhos_planilha import COLUNAS_FINANCEIRAS, mapear_cabecalho
 
 from .divergencias import LinhaPlanilha
 
 # Sinônimos aceitos por coluna: planilhas de projetos diferentes escrevem o
 # mesmo conceito de formas ligeiramente diferentes.
 COLUNAS = {
-    "prestador": ("PRESTADOR DE SERVICO", "PRESTADOR", "PRESTADOR DE SERVIÇO"),
-    "razao_social": ("RAZAO SOCIAL", "RAZÃO SOCIAL"),
-    "data": ("DATA", "DATA DE PAGAMENTO"),
-    "valor": ("VALOR", "VALOR PAGO"),
-    "controle": ("CONTROLE",),
-    "rubrica": ("RUBRICA", "RUBRICA SALIC"),
-    "documento_fiscal": ("DOCUMENTO FISCAL", "DOCUMENTO", "DOC FISCAL"),
+    conceito: COLUNAS_FINANCEIRAS[conceito]
+    for conceito in ("prestador", "razao_social", "data", "valor", "controle", "rubrica", "documento_fiscal")
 }
-
-
-def _norm(s) -> str:
-    if s is None:
-        return ""
-    t = unicodedata.normalize("NFKD", str(s))
-    t = "".join(c for c in t if not unicodedata.combining(c))
-    return re.sub(r"\s+", " ", t).strip().upper()
 
 
 def _data(v) -> datetime.date | None:
@@ -78,7 +68,8 @@ def _valor(v) -> Decimal | None:
     if v is None or v == "":
         return None
     try:
-        return Decimal(str(v)).quantize(Decimal("0.01"))
+        valor = Decimal(str(v))
+        return valor.quantize(Decimal("0.01")) if valor.is_finite() else None
     except (InvalidOperation, ValueError):
         return None
 
@@ -90,30 +81,51 @@ def achar_cabecalho(ws, limite=15) -> tuple[int, dict[str, int]]:
     e uma planilha sem cabeçalho vira 400 na rota, não morte do processo.
     """
     for i, linha in enumerate(ws.iter_rows(min_row=1, max_row=limite, values_only=True), 1):
-        celulas = {_norm(c): j for j, c in enumerate(linha) if c is not None}
-        achadas = {}
-        for conceito, nomes in COLUNAS.items():
-            for nome in nomes:
-                if _norm(nome) in celulas:
-                    achadas[conceito] = celulas[_norm(nome)]
-                    break
-        if {"prestador", "data", "valor"} <= achadas.keys():
+        achadas = mapear_cabecalho(linha, COLUNAS, i, ws.iter_rows(min_row=i + 1, values_only=True))
+        if achadas:
             return i, achadas
     raise ValueError(
         f"Não achei o cabeçalho com PRESTADOR/DATA/VALOR nas primeiras {limite} linhas."
     )
 
 
-def parse_planilha(conteudo: bytes, aba: str | None = None) -> list[LinhaPlanilha]:
+def analisar_planilha(conteudo: bytes, aba: str | None = None) -> tuple[list[LinhaPlanilha], dict]:
     """Interpreta o XLSX (bytes) e devolve as LinhaPlanilha na ordem da planilha.
 
     Linhas sem data ou sem valor são puladas (aporte/subtotal/vazia). A `linha`
     é o número físico da linha no arquivo — é o que as divergências mostram
     quando acusam AUSENTE_NO_EXTRATO ou DATA_DIVERGENTE.
     """
-    wb = openpyxl.load_workbook(BytesIO(conteudo), read_only=True, data_only=True)
-    ws = wb[aba] if aba else wb[wb.sheetnames[0]]
-    cab, col = achar_cabecalho(ws)
+    try:
+        wb = openpyxl.load_workbook(BytesIO(conteudo), read_only=True, data_only=True)
+    except (BadZipFile, InvalidFileException, KeyError, OSError, ParseError, ValueError) as exc:
+        raise ValueError("Arquivo XLSX ilegível ou corrompido.") from exc
+    try:
+        if aba and aba not in wb.sheetnames:
+            raise ValueError(f"Aba não encontrada: {aba}.")
+        ws = wb[aba] if aba else wb[wb.sheetnames[0]]
+        cab, col = achar_cabecalho(ws)
+        return _ler_linhas(ws, cab, col)
+    finally:
+        wb.close()
+
+
+def _ler_linhas(ws, cab, col) -> tuple[list[LinhaPlanilha], dict]:
+    cabecalhos = next(ws.iter_rows(min_row=cab, max_row=cab, values_only=True))
+    relatorio = {
+        "aba": ws.title,
+        "linha_cabecalho": cab,
+        "colunas_reconhecidas": [
+            {"conceito": conceito, "coluna": j + 1, "cabecalho": str(cabecalhos[j])}
+            for conceito, j in col.items()
+        ],
+        "colunas_nao_importadas": [
+            {"coluna": j + 1, "cabecalho": str(nome)}
+            for j, nome in enumerate(cabecalhos)
+            if nome not in (None, "") and j not in col.values()
+        ],
+        "linhas_ignoradas": [],
+    }
 
     def _cel(k: str, r: tuple):
         j = col.get(k)
@@ -124,7 +136,15 @@ def parse_planilha(conteudo: bytes, aba: str | None = None) -> list[LinhaPlanilh
     out: list[LinhaPlanilha] = []
     for i, r in enumerate(ws.iter_rows(min_row=cab + 1, values_only=True), cab + 1):
         d, v = _data(_cel("data", r)), _valor(_cel("valor", r))
+        invalidos = [
+            campo for campo, convertido in (("data", d), ("valor", v))
+            if _cel(campo, r) is not None and convertido is None
+        ]
+        if invalidos:
+            raise ValueError(f"Linha {i}: {', '.join(invalidos)} inválido(s). Corrija antes de importar.")
         if not d or v is None:
+            if any(c not in (None, "") for c in r):
+                relatorio["linhas_ignoradas"].append({"linha": i, "motivo": "Sem data ou valor."})
             continue
         out.append(
             LinhaPlanilha(
@@ -138,4 +158,10 @@ def parse_planilha(conteudo: bytes, aba: str | None = None) -> list[LinhaPlanilh
                 documento_fiscal=_cel("documento_fiscal", r),
             )
         )
-    return out
+    relatorio["linhas_validas"] = len(out)
+    return out, relatorio
+
+
+def parse_planilha(conteudo: bytes, aba: str | None = None) -> list[LinhaPlanilha]:
+    linhas, _ = analisar_planilha(conteudo, aba)
+    return linhas

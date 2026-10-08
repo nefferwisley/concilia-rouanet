@@ -2,15 +2,50 @@ import json
 import hashlib
 import logging
 
-import yaml
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 
 from backend.database import adquirir_conn, get_conn
 from backend.services.importacao import executar_importacao_bg
+from backend.config import settings
+from backend.dominio.importacao_validacao import avaliar_entrada, ler_entrada, normalizar_pronac
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/importacoes", tags=["importacoes"])
+
+
+async def _preparar_entrada(conn, projeto_id, arquivo, config_yaml, usar_rag):
+    projeto = await conn.fetchrow("select id, pronac from projetos where id = $1", projeto_id)
+    if not projeto:
+        raise HTTPException(404, "Projeto não encontrado (ou sem permissão via RLS).")
+    limite = settings.max_upload_mb * 1024 * 1024
+    arquivo_bytes = await arquivo.read(limite + 1)
+    config_bytes = await config_yaml.read(limite + 1)
+    if len(arquivo_bytes) > limite or len(config_bytes) > limite:
+        raise HTTPException(413, f"Cada arquivo deve ter no máximo {settings.max_upload_mb} MB.")
+    try:
+        conteudo, cfg = ler_entrada(arquivo_bytes, config_bytes)
+        if normalizar_pronac(projeto["pronac"]) != normalizar_pronac(cfg["projeto"]["pronac"]):
+            raise ValueError("PRONAC da configuração diverge do projeto selecionado.")
+        relatorio = avaliar_entrada(conteudo, cfg, usar_rag=usar_rag)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return arquivo_bytes, conteudo, cfg, {"projeto_id": projeto_id, **relatorio}
+
+
+@router.post("/validar")
+async def validar_importacao(
+    projeto_id: str = Form(...),
+    arquivo: UploadFile = File(...),
+    config_yaml: UploadFile = File(...),
+    api_key_gemini: str | None = Form(None),
+    dep=Depends(get_conn),
+):
+    conn, _ = dep
+    _, _, _, relatorio = await _preparar_entrada(
+        conn, projeto_id, arquivo, config_yaml, bool(api_key_gemini)
+    )
+    return relatorio
 
 
 @router.post("", status_code=202)
@@ -28,21 +63,12 @@ async def iniciar_importacao(
     if modo not in ("dry_run", "commit"):
         raise HTTPException(400, "modo deve ser 'dry_run' ou 'commit'.")
 
-    arquivo_bytes = await arquivo.read()
+    arquivo_bytes, conteudo_json, cfg, relatorio = await _preparar_entrada(
+        conn, projeto_id, arquivo, config_yaml, bool(api_key_gemini)
+    )
+    if not relatorio["apto_para_importar"]:
+        raise HTTPException(400, "Há lançamentos inválidos. Corrija os erros indicados na pré-validação.")
     arquivo_sha256 = hashlib.sha256(arquivo_bytes).hexdigest()
-    try:
-        conteudo_json = json.loads(arquivo_bytes)
-    except json.JSONDecodeError as e:
-        raise HTTPException(400, f"Arquivo JSON inválido: {e}")
-
-    try:
-        cfg = yaml.safe_load(await config_yaml.read())
-    except yaml.YAMLError as e:
-        raise HTTPException(400, f"config_yaml inválido: {e}")
-
-    projeto = await conn.fetchrow("select id from projetos where id = $1", projeto_id)
-    if not projeto:
-        raise HTTPException(404, "Projeto não encontrado (ou sem permissão via RLS).")
 
     # A linha `importacoes` é criada numa transação própria e commitada ANTES
     # de agendar a background task. Se usássemos o conn do get_conn, o commit

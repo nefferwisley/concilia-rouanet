@@ -110,6 +110,8 @@ def chave_registro_fonte(arquivo_sha256: str, linha_num: int, linha: dict) -> st
 # Resolução do JSON de entrada (agnóstica de estrutura)
 # ============================================================
 def resolver_projeto_e_lancamentos(json_data, cfg):
+    if not isinstance(json_data, dict):
+        raise ValueError("A raiz do JSON deve ser um objeto.")
     map_cfg = cfg["mapeamento_lancamentos"]
     projeto_path = map_cfg.get("projeto_path")
     campo_lanc = map_cfg["lancamentos_field"]
@@ -118,17 +120,21 @@ def resolver_projeto_e_lancamentos(json_data, cfg):
     raiz = json_data
     if projeto_path:
         lista = json_data.get(projeto_path)
-        if lista is None:
-            raise ValueError(f"Chave '{projeto_path}' (projeto_path) não encontrada no JSON.")
+        if not isinstance(lista, list) or any(not isinstance(p, dict) for p in lista):
+            raise ValueError(f"Chave '{projeto_path}' deve conter uma lista de projetos.")
         pronac_field = cfg["projeto"]["campos"].get("pronac", "pronac")
-        candidatos = [p for p in lista if str(p.get(pronac_field, "")).strip() == pronac]
+        candidatos = [p for p in lista if str(p.get(pronac_field, "")).strip().replace(".", "") == pronac.replace(".", "")]
         if not candidatos:
             raise ValueError(f"Nenhum projeto com pronac={pronac!r} em '{projeto_path}'.")
+        if len(candidatos) > 1:
+            raise ValueError("Mais de um projeto corresponde ao PRONAC configurado.")
         raiz = candidatos[0]
 
     lancamentos = raiz.get(campo_lanc)
     if lancamentos is None:
         raise ValueError(f"Chave '{campo_lanc}' (lancamentos_field) não encontrada.")
+    if not isinstance(lancamentos, list) or any(not isinstance(linha, dict) for linha in lancamentos):
+        raise ValueError(f"Chave '{campo_lanc}' deve conter uma lista de objetos de lançamento.")
     return raiz, lancamentos
 
 

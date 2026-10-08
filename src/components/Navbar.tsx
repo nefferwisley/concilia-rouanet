@@ -95,7 +95,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             <span className="hidden truncate text-sm font-bold tracking-tight text-white sm:inline lg:text-base">
-              Concilia Rouanet
+              RevisaRouanet
             </span>
           </div>
 

@@ -60,7 +60,7 @@ export function OnlineLoginView({ configuration, onAuthenticated }: OnlineLoginV
       <section className="mx-auto max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-xl">
         <div className="flex items-center gap-3 text-emerald-400">
           <LockKeyhole className="h-6 w-6" />
-          <span className="text-sm font-semibold uppercase tracking-wider">Concilia Rouanet</span>
+          <span className="text-sm font-semibold uppercase tracking-wider">RevisaRouanet</span>
         </div>
         <h1 className="mt-5 text-2xl font-bold">{inviteToken ? "Definir senha de acesso" : "Acessar projetos online"}</h1>
         <p className="mt-2 text-sm text-slate-400">

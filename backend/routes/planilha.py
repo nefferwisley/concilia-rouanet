@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from backend.config import settings
 from backend.database import get_conn
-from backend.dominio.planilha_revisada import parse_planilha
+from backend.dominio.planilha_revisada import analisar_planilha, parse_planilha
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/projetos", tags=["planilha"])
@@ -67,6 +67,41 @@ async def listar_planilha(projeto_id: str, dep=Depends(get_conn)):
     }
 
 
+def _validar_identidades(linhas):
+    identidades = [
+        f"controle:{str(p.controle).strip().removesuffix('.0')}" if p.controle else f"linha:{p.linha}"
+        for p in linhas
+    ]
+    if len(set(identidades)) != len(identidades):
+        raise HTTPException(400, "A planilha contém identidades de linha duplicadas.")
+
+
+@router.post("/{projeto_id}/planilha/validar")
+async def validar_planilha(
+    projeto_id: str,
+    arquivo: UploadFile = File(...),
+    aba: str | None = Form(None),
+    dep=Depends(get_conn),
+):
+    """Prévia sem persistência; importar revalida os mesmos bytes."""
+    conn, _ = dep
+    await _projeto_existe(conn, projeto_id)
+    if not arquivo.filename or not arquivo.filename.lower().endswith(".xlsx"):
+        raise HTTPException(400, "Envie um arquivo .xlsx.")
+    limite = settings.max_upload_mb * 1024 * 1024
+    conteudo = await arquivo.read(limite + 1)
+    if len(conteudo) > limite:
+        raise HTTPException(413, f"Arquivo acima do limite de {settings.max_upload_mb} MB.")
+    try:
+        linhas, relatorio = analisar_planilha(conteudo, aba)
+    except ValueError as exc:
+        raise HTTPException(400, f"Planilha inválida: {exc}") from exc
+    if not linhas:
+        raise HTTPException(400, "Nenhuma linha com data/valor encontrada na planilha.")
+    _validar_identidades(linhas)
+    return {"projeto_id": projeto_id, **relatorio}
+
+
 @router.post("/{projeto_id}/planilha", status_code=201)
 async def importar_planilha(
     projeto_id: str,
@@ -80,7 +115,7 @@ async def importar_planilha(
     if not arquivo.filename or not arquivo.filename.lower().endswith(".xlsx"):
         raise HTTPException(400, "Envie um arquivo .xlsx.")
 
-    conteudo = await arquivo.read()
+    conteudo = await arquivo.read(settings.max_upload_mb * 1024 * 1024 + 1)
     if len(conteudo) > settings.max_upload_mb * 1024 * 1024:
         raise HTTPException(
             413, f"Arquivo acima do limite de {settings.max_upload_mb} MB."
@@ -93,6 +128,8 @@ async def importar_planilha(
 
     if not linhas:
         raise HTTPException(400, "Nenhuma linha com data/valor encontrada na planilha.")
+
+    _validar_identidades(linhas)
 
     # REPLACE atômico: a planilha do projeto passa a ser exatamente este arquivo.
     await conn.execute(

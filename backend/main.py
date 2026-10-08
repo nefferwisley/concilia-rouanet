@@ -114,7 +114,7 @@ async def lifespan(app: FastAPI):
     await close_pool()
 
 
-app = FastAPI(title="RouanetConcilia API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="RevisaRouanet API", version="1.0.0", lifespan=lifespan)
 
 @app.middleware("http")
 async def capturar_erros_com_cors(request: Request, call_next):
