@@ -61,7 +61,11 @@ export function OnlineSessionBoundary({
   }
 
   if (session.status === "empty") {
-    return <SessionNotice title="Nenhum projeto disponível" message={session.message} />;
+    // Conta ainda sem projetos: não bloqueamos o app inteiro (isso escondia o
+    // Navbar, o "Sair" e o botão "Novo projeto"). Renderizamos o app com o
+    // workspace vazio para o usuário criar o primeiro projeto — sem trazer
+    // dados de projetos anteriores.
+    return <>{children}</>;
   }
 
   return <>{children}</>;

@@ -54,6 +54,23 @@ describe("OnlineSessionBoundary", () => {
     expect(html).not.toContain("<select");
   });
 
+  it("renders the app when the account has no projects yet (no dead-end)", () => {
+    const html = renderToStaticMarkup(
+      <OnlineSessionBoundary
+        {...props}
+        session={{
+          status: "empty",
+          projects: [],
+          activeProjectId: null,
+          message: "Nenhum projeto disponível para esta conta.",
+        }}
+      />,
+    );
+
+    expect(html).toContain("Painel real");
+    expect(html).not.toContain("Nenhum projeto disponível");
+  });
+
   it("suppresses children while a production session loads", () => {
     const html = renderToStaticMarkup(
       <OnlineSessionBoundary

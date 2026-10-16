@@ -619,6 +619,15 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [hasOnlineSnapshot, loadedOnlineProjectId, activeProjectId, projects, allRubrics, allTransactions, allDocuments, allAlerts, allTripartiteEntries, allReceipts]);
 
+  // Conta online ainda sem projetos: abre automaticamente o cadastro do primeiro
+  // projeto, para o usuário não cair num estado vazio sem ação óbvia.
+  useEffect(() => {
+    if (IS_DEMO_MODE) return;
+    if (onlineSession.status !== "empty") return;
+    if (projects.length > 0) return;
+    setIsNewProjectModalOpen(true);
+  }, [onlineSession.status, projects.length]);
+
   // Active Project & Safe arrays
   const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0] || EMPTY_PROJECT;
 
