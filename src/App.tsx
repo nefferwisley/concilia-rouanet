@@ -58,7 +58,6 @@ import {
   OFFICIAL_PROJECT_1961_ACTIVE_VERSION_KEY,
   OFFICIAL_PROJECT_1961_DATA_VERSION,
   OFFICIAL_PROJECT_1961_DATA_VERSION_KEY,
-  OFFICIAL_PROJECT_1961_ID,
   resolveInitialActiveProjectId,
 } from "./utils/officialProject1961Migration";
 import { Plus, X, Building, CheckCircle2, LayoutDashboard, Split, ArrowLeftRight, ShieldCheck, Menu } from "lucide-react";
@@ -80,6 +79,9 @@ const STORAGE_KEYS = {
 const IS_DEMO_MODE =
   import.meta.env.VITE_DEMO_MODE === "true" ||
   !getSupabaseAuthConfiguration();
+// Modo online (autenticado): a API é a única fonte de verdade. Nenhum dado
+// local/cacheado de projetos ou sessões anteriores é reaproveitado no login.
+const IS_ONLINE_MODE = !IS_DEMO_MODE;
 const ONLINE_ACTIVE_PROJECT_STORAGE_KEY = "concilia_rouanet_online_active_project_v1";
 
 const shouldRefreshOfficialProject1961 = (): boolean => {
@@ -233,8 +235,42 @@ const isSummaryItem = (item: any) => {
 export default function App() {
   const [hasAuthenticatedSession, setHasAuthenticatedSession] = useState(() => Boolean(apiClient.getToken()));
   const supabaseAuthConfiguration = getSupabaseAuthConfiguration();
-  // Carrega os projetos; se o navegador estiver vazio, inicializa com a base oficial (Projeto 1961 e É Tudo Verdade)
+
+  // Lê o e-mail do payload JWT sem precisar de uma chamada extra à API
+  const loggedUserEmail = (() => {
+    try {
+      const token = apiClient.getToken();
+      if (!token) return null;
+      const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+      return (payload?.email as string | undefined) ?? null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const handleLogout = () => {
+    apiClient.clearToken();
+    setHasAuthenticatedSession(false);
+    // Zera o estado em memória: o próximo login começa do zero, sem dados do
+    // usuário/projeto anterior.
+    setOnlineSession({ status: "loading", projects: [], activeProjectId: null, message: null });
+    setHasOnlineSnapshot(false);
+    setLoadedOnlineProjectId(null);
+    setProjects([]);
+    setActiveProjectId("");
+    setAllRubrics({});
+    setAllTransactions({});
+    setAllDocuments({});
+    setAllAlerts({});
+    setAllTripartiteEntries({});
+    setAllReceipts({});
+  };
+
+  // Carrega os projetos. No modo online a API é a única fonte de verdade:
+  // começa sempre vazio para NÃO reaproveitar dados de projetos anteriores.
+  // No modo demonstração, hidrata do navegador com a base oficial (Projeto 1961 e É Tudo Verdade).
   const [projects, setProjects] = useState<PronacProject[]>(() => {
+    if (IS_ONLINE_MODE) return [];
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
       if (saved) {
@@ -254,6 +290,7 @@ export default function App() {
   });
 
   const [activeProjectId, setActiveProjectId] = useState<string>(() => {
+    if (IS_ONLINE_MODE) return "";
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.ACTIVE_ID);
       return resolveInitialActiveProjectId(
@@ -311,6 +348,7 @@ export default function App() {
 
   // Domain state stored per project
   const [allRubrics, setAllRubrics] = useState<Record<string, BudgetRubric[]>>(() => {
+    if (IS_ONLINE_MODE) return {};
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.RUBRICS);
       if (saved) {
@@ -330,6 +368,7 @@ export default function App() {
   });
 
   const [allTransactions, setAllTransactions] = useState<Record<string, BankTransaction[]>>(() => {
+    if (IS_ONLINE_MODE) return {};
     let loadedTransactions: Record<string, BankTransaction[]> = {};
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
@@ -367,6 +406,7 @@ export default function App() {
   });
 
   const [allDocuments, setAllDocuments] = useState<Record<string, FiscalDocument[]>>(() => {
+    if (IS_ONLINE_MODE) return {};
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.DOCUMENTS);
       if (saved) {
@@ -390,6 +430,7 @@ export default function App() {
   });
 
   const [allAlerts, setAllAlerts] = useState<Record<string, AuditAlert[]>>(() => {
+    if (IS_ONLINE_MODE) return {};
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.ALERTS);
       if (saved) {
@@ -411,6 +452,7 @@ export default function App() {
   const [allTripartiteEntries, setAllTripartiteEntries] = useState<
     Record<string, TripartiteEntry[]>
   >(() => {
+    if (IS_ONLINE_MODE) return {};
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.TRIPARTITE);
       if (saved) {
@@ -434,6 +476,7 @@ export default function App() {
   });
 
   const [allReceipts, setAllReceipts] = useState<Record<string, Record<string, ReceiptItem>>>(() => {
+    if (IS_ONLINE_MODE) return {};
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.RECEIPTS);
       if (saved) return JSON.parse(saved);
@@ -452,20 +495,9 @@ export default function App() {
     void apiClient.loadProjectSnapshot<PersistedWorkspace>(projectId)
       .then(async (snapshot) => {
         if (!active || !snapshot) return;
-        const snapshotToLoad = projectId === OFFICIAL_PROJECT_1961_ID
-          && (snapshot.transactions?.[projectId]?.length || 0) === 0
-          ? {
-              ...snapshot,
-              projects: mergeOfficialProject1961(snapshot.projects || [], initialProjects, true),
-              activeProjectId: projectId,
-              rubrics: mergeOfficialProject1961Dataset(snapshot.rubrics || {}, initialRubrics, true),
-              transactions: mergeOfficialProject1961Dataset(snapshot.transactions || {}, initialTransactions, true),
-              documents: mergeOfficialProject1961Dataset(snapshot.documents || {}, initialDocuments, true),
-              alerts: mergeOfficialProject1961Dataset(snapshot.alerts || {}, initialAlerts, true),
-              tripartiteEntries: mergeOfficialProject1961Dataset(snapshot.tripartiteEntries || {}, initialTripartiteEntries, true),
-              receipts: snapshot.receipts || {},
-            }
-          : snapshot;
+        // Modo online: carrega EXATAMENTE o que está salvo na conta do usuário.
+        // Não injetamos a base de demonstração do Projeto 1961 num projeto vazio.
+        const snapshotToLoad = snapshot;
         const storedDocuments = await apiClient.listProjectDocuments(projectId).catch(() => []);
         if (!active) return;
         const restoredDocuments = restoreStoredDocuments(snapshotToLoad.documents || {}, projectId, storedDocuments);
@@ -1083,6 +1115,8 @@ export default function App() {
         onRulesContextChange={setRulesContext}
         userRole={userRole}
         onUserRoleChange={setUserRole}
+        onLogout={IS_DEMO_MODE ? undefined : handleLogout}
+        userEmail={loggedUserEmail}
       />
 
       {/* Body Area with Sidebar + Content */}

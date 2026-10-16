@@ -16,6 +16,7 @@ import {
   Trash2,
   MoreHorizontal,
   RotateCcw,
+  LogOut,
 } from "lucide-react";
 import { PronacProject, AuditAlert, UserRole } from "../types";
 
@@ -40,6 +41,10 @@ interface NavbarProps {
   onRulesContextChange: (context: "SALIC" | "FSA_ANCINE") => void;
   userRole: UserRole;
   onUserRoleChange: (role: UserRole) => void;
+  /** Quando definido, exibe o botão "Sair" ao lado do e-mail do usuário */
+  onLogout?: () => void;
+  /** E-mail do usuário atualmente autenticado */
+  userEmail?: string | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -63,6 +68,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRulesContextChange,
   userRole,
   onUserRoleChange,
+  onLogout,
+  userEmail,
 }) => {
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
@@ -290,6 +297,30 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </>
               )}
             </div>
+
+            {/* Logout button — shown only when authenticated (onLogout prop is defined) */}
+            {onLogout && (
+              <div className="flex items-center gap-2 border-l border-slate-700 pl-2 sm:pl-3 ml-1">
+                {userEmail && (
+                  <span
+                    className="hidden lg:block max-w-[140px] truncate text-xs text-slate-400"
+                    title={userEmail}
+                  >
+                    {userEmail}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  title="Sair da conta"
+                  aria-label="Sair da conta"
+                  className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-500/10 px-2.5 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/20 hover:text-rose-200 sm:px-3"
+                >
+                  <LogOut className="h-3.5 w-3.5 shrink-0" />
+                  <span className="hidden sm:inline">Sair</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
